@@ -1,94 +1,134 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
-type Note = {
-  id: string
-  content: string
-  created_at: string
-}
+type NoteRow = {
+  id: string;
+  content: string;
+  created_at: string;
+};
 
 export default function Home() {
-  const [note, setNote] = useState("")
-  const [notes, setNotes] = useState<Note[]>([])
-  const [loading, setLoading] = useState(false)
+  const [notes, setNotes] = useState<NoteRow[]>([]);
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const loadNotes = async () => {
+  async function loadNotes() {
+    setLoading(true);
+    setError(null);
+
     const { data, error } = await supabase
       .from("notes")
-      .select("*")
-      .order("created_at", { ascending: false })
+      .select("id, content, created_at")
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error(error)
-      alert("Error loading notes")
-      return
+      setError(error.message);
+      setNotes([]);
+    } else {
+      setNotes((data ?? []) as NoteRow[]);
     }
 
-    setNotes(data ?? [])
+    setLoading(false);
   }
 
-  const addNote = async () => {
-    if (!note.trim()) return
+  async function addNote() {
+    const trimmed = content.trim();
+    if (!trimmed) return;
 
-    setLoading(true)
+    setSaving(true);
+    setError(null);
 
-    const { error } = await supabase.from("notes").insert([{ content: note }])
-
-    setLoading(false)
+    const { error } = await supabase.from("notes").insert([{ content: trimmed }]);
 
     if (error) {
-      console.error(error)
-      alert("Error adding note")
-      return
+      setError(error.message);
+    } else {
+      setContent("");
+      setToast("Note added");
+      // refresh list
+      await loadNotes();
+      // auto-hide toast
+      window.setTimeout(() => setToast(null), 1500);
     }
 
-    setNote("")
-    loadNotes()
+    setSaving(false);
   }
 
   useEffect(() => {
-    loadNotes()
-  }, [])
+    loadNotes();
+  }, []);
 
   return (
-    <div style={{ padding: 40, maxWidth: 700 }}>
-      <h1>NotesBoard</h1>
+    <main className="min-h-screen p-6">
+      <div className="mx-auto max-w-xl space-y-6">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-semibold">NotesBoard</h1>
+          <p className="text-sm text-neutral-400">Quick notes, saved to Supabase.</p>
+        </header>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Write a note..."
-          style={{ padding: 8, flex: 1 }}
-        />
-        <button onClick={addNote} disabled={loading}>
-          {loading ? "Adding..." : "Add"}
-        </button>
-      </div>
-
-      <div style={{ display: "grid", gap: 10 }}>
-        {notes.map((n) => (
-          <div
-            key={n.id}
-            style={{
-              border: "1px solid #333",
-              borderRadius: 10,
-              padding: 12,
-            }}
-          >
-            <div style={{ fontSize: 16 }}>{n.content}</div>
-            <div style={{ opacity: 0.6, fontSize: 12, marginTop: 6 }}>
-              {new Date(n.created_at).toLocaleString()}
-            </div>
+        {/* Toast */}
+        {toast && (
+          <div className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm">
+            {toast}
           </div>
-        ))}
-
-        {notes.length === 0 && (
-          <div style={{ opacity: 0.7 }}>No notes yet.</div>
         )}
+
+        {/* Add note */}
+        <section className="space-y-3">
+          <textarea
+            className="w-full rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm outline-none focus:border-neutral-700"
+            rows={3}
+            placeholder="Write a note..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+
+          <div className="flex items-center gap-3">
+            <button
+              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
+              onClick={addNote}
+              disabled={saving || !content.trim()}
+            >
+              {saving ? "Saving..." : "Add note"}
+            </button>
+
+            {error && <p className="text-sm text-red-400">{error}</p>}
+          </div>
+        </section>
+
+        {/* Notes list */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-400">
+            Saved
+          </h2>
+
+          {loading ? (
+            <p className="text-sm text-neutral-400">Loading…</p>
+          ) : notes.length === 0 ? (
+            <p className="text-sm text-neutral-400">No notes yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {notes.map((n) => (
+                <li
+                  key={n.id}
+                  className="rounded-md border border-neutral-800 bg-neutral-950 p-3"
+                >
+                  <p className="whitespace-pre-wrap text-sm">{n.content}</p>
+                  <p className="mt-2 text-xs text-neutral-500">
+                    {new Date(n.created_at).toLocaleString()}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
-    </div>
-  )
+    </main>
+  );
 }
+
