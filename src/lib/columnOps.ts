@@ -2,15 +2,17 @@ import { supabase } from "./supabase";
 import { ColumnRow } from "./columns";
 import { NoteRow } from "./notes";
 import { LabelRow, listLabels, attachLabel } from "./labels";
+import { createPlacement } from "./placements";
 
 /**
- * Move a column (and all its notes) to a different board.
+ * Move a column (and all its notes' placements) to a different board.
  * The column gets position = max_position_in_target + 1.
  * Source board positions are left with a gap (acceptable; they're still ordered).
  */
 export async function moveColumnToBoard(
   columnId: string,
   targetBoardId: string,
+  sourceBoardId: string,
 ): Promise<{ error: string | null }> {
   // Compute target position
   const { data: targetCols } = await supabase
@@ -30,13 +32,22 @@ export async function moveColumnToBoard(
 
   if (colErr) return { error: colErr.message };
 
-  // Move notes
+  // Move notes (deprecated fields)
   const { error: notesErr } = await supabase
     .from("notes")
     .update({ board_id: targetBoardId })
     .eq("column_id", columnId);
 
-  return { error: notesErr?.message ?? null };
+  if (notesErr) return { error: notesErr.message };
+
+  // Update placements to new board — only placements on the source board
+  const { error: placementsErr } = await supabase
+    .from("note_placements")
+    .update({ board_id: targetBoardId })
+    .eq("column_id", columnId)
+    .eq("board_id", sourceBoardId);
+
+  return { error: placementsErr?.message ?? null };
 }
 
 /**
@@ -103,11 +114,19 @@ export async function copyColumnToBoard(
     if (noteErr || !newNote) continue;
     newNotes.push(newNote as NoteRow);
 
+    // Create placement for the new note
+    await createPlacement({
+      noteId: (newNote as NoteRow).id,
+      boardId: targetBoardId,
+      columnId: newCol.id,
+      position: i,
+    });
+
     // Attach matching labels
     const sourceLabels = noteLabelMap[note.id] ?? [];
     for (const src of sourceLabels) {
       const match = targetLabels.find((l) => l.name === src.name && l.color === src.color);
-      if (match) await attachLabel(newNote.id, match.id);
+      if (match) await attachLabel((newNote as NoteRow).id, match.id);
     }
   }
 

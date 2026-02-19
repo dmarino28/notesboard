@@ -14,6 +14,7 @@ import {
   filterNotes,
   getUnscheduledNotes,
 } from "@/lib/calendar";
+import { deleteNote } from "@/lib/notes";
 import { CalendarHeader } from "@/components/CalendarHeader";
 import { CalendarFilterBar } from "@/components/CalendarFilterBar";
 import { CalendarMonthGrid } from "@/components/CalendarMonthGrid";
@@ -114,6 +115,16 @@ export default function CalendarPage() {
   const handleNoteChange = useCallback((id: string, fields: Partial<NoteRow>) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...fields } : n)));
   }, []);
+
+  const handleNoteDeleted = useCallback((noteId: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+  }, []);
+
+  const handleDeleteEverywhere = useCallback(async (noteId: string) => {
+    const { error } = await deleteNote(noteId);
+    if (error) showToast(`Failed to delete: ${error}`);
+    else handleNoteDeleted(noteId);
+  }, [handleNoteDeleted, showToast]);
 
   const handleLabelCreated = useCallback((label: LabelRow) => {
     setLabels((prev) => [...prev, label]);
@@ -222,6 +233,7 @@ export default function CalendarPage() {
       {modalNote && (
         <CardDetailsModal
           note={modalNote}
+          noteId={modalNote.id}
           boardId={modalNote.board_id}
           boardLabels={modalBoardLabels}
           onClose={() => setModalNoteId(null)}
@@ -229,6 +241,8 @@ export default function CalendarPage() {
           onLabelCreated={handleLabelCreated}
           onNoteLabelsChanged={handleNoteLabelsChanged}
           onError={handleError}
+          onDeleteEverywhere={handleDeleteEverywhere}
+          onNoteDeleted={handleNoteDeleted}
         />
       )}
     </div>

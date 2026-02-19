@@ -13,6 +13,7 @@ import {
   listAllNoteLabels,
   filterNotes,
 } from "@/lib/calendar";
+import { deleteNote } from "@/lib/notes";
 import { CalendarFilterBar } from "@/components/CalendarFilterBar";
 import { TimelineGrid } from "@/components/TimelineGrid";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
@@ -154,6 +155,16 @@ export default function TimelinePage() {
   }, []);
   const handleError = useCallback((msg: string) => showToast(msg), [showToast]);
 
+  const handleNoteDeleted = useCallback((noteId: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+  }, []);
+
+  const handleDeleteEverywhere = useCallback(async (noteId: string) => {
+    const { error } = await deleteNote(noteId);
+    if (error) showToast(`Failed to delete: ${error}`);
+    else handleNoteDeleted(noteId);
+  }, [handleNoteDeleted, showToast]);
+
   // range navigation
   function goToday() {
     const rs = computeRangeStart(rangeType, new Date());
@@ -291,6 +302,7 @@ export default function TimelinePage() {
       {modalNote && (
         <CardDetailsModal
           note={modalNote}
+          noteId={modalNote.id}
           boardId={modalNote.board_id}
           boardLabels={modalBoardLabels}
           onClose={() => setModalNoteId(null)}
@@ -298,6 +310,8 @@ export default function TimelinePage() {
           onLabelCreated={handleLabelCreated}
           onNoteLabelsChanged={handleNoteLabelsChanged}
           onError={handleError}
+          onDeleteEverywhere={handleDeleteEverywhere}
+          onNoteDeleted={handleNoteDeleted}
         />
       )}
     </div>

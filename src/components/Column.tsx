@@ -3,7 +3,7 @@
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ColumnRow } from "@/lib/columns";
-import { NoteRow } from "@/lib/notes";
+import { PlacedNoteRow } from "@/lib/placements";
 import { LabelRow } from "@/lib/labels";
 import { BoardRow } from "@/lib/boards";
 import { NoteComposer } from "./NoteComposer";
@@ -12,14 +12,14 @@ import { ListHeader } from "./ListHeader";
 
 type Props = {
   column: ColumnRow;
-  notes: NoteRow[];
+  notes: PlacedNoteRow[];
   noteLabelMap: Record<string, LabelRow[]>;
   boards: BoardRow[];
   currentBoardId: string;
   isCollapsed: boolean;
   onAddNote: (content: string) => Promise<void>;
-  onDeleteNote: (id: string) => Promise<void>;
-  onUpdateNote: (id: string, content: string) => Promise<void>;
+  onRemoveNote: (placementId: string) => Promise<void>;
+  onUpdateNote: (noteId: string, content: string) => Promise<void>;
   onOpenNote: (noteId: string) => void;
   onRename: (name: string) => Promise<void>;
   onDelete: () => void;
@@ -40,7 +40,7 @@ export function Column({
   currentBoardId,
   isCollapsed,
   onAddNote,
-  onDeleteNote,
+  onRemoveNote,
   onUpdateNote,
   onOpenNote,
   onRename,
@@ -53,6 +53,7 @@ export function Column({
   dragHandleListeners,
   dragHandleAttributes,
 }: Props) {
+  // NoteItem sortable id = placement_id = note.id
   const noteIds = notes.map((n) => n.id);
 
   const headerBg = column.color ? hexToRgba(column.color, 0.22) : undefined;
@@ -124,10 +125,10 @@ export function Column({
                 <NoteItem
                   key={note.id}
                   note={note}
-                  noteLabels={noteLabelMap[note.id] ?? []}
-                  onDelete={onDeleteNote}
+                  noteLabels={noteLabelMap[note.note_id] ?? []}
+                  onRemove={onRemoveNote}
                   onUpdate={onUpdateNote}
-                  onOpen={() => onOpenNote(note.id)}
+                  onOpen={() => onOpenNote(note.note_id)}
                 />
               ))
             )}

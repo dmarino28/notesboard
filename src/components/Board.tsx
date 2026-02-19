@@ -14,23 +14,23 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { ColumnRow } from "@/lib/columns";
-import { NoteRow, ReorderUpdate } from "@/lib/notes";
+import { PlacedNoteRow, PlacementReorderUpdate } from "@/lib/placements";
 import { LabelRow } from "@/lib/labels";
 import { BoardRow } from "@/lib/boards";
 import { ColumnContainer } from "./ColumnContainer";
 
 type Props = {
   columns: ColumnRow[];
-  notes: NoteRow[];
+  notes: PlacedNoteRow[];
   loading: boolean;
   error: string | null;
   noteLabelMap: Record<string, LabelRow[]>;
   boards: BoardRow[];
   currentBoardId: string;
   onAddNote: (content: string, columnId: string) => Promise<void>;
-  onDeleteNote: (id: string) => Promise<void>;
-  onUpdateNote: (id: string, content: string) => Promise<void>;
-  onReorderNotes: (updates: ReorderUpdate[]) => Promise<boolean>;
+  onRemoveNote: (placementId: string) => Promise<void>;
+  onUpdateNote: (noteId: string, content: string) => Promise<void>;
+  onReorderNotes: (updates: PlacementReorderUpdate[]) => Promise<boolean>;
   onReorderColumns: (orderedIds: string[]) => Promise<void>;
   onAddColumn: (name: string) => Promise<void>;
   onOpenNote: (noteId: string) => void;
@@ -50,7 +50,7 @@ export function Board({
   boards,
   currentBoardId,
   onAddNote,
-  onDeleteNote,
+  onRemoveNote,
   onUpdateNote,
   onReorderNotes,
   onReorderColumns,
@@ -63,9 +63,9 @@ export function Board({
   onCopyColumnToBoard,
 }: Props) {
   // --- Note drag state ---
-  const [localNotes, setLocalNotes] = useState<NoteRow[]>([]);
+  const [localNotes, setLocalNotes] = useState<PlacedNoteRow[]>([]);
   const [isDraggingNote, setIsDraggingNote] = useState(false);
-  const [activeNote, setActiveNote] = useState<NoteRow | null>(null);
+  const [activeNote, setActiveNote] = useState<PlacedNoteRow | null>(null);
 
   // --- Column drag state ---
   const [localColumns, setLocalColumns] = useState<ColumnRow[]>([]);
@@ -94,11 +94,11 @@ export function Board({
     });
   }
 
-  function noteSortCmp(a: NoteRow, b: NoteRow): number {
+  function noteSortCmp(a: PlacedNoteRow, b: PlacedNoteRow): number {
     return a.position - b.position || a.created_at.localeCompare(b.created_at);
   }
 
-  function getNotesForColumn(colId: string): NoteRow[] {
+  function getNotesForColumn(colId: string): PlacedNoteRow[] {
     const filtered = displayNotes.filter((n) => n.column_id === colId);
     return isDraggingNote ? filtered : [...filtered].sort(noteSortCmp);
   }
@@ -116,7 +116,7 @@ export function Board({
       return;
     }
 
-    // NOTE drag
+    // NOTE drag — active.id = placement_id
     const snapshot = [...notes].sort((a, b) => {
       if (a.column_id !== b.column_id) return 0;
       return noteSortCmp(a, b);
@@ -157,7 +157,7 @@ export function Board({
       return;
     }
 
-    // ── NOTE drag ─────────────────────────────────────────────────────────────
+    // ── NOTE drag — ids are placement_ids ──────────────────────────────────────
 
     setLocalNotes((prev) => {
       const dragged = prev.find((n) => n.id === active.id);
@@ -228,7 +228,8 @@ export function Board({
       return;
     }
 
-    const colOrderKey = (notesList: NoteRow[], colId: string) =>
+    // Determine which columns changed by comparing placement_id order per column
+    const colOrderKey = (notesList: PlacedNoteRow[], colId: string) =>
       notesList
         .filter((n) => n.column_id === colId)
         .map((n) => n.id)
@@ -245,9 +246,9 @@ export function Board({
       }
     }
 
-    const updates: ReorderUpdate[] = [];
+    const updates: PlacementReorderUpdate[] = [];
     if (touchedColIds.size > 0) {
-      const colGroups = new Map<string, NoteRow[]>();
+      const colGroups = new Map<string, PlacedNoteRow[]>();
       for (const note of localNotes) {
         if (!touchedColIds.has(note.column_id)) continue;
         const group = colGroups.get(note.column_id) ?? [];
@@ -309,7 +310,7 @@ export function Board({
                 currentBoardId={currentBoardId}
                 isCollapsed={collapsedColumns.has(col.id)}
                 onAddNote={(content) => onAddNote(content, col.id)}
-                onDeleteNote={onDeleteNote}
+                onRemoveNote={onRemoveNote}
                 onUpdateNote={onUpdateNote}
                 onOpenNote={onOpenNote}
                 onRename={(name) => onRenameColumn(col.id, name)}

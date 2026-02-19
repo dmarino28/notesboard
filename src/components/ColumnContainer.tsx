@@ -4,21 +4,21 @@ import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ColumnRow } from "@/lib/columns";
-import { NoteRow } from "@/lib/notes";
+import { PlacedNoteRow } from "@/lib/placements";
 import { LabelRow } from "@/lib/labels";
 import { BoardRow } from "@/lib/boards";
 import { Column } from "./Column";
 
 type Props = {
   column: ColumnRow;
-  notes: NoteRow[];
+  notes: PlacedNoteRow[];
   noteLabelMap: Record<string, LabelRow[]>;
   boards: BoardRow[];
   currentBoardId: string;
   isCollapsed: boolean;
   onAddNote: (content: string) => Promise<void>;
-  onDeleteNote: (id: string) => Promise<void>;
-  onUpdateNote: (id: string, content: string) => Promise<void>;
+  onRemoveNote: (placementId: string) => Promise<void>;
+  onUpdateNote: (noteId: string, content: string) => Promise<void>;
   onOpenNote: (noteId: string) => void;
   onRename: (name: string) => Promise<void>;
   onDelete: () => void;
@@ -36,7 +36,7 @@ export function ColumnContainer({
   currentBoardId,
   isCollapsed,
   onAddNote,
-  onDeleteNote,
+  onRemoveNote,
   onUpdateNote,
   onOpenNote,
   onRename,
@@ -71,7 +71,7 @@ export function ColumnContainer({
         currentBoardId={currentBoardId}
         isCollapsed={isCollapsed}
         onAddNote={onAddNote}
-        onDeleteNote={onDeleteNote}
+        onRemoveNote={onRemoveNote}
         onUpdateNote={onUpdateNote}
         onOpenNote={onOpenNote}
         onRename={onRename}

@@ -3,14 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  listNotes,
   createNote,
   deleteNote,
   updateNote,
-  reorderNotes,
   type NoteRow,
-  type ReorderUpdate,
 } from "@/lib/notes";
+import {
+  listPlacements,
+  createPlacement,
+  deletePlacement,
+  reorderPlacements,
+  maxPlacementPosition,
+  type PlacedNoteRow,
+  type PlacementReorderUpdate,
+} from "@/lib/placements";
 import {
   listColumns,
   createColumn,
@@ -40,14 +46,14 @@ export default function BoardPage() {
   const router = useRouter();
 
   const [columns, setColumns] = useState<ColumnRow[]>([]);
-  const [notes, setNotes] = useState<NoteRow[]>([]);
+  const [placements, setPlacements] = useState<PlacedNoteRow[]>([]);
   const [boards, setBoards] = useState<BoardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showManager, setShowManager] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
-  // Modal
+  // Modal — keyed on note_id
   const [modalNoteId, setModalNoteId] = useState<string | null>(null);
 
   // Labels
@@ -63,32 +69,32 @@ export default function BoardPage() {
     });
   }, []);
 
-  // Reload columns + notes + labels whenever boardId or showArchived changes.
+  // Reload columns + placements + labels whenever boardId or showArchived changes.
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       setColumns([]);
-      setNotes([]);
+      setPlacements([]);
       setFetchError(null);
       setShowManager(false);
       setModalNoteId(null);
 
-      const [colResult, noteResult, labelResult, labelMapResult] = await Promise.all([
+      const [colResult, placementResult, labelResult, labelMapResult] = await Promise.all([
         listColumns(boardId),
-        listNotes(boardId, showArchived),
+        listPlacements(boardId, showArchived),
         listLabels(boardId),
         listBoardNoteLabels(boardId),
       ]);
 
       if (cancelled) return;
 
-      if (colResult.error || noteResult.error) {
-        setFetchError(colResult.error ?? noteResult.error);
+      if (colResult.error || placementResult.error) {
+        setFetchError(colResult.error ?? placementResult.error);
       } else {
         setColumns(colResult.data);
-        setNotes(noteResult.data);
+        setPlacements(placementResult.data);
       }
       if (!labelResult.error) setBoardLabels(labelResult.data);
       if (!labelMapResult.error) setNoteLabelMap(labelMapResult.data);
@@ -102,11 +108,13 @@ export default function BoardPage() {
     };
   }, [boardId, showArchived]);
 
-  // Notes visible on the board: always filter to archived=false unless showArchived is on.
-  const visibleNotes = showArchived ? notes : notes.filter((n) => !n.archived);
+  // Visible placements: always filter archived unless showArchived is on.
+  const visiblePlacements = showArchived ? placements : placements.filter((p) => !p.archived);
 
-  // Note open for modal (look in full notes state, not just visible)
-  const modalNote = modalNoteId ? notes.find((n) => n.id === modalNoteId) ?? null : null;
+  // Modal note — look up by note_id (any matching placement has the same content)
+  const modalPlacement = modalNoteId
+    ? placements.find((p) => p.note_id === modalNoteId) ?? null
+    : null;
 
   const handleCloseModal = useCallback(() => setModalNoteId(null), []);
 
@@ -155,48 +163,74 @@ export default function BoardPage() {
     }
   }
 
-  // --- Note handlers ---
+  // --- Note / placement handlers ---
 
   async function handleAddNote(content: string, columnId: string) {
-    const colNotes = notes.filter((n) => n.column_id === columnId);
-    const maxPos = colNotes.reduce((max, n) => Math.max(max, n.position), -1);
+    const colPlacements = placements.filter((p) => p.column_id === columnId);
+    const maxPos = colPlacements.reduce((max, p) => Math.max(max, p.position), -1);
     const position = maxPos + 1;
-    const { error } = await createNote(content, columnId, position, boardId);
-    if (error) throw new Error(error);
-    const { data } = await listNotes(boardId, showArchived);
-    if (data) setNotes(data);
+
+    const { data: newNote, error: noteErr } = await createNote(content, columnId, position, boardId);
+    if (noteErr || !newNote) throw new Error(noteErr ?? "Failed to create note");
+
+    const { error: placementErr } = await createPlacement({
+      noteId: newNote.id,
+      boardId,
+      columnId,
+      position,
+    });
+    if (placementErr) throw new Error(placementErr);
+
+    const { data } = await listPlacements(boardId, showArchived);
+    if (data) setPlacements(data);
     showToast("Note added");
   }
 
-  async function handleDeleteNote(id: string) {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-    const { error } = await deleteNote(id);
+  async function handleRemoveFromBoard(placementId: string) {
+    setPlacements((prev) => prev.filter((p) => p.id !== placementId));
+    const { error } = await deletePlacement(placementId);
     if (error) {
-      const { data } = await listNotes(boardId, showArchived);
-      if (data) setNotes(data);
-      showToast("Failed to delete note");
+      const { data } = await listPlacements(boardId, showArchived);
+      if (data) setPlacements(data);
+      showToast("Failed to remove note");
     } else {
-      showToast("Note deleted");
+      showToast("Removed from board");
     }
   }
 
-  async function handleUpdateNote(id: string, content: string) {
-    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, content } : n)));
-    const { error } = await updateNote(id, content);
+  async function handleDeleteNoteEverywhere(noteId: string) {
+    // Optimistic: remove all placements for this note from current board
+    setPlacements((prev) => prev.filter((p) => p.note_id !== noteId));
+    const { error } = await deleteNote(noteId);
     if (error) {
-      const { data } = await listNotes(boardId, showArchived);
-      if (data) setNotes(data);
+      const { data } = await listPlacements(boardId, showArchived);
+      if (data) setPlacements(data);
+      showToast("Failed to delete note");
+    } else {
+      showToast("Note deleted everywhere");
+    }
+  }
+
+  async function handleUpdateNote(noteId: string, content: string) {
+    // Update all placements of this note in local state
+    setPlacements((prev) =>
+      prev.map((p) => (p.note_id === noteId ? { ...p, content } : p)),
+    );
+    const { error } = await updateNote(noteId, content);
+    if (error) {
+      const { data } = await listPlacements(boardId, showArchived);
+      if (data) setPlacements(data);
       throw new Error(error);
     }
     showToast("Note updated");
   }
 
-  async function handleReorderNotes(updates: ReorderUpdate[]): Promise<boolean> {
+  async function handleReorderPlacements(updates: PlacementReorderUpdate[]): Promise<boolean> {
     const updatesMap = new Map(updates.map((u) => [u.id, u]));
-    setNotes((prev) => {
-      const updated = prev.map((n) => {
-        const u = updatesMap.get(n.id);
-        return u ? { ...n, column_id: u.column_id, position: u.position } : n;
+    setPlacements((prev) => {
+      const updated = prev.map((p) => {
+        const u = updatesMap.get(p.id);
+        return u ? { ...p, column_id: u.column_id, position: u.position } : p;
       });
       return updated.sort((a, b) => {
         const colCmp = a.column_id.localeCompare(b.column_id);
@@ -205,11 +239,11 @@ export default function BoardPage() {
       });
     });
 
-    const { error } = await reorderNotes(updates);
+    const { error } = await reorderPlacements(updates);
 
     if (error) {
-      const { data } = await listNotes(boardId, showArchived);
-      if (data) setNotes(data);
+      const { data } = await listPlacements(boardId, showArchived);
+      if (data) setPlacements(data);
       showToast(`Reorder failed: ${error}`);
       return false;
     }
@@ -218,8 +252,12 @@ export default function BoardPage() {
     return true;
   }
 
-  function handleNoteChange(id: string, fields: Partial<NoteRow>) {
-    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...fields } : n)));
+  // Called by CardDetailsModal when note content/fields change.
+  // Updates all placements for this note_id in local state.
+  function handleNoteChange(noteId: string, fields: Partial<NoteRow>) {
+    setPlacements((prev) =>
+      prev.map((p) => (p.note_id === noteId ? { ...p, ...fields } : p)),
+    );
   }
 
   function handleNoteLabelsChanged(noteId: string, labels: LabelRow[]) {
@@ -228,6 +266,31 @@ export default function BoardPage() {
 
   function handleLabelCreated(label: LabelRow) {
     setBoardLabels((prev) => [...prev, label]);
+  }
+
+  // Link a note to another board.
+  async function handleLinkToBoard(
+    noteId: string,
+    targetBoardId: string,
+    targetColumnId: string,
+  ) {
+    const position = await maxPlacementPosition(targetBoardId, targetColumnId);
+    const { error } = await createPlacement({
+      noteId,
+      boardId: targetBoardId,
+      columnId: targetColumnId,
+      position: position + 1,
+    });
+    if (error) throw new Error(error);
+
+    // If linking to current board, refresh placements
+    if (targetBoardId === boardId) {
+      const { data } = await listPlacements(boardId, showArchived);
+      if (data) setPlacements(data);
+    }
+
+    const target = boards.find((b) => b.id === targetBoardId);
+    showToast(`Linked to "${target?.name ?? "board"}"`);
   }
 
   // --- Column handlers ---
@@ -290,24 +353,23 @@ export default function BoardPage() {
       return;
     }
     setColumns((prev) => prev.filter((c) => c.id !== id));
-    setNotes((prev) => prev.filter((n) => n.column_id !== id));
+    // Placements for deleted column's notes cascade via DB (column → note_placements ON DELETE CASCADE for column_id)
+    setPlacements((prev) => prev.filter((p) => p.column_id !== id));
     showToast("Column deleted");
   }
 
   async function handleMoveColumnToBoard(columnId: string, targetBoardId: string) {
-    // Optimistic: remove from current board state immediately
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
-    setNotes((prev) => prev.filter((n) => n.column_id !== columnId));
+    setPlacements((prev) => prev.filter((p) => p.column_id !== columnId));
 
-    const { error } = await moveColumnToBoard(columnId, targetBoardId);
+    const { error } = await moveColumnToBoard(columnId, targetBoardId, boardId);
     if (error) {
-      // Rollback
-      const [{ data: cols }, { data: nts }] = await Promise.all([
+      const [{ data: cols }, { data: pls }] = await Promise.all([
         listColumns(boardId),
-        listNotes(boardId, showArchived),
+        listPlacements(boardId, showArchived),
       ]);
       if (cols) setColumns(cols);
-      if (nts) setNotes(nts);
+      if (pls) setPlacements(pls);
       showToast("Failed to move list");
       return;
     }
@@ -318,7 +380,22 @@ export default function BoardPage() {
   async function handleCopyColumnToBoard(columnId: string, targetBoardId: string) {
     const column = columns.find((c) => c.id === columnId);
     if (!column) return;
-    const colNotes = notes.filter((n) => n.column_id === columnId);
+
+    // Build NoteRow-compatible objects from placements in this column
+    const colPlacements = placements.filter((p) => p.column_id === columnId);
+    const colNotes: NoteRow[] = colPlacements.map((p) => ({
+      id: p.note_id,
+      content: p.content,
+      description: p.description,
+      due_date: p.due_date,
+      event_start: p.event_start,
+      event_end: p.event_end,
+      archived: p.archived,
+      column_id: p.column_id,
+      board_id: p.board_id,
+      position: p.position,
+      created_at: p.created_at,
+    }));
 
     const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);
     if (error || !data) {
@@ -326,10 +403,11 @@ export default function BoardPage() {
       return;
     }
 
-    // If the target is the currently viewed board, add to local state
     if (targetBoardId === boardId) {
       setColumns((prev) => [...prev, data.column]);
-      setNotes((prev) => [...prev, ...data.notes]);
+      // Refresh placements since copyColumnToBoard creates them
+      const { data: pls } = await listPlacements(boardId, showArchived);
+      if (pls) setPlacements(pls);
     }
 
     const targetBoard = boards.find((b) => b.id === targetBoardId);
@@ -373,16 +451,16 @@ export default function BoardPage() {
         <Board
           key={boardId}
           columns={columns}
-          notes={visibleNotes}
+          notes={visiblePlacements}
           loading={loading}
           error={fetchError}
           noteLabelMap={noteLabelMap}
           boards={boards}
           currentBoardId={boardId}
           onAddNote={handleAddNote}
-          onDeleteNote={handleDeleteNote}
+          onRemoveNote={handleRemoveFromBoard}
           onUpdateNote={handleUpdateNote}
-          onReorderNotes={handleReorderNotes}
+          onReorderNotes={handleReorderPlacements}
           onReorderColumns={handleReorderColumns}
           onAddColumn={handleAddColumn}
           onOpenNote={setModalNoteId}
@@ -394,7 +472,7 @@ export default function BoardPage() {
         />
       </div>
 
-      {/* Toast — fixed overlay */}
+      {/* Toast */}
       {toast && (
         <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2">
           <div className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-200 shadow-xl">
@@ -403,16 +481,20 @@ export default function BoardPage() {
         </div>
       )}
 
-      {modalNote && (
+      {modalPlacement && (
         <CardDetailsModal
-          note={modalNote}
+          note={modalPlacement}
+          noteId={modalPlacement.note_id}
           boardId={boardId}
           boardLabels={boardLabels}
+          boards={boards}
           onClose={handleCloseModal}
           onNoteChange={handleNoteChange}
           onLabelCreated={handleLabelCreated}
           onNoteLabelsChanged={handleNoteLabelsChanged}
           onError={showToast}
+          onDeleteEverywhere={handleDeleteNoteEverywhere}
+          onLinkToBoard={handleLinkToBoard}
         />
       )}
     </div>

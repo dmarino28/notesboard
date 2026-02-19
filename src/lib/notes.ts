@@ -52,11 +52,13 @@ export async function createNote(
   columnId: string,
   position: number,
   boardId: string,
-): Promise<{ error: string | null }> {
-  const { error } = await supabase
+): Promise<{ data: NoteRow | null; error: string | null }> {
+  const { data, error } = await supabase
     .from("notes")
-    .insert([{ content, column_id: columnId, position, board_id: boardId }]);
-  return { error: error?.message ?? null };
+    .insert([{ content, column_id: columnId, position, board_id: boardId }])
+    .select(NOTE_SELECT)
+    .single();
+  return { data: (data as NoteRow | null) ?? null, error: error?.message ?? null };
 }
 
 export async function deleteNote(id: string): Promise<{ error: string | null }> {

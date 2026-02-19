@@ -3,20 +3,20 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { NoteRow } from "@/lib/notes";
+import { PlacedNoteRow } from "@/lib/placements";
 import { LabelRow } from "@/lib/labels";
 
 type Props = {
-  note: NoteRow;
+  note: PlacedNoteRow;
   noteLabels: LabelRow[];
-  onDelete: (id: string) => Promise<void>;
-  onUpdate: (id: string, content: string) => Promise<void>;
+  onRemove: (placementId: string) => Promise<void>;
+  onUpdate: (noteId: string, content: string) => Promise<void>;
   onOpen: () => void;
 };
 
-export function NoteItem({ note, noteLabels, onDelete, onUpdate, onOpen }: Props) {
+export function NoteItem({ note, noteLabels, onRemove, onUpdate, onOpen }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: note.id,
+    id: note.id, // placement_id
     data: { type: "NOTE" },
   });
 
@@ -40,7 +40,7 @@ export function NoteItem({ note, noteLabels, onDelete, onUpdate, onOpen }: Props
     setSaving(true);
     setError(null);
     try {
-      await onUpdate(note.id, trimmed);
+      await onUpdate(note.note_id, trimmed);
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update.");
@@ -55,9 +55,9 @@ export function NoteItem({ note, noteLabels, onDelete, onUpdate, onOpen }: Props
     setEditing(false);
   }
 
-  async function handleDelete() {
-    if (!confirm("Delete this note?")) return;
-    await onDelete(note.id);
+  async function handleRemove() {
+    if (!confirm("Remove from this board?")) return;
+    await onRemove(note.id);
   }
 
   const shownLabels = noteLabels.slice(0, 3);
@@ -145,7 +145,17 @@ export function NoteItem({ note, noteLabels, onDelete, onUpdate, onOpen }: Props
             </div>
           )}
 
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex items-center justify-between">
+            {note.placement_count > 1 ? (
+              <span
+                className="text-xs text-neutral-400"
+                title={`Linked to ${note.placement_count} boards`}
+              >
+                🔗
+              </span>
+            ) : (
+              <span />
+            )}
             <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors"
@@ -160,10 +170,10 @@ export function NoteItem({ note, noteLabels, onDelete, onUpdate, onOpen }: Props
                 className="text-xs text-red-400 hover:text-red-600 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDelete();
+                  void handleRemove();
                 }}
               >
-                Delete
+                Remove
               </button>
             </div>
           </div>

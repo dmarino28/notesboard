@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { NoteRow, NoteFieldUpdates, updateNoteFields } from "@/lib/notes";
+import { NoteFieldUpdates, updateNoteFields, deleteNote } from "@/lib/notes";
 import {
   LabelRow,
   listNoteLabels,
@@ -10,29 +10,52 @@ import {
   createLabel,
 } from "@/lib/labels";
 import { CommentRow, listComments, addComment, deleteComment } from "@/lib/comments";
+import { ColumnRow, listColumns } from "@/lib/columns";
+import { BoardRow } from "@/lib/boards";
+
+// Minimal shape the modal needs from a note — works for both NoteRow and PlacedNoteRow
+type NoteInput = {
+  content: string;
+  description: string | null;
+  due_date: string | null;
+  event_start: string | null;
+  event_end: string | null;
+  archived: boolean;
+  board_id: string;
+};
 
 type Props = {
-  note: NoteRow;
+  note: NoteInput;
+  noteId: string;           // canonical note id (use this for all DB calls)
   boardId: string;
   boardLabels: LabelRow[];
+  boards?: BoardRow[];      // if provided, enables "Link to board" UI
   onClose: () => void;
-  onNoteChange: (id: string, fields: Partial<NoteRow>) => void;
+  onNoteChange: (noteId: string, fields: Partial<NoteInput>) => void;
   onLabelCreated: (label: LabelRow) => void;
   onNoteLabelsChanged: (noteId: string, labels: LabelRow[]) => void;
   onError: (msg: string) => void;
+  onDeleteEverywhere?: (noteId: string) => Promise<void>;
+  onLinkToBoard?: (noteId: string, targetBoardId: string, targetColumnId: string) => Promise<void>;
+  onNoteDeleted?: (noteId: string) => void;
 };
 
 export function CardDetailsModal({
   note,
+  noteId,
   boardId,
   boardLabels,
+  boards,
   onClose,
   onNoteChange,
   onLabelCreated,
   onNoteLabelsChanged,
   onError,
+  onDeleteEverywhere,
+  onLinkToBoard,
+  onNoteDeleted,
 }: Props) {
-  // --- Local field state (one-way from prop; parent updated via onNoteChange) ---
+  // --- Local field state ---
   const [title, setTitle] = useState(note.content);
   const [description, setDescription] = useState(note.description ?? "");
   const [dueDate, setDueDate] = useState(
@@ -69,21 +92,30 @@ export function CardDetailsModal({
   const [visible, setVisible] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // --- Link to board state ---
+  const [showLinkForm, setShowLinkForm] = useState(false);
+  const [linkBoardId, setLinkBoardId] = useState("");
+  const [linkColumns, setLinkColumns] = useState<ColumnRow[]>([]);
+  const [linkColumnId, setLinkColumnId] = useState("");
+  const [linkColumnsLoading, setLinkColumnsLoading] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkSuccess, setLinkSuccess] = useState(false);
+
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
   // Lazy-load labels and comments
   useEffect(() => {
-    listNoteLabels(note.id).then(({ data }) => {
+    listNoteLabels(noteId).then(({ data }) => {
       setNoteLabels(data);
       setLabelsLoading(false);
     });
-    listComments(note.id).then(({ data }) => {
+    listComments(noteId).then(({ data }) => {
       setComments(data);
       setCommentsLoading(false);
     });
-  }, [note.id]);
+  }, [noteId]);
 
   // ESC to close
   useEffect(() => {
@@ -103,9 +135,7 @@ export function CardDetailsModal({
     };
   }, []);
 
-  // Initialize local fields only when a different card is opened (note.id changes).
-  // Do NOT resync on individual field changes — that clobbers the date picker while the user
-  // is interacting with it (focus loss / picker closes).
+  // Re-sync fields when a different card is opened (noteId changes)
   useEffect(() => {
     setTitle(note.content);
     setDescription(note.description ?? "");
@@ -114,19 +144,18 @@ export function CardDetailsModal({
     setEventEnd(note.event_end ? toDatetimeLocal(note.event_end) : "");
     setArchived(note.archived);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [note.id]);
+  }, [noteId]);
 
   // ------------------------------------------------------------------ helpers
 
   function triggerClose() {
-    // Flush any pending debounced save synchronously
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
       const pending = pendingRef.current;
       pendingRef.current = {};
       if (Object.keys(pending).length > 0) {
-        void updateNoteFields(note.id, pending);
+        void updateNoteFields(noteId, pending);
       }
     }
     setVisible(false);
@@ -141,7 +170,7 @@ export function CardDetailsModal({
     saveTimerRef.current = setTimeout(async () => {
       const toSave = pendingRef.current;
       pendingRef.current = {};
-      const { error } = await updateNoteFields(note.id, toSave);
+      const { error } = await updateNoteFields(noteId, toSave);
       if (error) {
         onError(`Save failed: ${error}`);
         setSaveStatus("idle");
@@ -156,34 +185,34 @@ export function CardDetailsModal({
 
   function handleTitleChange(v: string) {
     setTitle(v);
-    onNoteChange(note.id, { content: v });
+    onNoteChange(noteId, { content: v });
     scheduleFieldSave({ content: v });
   }
 
   function handleDescriptionChange(v: string) {
     setDescription(v);
-    onNoteChange(note.id, { description: v || null });
+    onNoteChange(noteId, { description: v || null });
     scheduleFieldSave({ description: v || null });
   }
 
   function handleDueDateChange(v: string) {
     setDueDate(v);
     const iso = v ? new Date(v).toISOString() : null;
-    onNoteChange(note.id, { due_date: iso });
+    onNoteChange(noteId, { due_date: iso });
     scheduleFieldSave({ due_date: iso });
   }
 
   function handleEventStartChange(v: string) {
     setEventStart(v);
     const iso = v ? new Date(v).toISOString() : null;
-    onNoteChange(note.id, { event_start: iso });
+    onNoteChange(noteId, { event_start: iso });
     scheduleFieldSave({ event_start: iso });
   }
 
   function handleEventEndChange(v: string) {
     setEventEnd(v);
     const iso = v ? new Date(v).toISOString() : null;
-    onNoteChange(note.id, { event_end: iso });
+    onNoteChange(noteId, { event_end: iso });
     scheduleFieldSave({ event_end: iso });
   }
 
@@ -197,17 +226,75 @@ export function CardDetailsModal({
   async function handleArchiveToggle() {
     const newArchived = !archived;
     setArchived(newArchived);
-    onNoteChange(note.id, { archived: newArchived });
+    onNoteChange(noteId, { archived: newArchived });
 
-    const { error } = await updateNoteFields(note.id, { archived: newArchived });
+    const { error } = await updateNoteFields(noteId, { archived: newArchived });
     if (error) {
       setArchived(!newArchived);
-      onNoteChange(note.id, { archived: !newArchived });
+      onNoteChange(noteId, { archived: !newArchived });
       onError(`Failed to ${newArchived ? "archive" : "restore"} note`);
       return;
     }
 
     triggerClose();
+  }
+
+  // ------------------------------------------------------------------ delete everywhere
+
+  async function handleDeleteEverywhere() {
+    if (
+      !confirm(
+        "Delete this card from ALL boards? This cannot be undone — all placements, comments, and labels will be removed.",
+      )
+    )
+      return;
+
+    if (onDeleteEverywhere) {
+      await onDeleteEverywhere(noteId);
+    } else {
+      const { error } = await deleteNote(noteId);
+      if (error) {
+        onError(`Failed to delete: ${error}`);
+        return;
+      }
+      onNoteDeleted?.(noteId);
+    }
+
+    triggerClose();
+  }
+
+  // ------------------------------------------------------------------ link to board
+
+  async function handleLinkBoardChange(targetBoardId: string) {
+    setLinkBoardId(targetBoardId);
+    setLinkColumnId("");
+    setLinkColumns([]);
+    if (!targetBoardId) return;
+    setLinkColumnsLoading(true);
+    const { data } = await listColumns(targetBoardId);
+    setLinkColumnsLoading(false);
+    setLinkColumns(data);
+    if (data.length > 0) setLinkColumnId(data[0].id);
+  }
+
+  async function handleLink() {
+    if (!linkBoardId || !linkColumnId || !onLinkToBoard) return;
+    setLinking(true);
+    try {
+      await onLinkToBoard(noteId, linkBoardId, linkColumnId);
+      setLinkSuccess(true);
+      setTimeout(() => {
+        setLinkSuccess(false);
+        setShowLinkForm(false);
+        setLinkBoardId("");
+        setLinkColumns([]);
+        setLinkColumnId("");
+      }, 1500);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to link");
+    } finally {
+      setLinking(false);
+    }
   }
 
   // ------------------------------------------------------------------ labels
@@ -217,13 +304,13 @@ export function CardDetailsModal({
     if (!label || noteLabels.some((l) => l.id === labelId)) return;
     const updated = [...noteLabels, label];
     setNoteLabels(updated);
-    onNoteLabelsChanged(note.id, updated);
+    onNoteLabelsChanged(noteId, updated);
 
-    const { error } = await attachLabel(note.id, labelId);
+    const { error } = await attachLabel(noteId, labelId);
     if (error) {
       const reverted = updated.filter((l) => l.id !== labelId);
       setNoteLabels(reverted);
-      onNoteLabelsChanged(note.id, reverted);
+      onNoteLabelsChanged(noteId, reverted);
       onError("Failed to attach label");
     }
   }
@@ -231,13 +318,13 @@ export function CardDetailsModal({
   async function handleDetachLabel(labelId: string) {
     const updated = noteLabels.filter((l) => l.id !== labelId);
     setNoteLabels(updated);
-    onNoteLabelsChanged(note.id, updated);
+    onNoteLabelsChanged(noteId, updated);
 
-    const { error } = await detachLabel(note.id, labelId);
+    const { error } = await detachLabel(noteId, labelId);
     if (error) {
       const reverted = [...updated, boardLabels.find((l) => l.id === labelId)!].filter(Boolean);
       setNoteLabels(reverted);
-      onNoteLabelsChanged(note.id, reverted);
+      onNoteLabelsChanged(noteId, reverted);
       onError("Failed to remove label");
     }
   }
@@ -256,8 +343,8 @@ export function CardDetailsModal({
     setNewLabelName("");
     const updated = [...noteLabels, data];
     setNoteLabels(updated);
-    onNoteLabelsChanged(note.id, updated);
-    await attachLabel(note.id, data.id);
+    onNoteLabelsChanged(noteId, updated);
+    await attachLabel(noteId, data.id);
   }
 
   // ------------------------------------------------------------------ comments
@@ -268,14 +355,14 @@ export function CardDetailsModal({
     setAddingComment(true);
     const optimistic: CommentRow = {
       id: `temp-${Date.now()}`,
-      note_id: note.id,
+      note_id: noteId,
       content: trimmed,
       created_at: new Date().toISOString(),
     };
     setComments((prev) => [...prev, optimistic]);
     setNewComment("");
 
-    const { data, error } = await addComment(note.id, trimmed);
+    const { data, error } = await addComment(noteId, trimmed);
     setAddingComment(false);
     if (error || !data) {
       setComments((prev) => prev.filter((c) => c.id !== optimistic.id));
@@ -296,6 +383,10 @@ export function CardDetailsModal({
 
   const noteLabelIds = new Set(noteLabels.map((l) => l.id));
   const unattachedLabels = boardLabels.filter((l) => !noteLabelIds.has(l.id));
+
+  // Boards available for linking: exclude boards the note is already placed on
+  // We show all boards; the DB unique constraint will reject duplicates gracefully
+  const otherBoards = boards?.filter((b) => b.id !== boardId) ?? [];
 
   // ------------------------------------------------------------------ render
 
@@ -574,8 +665,85 @@ export function CardDetailsModal({
             )}
           </section>
 
-          {/* Archive */}
-          <section className="border-t border-neutral-800 pt-4">
+          {/* Link to board */}
+          {onLinkToBoard && otherBoards.length > 0 && (
+            <section className="border-t border-neutral-800 pt-4">
+              {!showLinkForm ? (
+                <button
+                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200 transition-colors"
+                  onClick={() => setShowLinkForm(true)}
+                >
+                  🔗 Link to another board…
+                </button>
+              ) : (
+                <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3">
+                  <p className="text-xs font-medium text-neutral-400">Link to board</p>
+                  <select
+                    className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
+                    value={linkBoardId}
+                    onChange={(e) => handleLinkBoardChange(e.target.value)}
+                  >
+                    <option value="">Select board…</option>
+                    {otherBoards.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {linkBoardId && (
+                    <>
+                      {linkColumnsLoading ? (
+                        <p className="text-xs text-neutral-600">Loading columns…</p>
+                      ) : linkColumns.length === 0 ? (
+                        <p className="text-xs text-neutral-500">No columns on this board.</p>
+                      ) : (
+                        <select
+                          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
+                          value={linkColumnId}
+                          onChange={(e) => setLinkColumnId(e.target.value)}
+                        >
+                          {linkColumns.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </>
+                  )}
+
+                  {linkSuccess ? (
+                    <p className="text-xs text-green-500">Linked successfully!</p>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black disabled:opacity-50"
+                        onClick={handleLink}
+                        disabled={linking || !linkBoardId || !linkColumnId}
+                      >
+                        {linking ? "Linking…" : "Link"}
+                      </button>
+                      <button
+                        className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                        onClick={() => {
+                          setShowLinkForm(false);
+                          setLinkBoardId("");
+                          setLinkColumns([]);
+                          setLinkColumnId("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Archive + Delete everywhere */}
+          <section className="border-t border-neutral-800 pt-4 flex flex-wrap items-center gap-3">
             <button
               className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
                 archived
@@ -585,6 +753,13 @@ export function CardDetailsModal({
               onClick={handleArchiveToggle}
             >
               {archived ? "Restore from Archive" : "Archive Card"}
+            </button>
+
+            <button
+              className="rounded-md border border-red-900 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-900/20 hover:text-red-400"
+              onClick={handleDeleteEverywhere}
+            >
+              Delete everywhere
             </button>
           </section>
         </div>
