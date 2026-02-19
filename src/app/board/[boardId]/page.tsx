@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   listNotes,
   createNote,
@@ -334,6 +335,18 @@ export default function BoardPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/calendar"
+              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900"
+            >
+              Calendar
+            </Link>
+            <Link
+              href="/timeline"
+              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900"
+            >
+              Timeline
+            </Link>
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-400 select-none">
               <input
                 type="checkbox"
