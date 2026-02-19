@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   listNotes,
   createNote,
@@ -28,10 +27,11 @@ import {
   type BoardRow,
 } from "@/lib/boards";
 import { listLabels, listBoardNoteLabels, type LabelRow } from "@/lib/labels";
+import { moveColumnToBoard, copyColumnToBoard } from "@/lib/columnOps";
 import { useToast } from "@/lib/useToast";
 import { Board } from "@/components/Board";
 import { ColumnManager } from "@/components/ColumnManager";
-import { BoardSelector } from "@/components/BoardSelector";
+import { BoardTopBar } from "@/components/BoardTopBar";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
 
 export default function BoardPage() {
@@ -103,13 +103,11 @@ export default function BoardPage() {
   }, [boardId, showArchived]);
 
   // Notes visible on the board: always filter to archived=false unless showArchived is on.
-  // (The fetch already filters server-side, but optimistic archive updates need client filter too.)
   const visibleNotes = showArchived ? notes : notes.filter((n) => !n.archived);
 
   // Note open for modal (look in full notes state, not just visible)
   const modalNote = modalNoteId ? notes.find((n) => n.id === modalNoteId) ?? null : null;
 
-  // Stable close handler for modal
   const handleCloseModal = useCallback(() => setModalNoteId(null), []);
 
   // --- Board handlers ---
@@ -193,23 +191,6 @@ export default function BoardPage() {
     showToast("Note updated");
   }
 
-  async function handleMoveNote(id: string, columnId: string) {
-    const targetColNotes = notes.filter((n) => n.column_id === columnId);
-    const maxPos = targetColNotes.reduce((max, n) => Math.max(max, n.position), -1);
-    const position = maxPos + 1;
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, column_id: columnId, position } : n)),
-    );
-    const { error } = await reorderNotes([{ id, column_id: columnId, position }]);
-    if (error) {
-      const { data } = await listNotes(boardId, showArchived);
-      if (data) setNotes(data);
-      showToast(`Failed to move note: ${error}`);
-    } else {
-      showToast("Note moved");
-    }
-  }
-
   async function handleReorderNotes(updates: ReorderUpdate[]): Promise<boolean> {
     const updatesMap = new Map(updates.map((u) => [u.id, u]));
     setNotes((prev) => {
@@ -237,7 +218,6 @@ export default function BoardPage() {
     return true;
   }
 
-  // --- Modal note-change handler (optimistic from modal) ---
   function handleNoteChange(id: string, fields: Partial<NoteRow>) {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...fields } : n)));
   }
@@ -289,7 +269,6 @@ export default function BoardPage() {
     const newColumns = ids.map((id, i) => ({ ...idToCol[id], position: i }));
     setColumns(newColumns);
 
-    // Only persist rows whose position actually changed
     const updates = newColumns
       .filter((c) => (idToCol[c.id]?.position ?? -1) !== c.position)
       .map((c) => ({ id: c.id, position: c.position }));
@@ -311,67 +290,71 @@ export default function BoardPage() {
       return;
     }
     setColumns((prev) => prev.filter((c) => c.id !== id));
-    // DB cascade deletes the notes; mirror that in local state.
     setNotes((prev) => prev.filter((n) => n.column_id !== id));
     showToast("Column deleted");
+  }
+
+  async function handleMoveColumnToBoard(columnId: string, targetBoardId: string) {
+    // Optimistic: remove from current board state immediately
+    setColumns((prev) => prev.filter((c) => c.id !== columnId));
+    setNotes((prev) => prev.filter((n) => n.column_id !== columnId));
+
+    const { error } = await moveColumnToBoard(columnId, targetBoardId);
+    if (error) {
+      // Rollback
+      const [{ data: cols }, { data: nts }] = await Promise.all([
+        listColumns(boardId),
+        listNotes(boardId, showArchived),
+      ]);
+      if (cols) setColumns(cols);
+      if (nts) setNotes(nts);
+      showToast("Failed to move list");
+      return;
+    }
+    const targetBoard = boards.find((b) => b.id === targetBoardId);
+    showToast(`List moved to "${targetBoard?.name ?? "board"}"`);
+  }
+
+  async function handleCopyColumnToBoard(columnId: string, targetBoardId: string) {
+    const column = columns.find((c) => c.id === columnId);
+    if (!column) return;
+    const colNotes = notes.filter((n) => n.column_id === columnId);
+
+    const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);
+    if (error || !data) {
+      showToast("Failed to copy list");
+      return;
+    }
+
+    // If the target is the currently viewed board, add to local state
+    if (targetBoardId === boardId) {
+      setColumns((prev) => [...prev, data.column]);
+      setNotes((prev) => [...prev, ...data.notes]);
+    }
+
+    const targetBoard = boards.find((b) => b.id === targetBoardId);
+    showToast(`List copied to "${targetBoard?.name ?? "board"}"`);
   }
 
   const currentBoard = boards.find((b) => b.id === boardId);
 
   return (
-    <main className="min-h-screen p-6">
-      <div className="mx-auto space-y-6">
-        <header className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <BoardSelector
-              boards={boards}
-              currentBoardId={boardId}
-              onCreateBoard={handleCreateBoard}
-              onRenameBoard={handleRenameBoard}
-              onDeleteBoard={handleDeleteBoard}
-            />
-            {currentBoard && (
-              <p className="text-sm text-neutral-400">{currentBoard.name}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/calendar"
-              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900"
-            >
-              Calendar
-            </Link>
-            <Link
-              href="/timeline"
-              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900"
-            >
-              Timeline
-            </Link>
-            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-400 select-none">
-              <input
-                type="checkbox"
-                className="accent-neutral-400"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />
-              Show archived
-            </label>
-            <button
-              className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900"
-              onClick={() => setShowManager((v) => !v)}
-            >
-              {showManager ? "Close" : "Manage Columns"}
-            </button>
-          </div>
-        </header>
+    <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
+      <BoardTopBar
+        currentBoard={currentBoard}
+        boards={boards}
+        boardId={boardId}
+        showArchived={showArchived}
+        onShowArchivedChange={setShowArchived}
+        onRenameBoard={handleRenameBoard}
+        onCreateBoard={handleCreateBoard}
+        onDeleteBoard={handleDeleteBoard}
+        showManager={showManager}
+        onToggleManager={() => setShowManager((v) => !v)}
+      />
 
-        {toast && (
-          <div className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm">
-            {toast}
-          </div>
-        )}
-
-        {showManager && (
+      {showManager && (
+        <div className="flex-shrink-0 border-b border-white/8 bg-neutral-900/60 px-4 py-3">
           <ColumnManager
             columns={columns}
             onAdd={handleAddColumn}
@@ -380,8 +363,13 @@ export default function BoardPage() {
             onReorder={handleReorderColumns}
             onDelete={handleDeleteColumn}
           />
-        )}
+        </div>
+      )}
 
+      <div
+        className="min-h-0 flex-1"
+        style={{ background: "linear-gradient(150deg, #1b1e2e 0%, #13151f 60%, #101218 100%)" }}
+      >
         <Board
           key={boardId}
           columns={columns}
@@ -389,15 +377,31 @@ export default function BoardPage() {
           loading={loading}
           error={fetchError}
           noteLabelMap={noteLabelMap}
+          boards={boards}
+          currentBoardId={boardId}
           onAddNote={handleAddNote}
           onDeleteNote={handleDeleteNote}
           onUpdateNote={handleUpdateNote}
-          onMoveNote={handleMoveNote}
           onReorderNotes={handleReorderNotes}
           onReorderColumns={handleReorderColumns}
+          onAddColumn={handleAddColumn}
           onOpenNote={setModalNoteId}
+          onRenameColumn={handleRenameColumn}
+          onDeleteColumn={handleDeleteColumn}
+          onUpdateColumnColor={handleUpdateColumnColor}
+          onMoveColumnToBoard={handleMoveColumnToBoard}
+          onCopyColumnToBoard={handleCopyColumnToBoard}
         />
       </div>
+
+      {/* Toast — fixed overlay */}
+      {toast && (
+        <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2">
+          <div className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-200 shadow-xl">
+            {toast}
+          </div>
+        </div>
+      )}
 
       {modalNote && (
         <CardDetailsModal
@@ -411,6 +415,6 @@ export default function BoardPage() {
           onError={showToast}
         />
       )}
-    </main>
+    </div>
   );
 }

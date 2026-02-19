@@ -1,54 +1,72 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type Props = {
   onAdd: (content: string) => Promise<void>;
 };
 
 export function NoteComposer({ onAdd }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const [content, setContent] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
-  async function handleAdd() {
+  function handleExpand() {
+    submittingRef.current = false;
+    setExpanded(true);
+  }
+
+  async function submit() {
+    if (submittingRef.current) return;
     const trimmed = content.trim();
-    if (!trimmed) return;
-
-    setSaving(true);
-    setError(null);
-
+    if (!trimmed) {
+      setExpanded(false);
+      setContent("");
+      return;
+    }
+    submittingRef.current = true;
     try {
       await onAdd(trimmed);
       setContent("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save note.");
-    } finally {
-      setSaving(false);
+      setExpanded(false);
+    } catch {
+      submittingRef.current = false;
+      setExpanded(false);
+      setContent("");
     }
   }
 
+  async function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      await submit();
+    } else if (e.key === "Escape") {
+      setContent("");
+      setExpanded(false);
+    }
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        onClick={handleExpand}
+        className="w-full rounded-lg border border-dashed border-white/15 bg-transparent px-3 py-2 text-left text-xs text-neutral-500 transition-colors hover:border-white/25 hover:bg-white/5 hover:text-neutral-300"
+      >
+        + Add card
+      </button>
+    );
+  }
+
   return (
-    <section className="space-y-3">
-      <textarea
-        className="w-full rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm outline-none focus:border-neutral-700"
-        rows={3}
-        placeholder="Write a note..."
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-      />
-
-      <div className="flex items-center gap-3">
-        <button
-          className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
-          onClick={handleAdd}
-          disabled={saving || !content.trim()}
-        >
-          {saving ? "Saving..." : "Add note"}
-        </button>
-
-        {error && <p className="text-sm text-red-400">{error}</p>}
-      </div>
-    </section>
+    <input
+      autoFocus
+      type="text"
+      value={content}
+      onChange={(e) => setContent(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={submit}
+      placeholder="Card title…"
+      className="w-full rounded-lg border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-600"
+    />
   );
 }

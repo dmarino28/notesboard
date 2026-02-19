@@ -4,20 +4,17 @@ import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { NoteRow } from "@/lib/notes";
-import { ColumnRow } from "@/lib/columns";
 import { LabelRow } from "@/lib/labels";
 
 type Props = {
   note: NoteRow;
-  allColumns: ColumnRow[];
   noteLabels: LabelRow[];
   onDelete: (id: string) => Promise<void>;
   onUpdate: (id: string, content: string) => Promise<void>;
-  onMove: (id: string, columnId: string) => Promise<void>;
   onOpen: () => void;
 };
 
-export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onMove, onOpen }: Props) {
+export function NoteItem({ note, noteLabels, onDelete, onUpdate, onOpen }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: note.id,
     data: { type: "NOTE" },
@@ -26,14 +23,15 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(note.content);
   const [saving, setSaving] = useState(false);
-  const [moving, setMoving] = useState(false);
-  const [moveTarget, setMoveTarget] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const style = {
+  const accentColor = noteLabels.length > 0 ? noteLabels[0].color : undefined;
+
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.3 : undefined,
+    opacity: isDragging ? 0.25 : undefined,
+    ...(accentColor ? { borderLeft: `3px solid ${accentColor}` } : {}),
   };
 
   async function handleSave() {
@@ -62,19 +60,6 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
     await onDelete(note.id);
   }
 
-  async function handleMove(e: React.ChangeEvent<HTMLSelectElement>) {
-    const targetId = e.target.value;
-    if (!targetId) return;
-    setMoving(true);
-    setMoveTarget(targetId);
-    await onMove(note.id, targetId);
-    setMoveTarget("");
-    setMoving(false);
-  }
-
-  const otherColumns = allColumns.filter((c) => c.id !== note.column_id);
-
-  // Label indicators: up to 3 colour swatches then "+N"
   const shownLabels = noteLabels.slice(0, 3);
   const extraLabels = noteLabels.length > 3 ? noteLabels.length - 3 : 0;
 
@@ -87,13 +72,12 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className="group cursor-pointer rounded-md border border-neutral-800 bg-neutral-950 p-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900"
+      className="group cursor-pointer rounded-lg border border-neutral-200/80 bg-white p-3 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-neutral-300"
     >
       {editing ? (
-        // Stop propagation so clicks inside the edit form don't re-open the modal
         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
           <textarea
-            className="w-full rounded border border-neutral-700 bg-neutral-900 p-2 text-sm outline-none focus:border-neutral-600"
+            className="w-full rounded border border-neutral-300 bg-white p-2 text-sm text-neutral-900 outline-none focus:border-neutral-500"
             rows={3}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
@@ -102,25 +86,24 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
           />
           <div className="flex items-center gap-2">
             <button
-              className="rounded bg-white px-3 py-1 text-xs font-medium text-black disabled:opacity-50"
+              className="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
               onClick={handleSave}
               disabled={saving || !editContent.trim()}
             >
               {saving ? "Saving…" : "Save"}
             </button>
             <button
-              className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-300 disabled:opacity-50"
+              className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 disabled:opacity-50"
               onClick={handleCancel}
               disabled={saving}
             >
               Cancel
             </button>
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
         </div>
       ) : (
         <>
-          {/* Label colour swatches */}
           {noteLabels.length > 0 && (
             <div className="mb-2 flex flex-wrap items-center gap-1">
               {shownLabels.map((label) => (
@@ -132,56 +115,40 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
                 />
               ))}
               {extraLabels > 0 && (
-                <span className="text-xs text-neutral-600">+{extraLabels}</span>
+                <span className="text-xs text-neutral-400">+{extraLabels}</span>
               )}
             </div>
           )}
 
-          <p className="whitespace-pre-wrap text-sm">{note.content}</p>
+          <p className="whitespace-pre-wrap text-sm leading-snug text-neutral-900">{note.content}</p>
 
-          {/* Date / event indicators */}
           {(note.due_date || note.event_start) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {note.due_date && (
                 <span
-                  className={`text-xs ${isPast(note.due_date) ? "text-red-400" : "text-neutral-500"}`}
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    isPast(note.due_date)
+                      ? "bg-red-100 text-red-600"
+                      : "bg-neutral-100 text-neutral-500"
+                  }`}
                 >
-                  Due {formatDate(note.due_date)}
+                  Due {formatDateOnly(note.due_date)}
                 </span>
               )}
               {note.event_start && (
-                <span className="text-xs text-neutral-500">
-                  {formatDate(note.event_start)}
-                  {note.event_end ? ` – ${formatDate(note.event_end)}` : ""}
+                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+                  {note.event_end
+                    ? formatDateRange(note.event_start, note.event_end)
+                    : formatDateOnly(note.event_start)}
                 </span>
               )}
             </div>
           )}
 
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-xs text-neutral-500">
-              {new Date(note.created_at).toLocaleString()}
-            </p>
+          <div className="mt-2 flex justify-end">
             <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-              {otherColumns.length > 0 && (
-                <select
-                  className="rounded border border-neutral-700 bg-neutral-900 px-1 py-0.5 text-xs text-neutral-400 disabled:opacity-50"
-                  value={moveTarget}
-                  onChange={handleMove}
-                  disabled={moving}
-                  title="Move to column"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <option value="">Move…</option>
-                  {otherColumns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              )}
               <button
-                className="text-xs text-neutral-400 hover:text-white"
+                className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditing(true);
@@ -190,7 +157,7 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
                 Edit
               </button>
               <button
-                className="text-xs text-red-500 hover:text-red-400"
+                className="text-xs text-red-400 hover:text-red-600 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDelete();
@@ -206,13 +173,23 @@ export function NoteItem({ note, allColumns, noteLabels, onDelete, onUpdate, onM
   );
 }
 
-function formatDate(iso: string): string {
+function formatDateOnly(iso: string): string {
   const d = new Date(iso);
-  const month = d.toLocaleString(undefined, { month: "short" });
-  const day = d.getDate();
-  const year = d.getFullYear();
-  const time = d.toLocaleString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
-  return `${month} ${day}, ${year} ${time}`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDateRange(start: string, end: string): string {
+  const s = new Date(start);
+  const e = new Date(end);
+  const sMonth = s.toLocaleDateString(undefined, { month: "short" });
+  const sDay = s.getDate();
+  const eMonth = e.toLocaleDateString(undefined, { month: "short" });
+  const eDay = e.getDate();
+  const eYear = e.getFullYear();
+  if (s.getFullYear() === eYear) {
+    return `${sMonth} ${sDay} – ${eMonth} ${eDay}, ${eYear}`;
+  }
+  return `${sMonth} ${sDay}, ${s.getFullYear()} – ${eMonth} ${eDay}, ${eYear}`;
 }
 
 function isPast(iso: string): boolean {

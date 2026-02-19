@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,6 +16,7 @@ import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-
 import { ColumnRow } from "@/lib/columns";
 import { NoteRow, ReorderUpdate } from "@/lib/notes";
 import { LabelRow } from "@/lib/labels";
+import { BoardRow } from "@/lib/boards";
 import { ColumnContainer } from "./ColumnContainer";
 
 type Props = {
@@ -24,13 +25,20 @@ type Props = {
   loading: boolean;
   error: string | null;
   noteLabelMap: Record<string, LabelRow[]>;
+  boards: BoardRow[];
+  currentBoardId: string;
   onAddNote: (content: string, columnId: string) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
   onUpdateNote: (id: string, content: string) => Promise<void>;
-  onMoveNote: (id: string, columnId: string) => Promise<void>;
   onReorderNotes: (updates: ReorderUpdate[]) => Promise<boolean>;
   onReorderColumns: (orderedIds: string[]) => Promise<void>;
+  onAddColumn: (name: string) => Promise<void>;
   onOpenNote: (noteId: string) => void;
+  onRenameColumn: (id: string, name: string) => Promise<void>;
+  onDeleteColumn: (id: string) => Promise<void>;
+  onUpdateColumnColor: (id: string, color: string) => void;
+  onMoveColumnToBoard: (columnId: string, targetBoardId: string) => Promise<void>;
+  onCopyColumnToBoard: (columnId: string, targetBoardId: string) => Promise<void>;
 };
 
 export function Board({
@@ -39,13 +47,20 @@ export function Board({
   loading,
   error,
   noteLabelMap,
+  boards,
+  currentBoardId,
   onAddNote,
   onDeleteNote,
   onUpdateNote,
-  onMoveNote,
   onReorderNotes,
   onReorderColumns,
+  onAddColumn,
   onOpenNote,
+  onRenameColumn,
+  onDeleteColumn,
+  onUpdateColumnColor,
+  onMoveColumnToBoard,
+  onCopyColumnToBoard,
 }: Props) {
   // --- Note drag state ---
   const [localNotes, setLocalNotes] = useState<NoteRow[]>([]);
@@ -57,6 +72,9 @@ export function Board({
   const [isDraggingColumn, setIsDraggingColumn] = useState(false);
   const [activeColumn, setActiveColumn] = useState<ColumnRow | null>(null);
 
+  // --- Collapse state (UI-only; resets on board remount) ---
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
+
   // Sorted columns for stable render order
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
 
@@ -66,6 +84,15 @@ export function Board({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
+
+  function toggleCollapse(colId: string) {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(colId)) next.delete(colId);
+      else next.add(colId);
+      return next;
+    });
+  }
 
   function noteSortCmp(a: NoteRow, b: NoteRow): number {
     return a.position - b.position || a.created_at.localeCompare(b.created_at);
@@ -108,14 +135,11 @@ export function Board({
     const overId = over.id as string;
 
     if (activeType === "COLUMN") {
-      // Reorder columns: accept when over another column directly, or derive
-      // the target column when hovering over a note inside a column.
       let targetColId: string | null = null;
 
       if (columns.some((c) => c.id === overId)) {
         targetColId = overId;
       } else {
-        // Hovering over a note — find which column it belongs to
         const overNote = notes.find((n) => n.id === overId);
         if (overNote && overNote.column_id !== active.id) {
           targetColId = overNote.column_id;
@@ -133,7 +157,7 @@ export function Board({
       return;
     }
 
-    // ── NOTE drag (existing logic, unchanged) ─────────────────────────────────
+    // ── NOTE drag ─────────────────────────────────────────────────────────────
 
     setLocalNotes((prev) => {
       const dragged = prev.find((n) => n.id === active.id);
@@ -150,7 +174,6 @@ export function Board({
       if (!overNote) return prev;
 
       if (dragged.column_id === overNote.column_id) {
-        // Same-column reorder
         const colId = dragged.column_id;
         const colNotes = prev.filter((n) => n.column_id === colId);
         const fromIdx = colNotes.findIndex((n) => n.id === active.id);
@@ -159,7 +182,6 @@ export function Board({
         const reordered = arrayMove(colNotes, fromIdx, toIdx);
         return [...prev.filter((n) => n.column_id !== colId), ...reordered];
       } else {
-        // Cross-column: insert at the hovered note's position
         const targetColId = overNote.column_id;
         const withoutDragged = prev.filter((n) => n.id !== active.id);
         const targetColNotes = withoutDragged.filter((n) => n.column_id === targetColId);
@@ -187,7 +209,6 @@ export function Board({
     if (activeType === "COLUMN") {
       setActiveColumn(null);
 
-      // Only persist if order actually changed
       const originalOrder = sortedColumns.map((c) => c.id);
       const newOrder = localColumns.map((c) => c.id);
       const changed = originalOrder.some((id, i) => id !== newOrder[i]);
@@ -199,8 +220,6 @@ export function Board({
       setIsDraggingColumn(false);
       return;
     }
-
-    // ── NOTE drag end (existing logic, unchanged) ─────────────────────────────
 
     setActiveNote(null);
 
@@ -252,17 +271,17 @@ export function Board({
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return <p className="text-sm text-neutral-400">Loading board…</p>;
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-neutral-500">Loading board…</p>
+      </div>
+    );
   }
 
   if (error) {
-    return <p className="text-sm text-red-400">{error}</p>;
-  }
-
-  if (columns.length === 0) {
     return (
-      <div className="py-16 text-center text-sm text-neutral-500">
-        No columns yet. Use &quot;Manage Columns&quot; to add one.
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-red-400">{error}</p>
       </div>
     );
   }
@@ -278,32 +297,42 @@ export function Board({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {displayColumns.map((col) => (
-            <ColumnContainer
-              key={col.id}
-              column={col}
-              notes={getNotesForColumn(col.id)}
-              allColumns={displayColumns}
-              noteLabelMap={noteLabelMap}
-              onAddNote={(content) => onAddNote(content, col.id)}
-              onDeleteNote={onDeleteNote}
-              onUpdateNote={onUpdateNote}
-              onMoveNote={onMoveNote}
-              onOpenNote={onOpenNote}
-            />
-          ))}
+        <div className="h-full overflow-x-auto overflow-y-hidden">
+          <div className="flex h-full items-start gap-4 px-6 py-5 pb-6">
+            {displayColumns.map((col) => (
+              <ColumnContainer
+                key={col.id}
+                column={col}
+                notes={getNotesForColumn(col.id)}
+                noteLabelMap={noteLabelMap}
+                boards={boards}
+                currentBoardId={currentBoardId}
+                isCollapsed={collapsedColumns.has(col.id)}
+                onAddNote={(content) => onAddNote(content, col.id)}
+                onDeleteNote={onDeleteNote}
+                onUpdateNote={onUpdateNote}
+                onOpenNote={onOpenNote}
+                onRename={(name) => onRenameColumn(col.id, name)}
+                onDelete={() => onDeleteColumn(col.id)}
+                onUpdateColor={(color) => onUpdateColumnColor(col.id, color)}
+                onMoveToBoard={(targetBoardId) => onMoveColumnToBoard(col.id, targetBoardId)}
+                onCopyToBoard={(targetBoardId) => onCopyColumnToBoard(col.id, targetBoardId)}
+                onToggleCollapse={() => toggleCollapse(col.id)}
+              />
+            ))}
+            <AddListStub onAdd={onAddColumn} />
+          </div>
         </div>
       </SortableContext>
 
       <DragOverlay>
         {activeNote && (
-          <div className="w-72 rounded-md border border-neutral-700 bg-neutral-900 p-3 shadow-2xl">
-            <p className="whitespace-pre-wrap text-sm">{activeNote.content}</p>
+          <div className="w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-2xl ring-1 ring-black/5">
+            <p className="whitespace-pre-wrap text-sm text-neutral-900">{activeNote.content}</p>
           </div>
         )}
         {activeColumn && (
-          <div className="w-72 flex-shrink-0 rounded-lg border border-neutral-600 bg-neutral-900 p-3 shadow-2xl opacity-90">
+          <div className="w-72 flex-shrink-0 rounded-xl border border-neutral-600/40 bg-neutral-800/80 p-3 shadow-2xl backdrop-blur-sm opacity-90">
             <div className="flex items-center gap-2">
               {activeColumn.color && (
                 <span
@@ -311,7 +340,7 @@ export function Board({
                   style={{ backgroundColor: activeColumn.color }}
                 />
               )}
-              <h2 className="flex-1 text-sm font-semibold text-neutral-200">
+              <h2 className="flex-1 text-sm font-semibold text-neutral-100">
                 {activeColumn.name}
               </h2>
             </div>
@@ -319,5 +348,96 @@ export function Board({
         )}
       </DragOverlay>
     </DndContext>
+  );
+}
+
+// ─── Add List Stub ────────────────────────────────────────────────────────────
+
+function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
+  const [expanded, setExpanded] = useState(false);
+  const [name, setName] = useState("");
+  const submittingRef = useRef(false);
+
+  function handleExpand() {
+    submittingRef.current = false;
+    setExpanded(true);
+  }
+
+  async function submit() {
+    if (submittingRef.current) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setExpanded(false);
+      setName("");
+      return;
+    }
+    submittingRef.current = true;
+    try {
+      await onAdd(trimmed);
+      setName("");
+      setExpanded(false);
+    } catch {
+      submittingRef.current = false;
+      setExpanded(false);
+      setName("");
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void submit();
+    } else if (e.key === "Escape") {
+      setExpanded(false);
+      setName("");
+    }
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        onClick={handleExpand}
+        className="flex w-72 flex-shrink-0 items-center gap-2.5 rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-neutral-400 transition-colors hover:border-white/25 hover:bg-white/8 hover:text-neutral-200"
+      >
+        <span className="text-base leading-none">+</span>
+        <span>Add another list</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex w-72 flex-shrink-0 flex-col gap-2 rounded-xl border border-neutral-600/40 bg-neutral-800/60 p-3 shadow-lg">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => void submit()}
+        placeholder="List name…"
+        className="rounded-md border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-400"
+      />
+      <div className="flex gap-2">
+        <button
+          onMouseDown={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          disabled={!name.trim()}
+          className="rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-40"
+        >
+          Add list
+        </button>
+        <button
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setExpanded(false);
+            setName("");
+          }}
+          className="rounded-md px-3 py-1.5 text-xs text-neutral-400 transition-colors hover:text-neutral-200"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
