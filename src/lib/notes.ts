@@ -4,14 +4,42 @@ export type NoteRow = {
   id: string;
   content: string;
   column_id: string;
+  board_id: string;
+  position: number;
   created_at: string;
+  description: string | null;
+  due_date: string | null;
+  event_start: string | null;
+  event_end: string | null;
+  archived: boolean;
 };
 
-export async function listNotes(): Promise<{ data: NoteRow[]; error: string | null }> {
-  const { data, error } = await supabase
+export type ReorderUpdate = { id: string; column_id: string; position: number };
+
+export type NoteFieldUpdates = Partial<
+  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived">
+>;
+
+const NOTE_SELECT =
+  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived";
+
+export async function listNotes(
+  boardId: string,
+  showArchived = false,
+): Promise<{ data: NoteRow[]; error: string | null }> {
+  let query = supabase
     .from("notes")
-    .select("id, content, column_id, created_at")
-    .order("created_at", { ascending: false });
+    .select(NOTE_SELECT)
+    .eq("board_id", boardId)
+    .order("column_id", { ascending: true })
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (!showArchived) {
+    query = query.eq("archived", false);
+  }
+
+  const { data, error } = await query;
 
   return {
     data: (data ?? []) as NoteRow[],
@@ -22,8 +50,12 @@ export async function listNotes(): Promise<{ data: NoteRow[]; error: string | nu
 export async function createNote(
   content: string,
   columnId: string,
+  position: number,
+  boardId: string,
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase.from("notes").insert([{ content, column_id: columnId }]);
+  const { error } = await supabase
+    .from("notes")
+    .insert([{ content, column_id: columnId, position, board_id: boardId }]);
   return { error: error?.message ?? null };
 }
 
@@ -37,18 +69,40 @@ export async function updateNote(id: string, content: string): Promise<{ error: 
   return { error: error?.message ?? null };
 }
 
-export async function moveNote(id: string, columnId: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.from("notes").update({ column_id: columnId }).eq("id", id);
+export async function updateNoteFields(
+  id: string,
+  fields: NoteFieldUpdates,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("notes").update(fields).eq("id", id);
   return { error: error?.message ?? null };
 }
 
-export async function moveColumnNotes(
-  fromColumnId: string,
-  toColumnId: string,
-): Promise<{ error: string | null }> {
-  const { error } = await supabase
-    .from("notes")
-    .update({ column_id: toColumnId })
-    .eq("column_id", fromColumnId);
-  return { error: error?.message ?? null };
+export async function reorderNotes(updates: ReorderUpdate[]): Promise<{ error: string | null }> {
+  if (updates.length === 0) return { error: null };
+
+  const results = await Promise.allSettled(
+    updates.map(async (u) => {
+      // .select("id") makes Supabase return the updated row(s).
+      // Without it, a blocked RLS UPDATE returns { data: null, error: null } — silent failure.
+      const { data, error } = await supabase
+        .from("notes")
+        .update({ column_id: u.column_id, position: u.position })
+        .eq("id", u.id)
+        .select("id");
+
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) {
+        throw new Error(`No rows updated for note ${u.id} — check RLS UPDATE policy on notes`);
+      }
+    }),
+  );
+
+  const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+
+  if (failures.length > 0) {
+    console.error("reorderNotes failures:", failures.map((f) => f.reason));
+    return { error: failures[0].reason?.message ?? "Reorder failed" };
+  }
+
+  return { error: null };
 }

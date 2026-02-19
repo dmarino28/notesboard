@@ -2,24 +2,31 @@
 
 import { useState } from "react";
 import { ColumnRow } from "@/lib/columns";
-import { NoteRow } from "@/lib/notes";
 
 type Props = {
   columns: ColumnRow[];
-  notes: NoteRow[];
   onAdd: (name: string) => Promise<void>;
   onRename: (id: string, name: string) => Promise<void>;
+  onUpdateColor: (id: string, color: string) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
-  onDelete: (id: string, destColumnId?: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 };
 
-export function ColumnManager({ columns, notes, onAdd, onRename, onReorder, onDelete }: Props) {
+export function ColumnManager({
+  columns,
+  onAdd,
+  onRename,
+  onUpdateColor,
+  onReorder,
+  onDelete,
+}: Props) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [destColumnId, setDestColumnId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  // Tracks in-progress color edits per column (cleared on blur after persisting).
+  const [colorOverrides, setColorOverrides] = useState<Map<string, string>>(new Map());
 
   async function handleAdd() {
     const trimmed = newName.trim();
@@ -58,39 +65,27 @@ export function ColumnManager({ columns, notes, onAdd, onRename, onReorder, onDe
     onReorder(reordered.map((c) => c.id));
   }
 
-  function startDelete(id: string) {
-    const others = columns.filter((c) => c.id !== id);
-    setDestColumnId(others[0]?.id ?? "");
-    setDeletingId(id);
-  }
-
   async function confirmDelete() {
     if (!deletingId) return;
-    const hasNotes = notes.some((n) => n.column_id === deletingId);
     setSaving(true);
-    await onDelete(deletingId, hasNotes ? destColumnId : undefined);
+    await onDelete(deletingId);
     setDeletingId(null);
-    setDestColumnId("");
     setSaving(false);
   }
 
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-4 space-y-4">
+    <div className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <h2 className="text-sm font-semibold text-neutral-200">Manage Columns</h2>
 
-      {columns.length === 0 && (
-        <p className="text-xs text-neutral-500">No columns yet.</p>
-      )}
+      {columns.length === 0 && <p className="text-xs text-neutral-500">No columns yet.</p>}
 
       <ul className="space-y-2">
         {columns.map((col, index) => {
-          const colNoteCount = notes.filter((n) => n.column_id === col.id).length;
           const isEditing = editingId === col.id;
           const isDeleting = deletingId === col.id;
-          const otherColumns = columns.filter((c) => c.id !== col.id);
 
           return (
-            <li key={col.id} className="rounded border border-neutral-800 p-2 space-y-2">
+            <li key={col.id} className="space-y-2 rounded border border-neutral-800 p-2">
               {isEditing ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -119,8 +114,29 @@ export function ColumnManager({ columns, notes, onAdd, onRename, onReorder, onDe
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
+                  {/* Color picker */}
+                  <input
+                    type="color"
+                    value={colorOverrides.get(col.id) ?? col.color ?? "#6b7280"}
+                    onChange={(e) => {
+                      const color = e.target.value;
+                      setColorOverrides((prev) => new Map(prev).set(col.id, color));
+                    }}
+                    onBlur={(e) => {
+                      const color = e.target.value;
+                      setColorOverrides((prev) => {
+                        const next = new Map(prev);
+                        next.delete(col.id);
+                        return next;
+                      });
+                      if (color !== (col.color ?? "#6b7280")) {
+                        onUpdateColor(col.id, color);
+                      }
+                    }}
+                    className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                    title="Column color"
+                  />
                   <span className="flex-1 text-sm text-neutral-200">{col.name}</span>
-                  <span className="text-xs text-neutral-500">{colNoteCount}</span>
                   <button
                     className="text-xs text-neutral-400 hover:text-white"
                     onClick={() => startEdit(col)}
@@ -145,7 +161,7 @@ export function ColumnManager({ columns, notes, onAdd, onRename, onReorder, onDe
                   </button>
                   <button
                     className="text-xs text-red-500 hover:text-red-400"
-                    onClick={() => startDelete(col.id)}
+                    onClick={() => setDeletingId(col.id)}
                   >
                     Delete
                   </button>
@@ -154,33 +170,14 @@ export function ColumnManager({ columns, notes, onAdd, onRename, onReorder, onDe
 
               {isDeleting && (
                 <div className="space-y-2 rounded bg-neutral-900 p-2">
-                  {colNoteCount > 0 ? (
-                    <>
-                      <p className="text-xs text-neutral-300">
-                        Move {colNoteCount} note{colNoteCount !== 1 ? "s" : ""} to:
-                      </p>
-                      <select
-                        className="w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-sm text-neutral-200"
-                        value={destColumnId}
-                        onChange={(e) => setDestColumnId(e.target.value)}
-                      >
-                        {otherColumns.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <p className="text-xs text-neutral-300">
-                      Delete &quot;{col.name}&quot;? This cannot be undone.
-                    </p>
-                  )}
+                  <p className="text-xs text-neutral-300">
+                    Delete &quot;{col.name}&quot;? All notes in this column will be lost.
+                  </p>
                   <div className="flex gap-2">
                     <button
                       className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-500 disabled:opacity-50"
                       onClick={confirmDelete}
-                      disabled={saving || (colNoteCount > 0 && !destColumnId)}
+                      disabled={saving}
                     >
                       {saving ? "Deleting…" : "Confirm Delete"}
                     </button>
