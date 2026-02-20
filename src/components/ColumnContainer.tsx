@@ -13,6 +13,7 @@ type Props = {
   column: ColumnRow;
   notes: PlacedNoteRow[];
   noteLabelMap: Record<string, LabelRow[]>;
+  emailThreadNoteIds: Set<string>;
   boards: BoardRow[];
   currentBoardId: string;
   isCollapsed: boolean;
@@ -32,6 +33,7 @@ export function ColumnContainer({
   column,
   notes,
   noteLabelMap,
+  emailThreadNoteIds,
   boards,
   currentBoardId,
   isCollapsed,
@@ -67,6 +69,7 @@ export function ColumnContainer({
         column={column}
         notes={notes}
         noteLabelMap={noteLabelMap}
+        emailThreadNoteIds={emailThreadNoteIds}
         boards={boards}
         currentBoardId={currentBoardId}
         isCollapsed={isCollapsed}

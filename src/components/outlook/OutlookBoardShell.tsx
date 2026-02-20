@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createNote,
   deleteNote,
@@ -37,21 +36,46 @@ import { listEmailThreadNoteIds } from "@/lib/emailThreads";
 import { moveColumnToBoard, copyColumnToBoard } from "@/lib/columnOps";
 import { useToast } from "@/lib/useToast";
 import { Board } from "@/components/Board";
-import { ColumnManager } from "@/components/ColumnManager";
-import { BoardTopBar } from "@/components/BoardTopBar";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
+import { EmailActionsBar } from "@/components/outlook/EmailActionsBar";
+import { CreateFromThreadSheet } from "@/components/outlook/CreateFromThreadSheet";
+import { type OutlookThread } from "@/lib/outlookContext";
 
-export default function BoardPage() {
-  const params = useParams();
-  const boardId = params.boardId as string;
-  const router = useRouter();
+const STORAGE_KEY = "outlook_last_board_id";
 
+const DUMMY_THREAD: OutlookThread = {
+  conversationId: "dummy-conv-001",
+  messageId: "dummy-msg-001",
+  webLink: "https://outlook.office365.com/mail/inbox/id/dummy-conv-001",
+  subject: "Q1 Planning Discussion",
+  provider: "outlook",
+  mailbox: "user@example.com",
+};
+
+function findLandingPad(boards: BoardRow[]): BoardRow | undefined {
+  return boards.find((b) => b.name === "Landing Pad") ?? boards[0];
+}
+
+function getInitialBoardId(boards: BoardRow[]): string {
+  const stored =
+    typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+  if (stored && boards.some((b) => b.id === stored)) return stored;
+  return findLandingPad(boards)?.id ?? "";
+}
+
+type Props = {
+  thread?: OutlookThread;
+};
+
+export function OutlookBoardShell({ thread }: Props) {
+  const activeThread = thread ?? DUMMY_THREAD;
+
+  const [boards, setBoards] = useState<BoardRow[]>([]);
+  const [boardId, setBoardId] = useState<string>("");
   const [columns, setColumns] = useState<ColumnRow[]>([]);
   const [placements, setPlacements] = useState<PlacedNoteRow[]>([]);
-  const [boards, setBoards] = useState<BoardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [showManager, setShowManager] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   // Modal — keyed on note_id
@@ -64,17 +88,27 @@ export default function BoardPage() {
   // Email thread indicators for card tiles
   const [emailThreadNoteIds, setEmailThreadNoteIds] = useState<Set<string>>(new Set());
 
+  // Create-from-thread sheet
+  const [showCreateSheet, setShowCreateSheet] = useState(false);
+
+  // Pending modal note id — set when we switch boards after card creation
+  const pendingModalNoteIdRef = useRef<string | null>(null);
+
   const { toast, showToast } = useToast();
 
-  // Load boards list once on mount.
+  // Phase 1: Load boards on mount, resolve initial boardId
   useEffect(() => {
     listBoards().then(({ data }) => {
-      if (data) setBoards(data);
+      if (!data || data.length === 0) return;
+      setBoards(data);
+      const initial = getInitialBoardId(data);
+      setBoardId(initial);
     });
   }, []);
 
-  // Reload columns + placements + labels whenever boardId or showArchived changes.
+  // Phase 2: Reload columns + placements + labels whenever boardId or showArchived changes
   useEffect(() => {
+    if (!boardId) return;
     let cancelled = false;
 
     async function load() {
@@ -82,7 +116,6 @@ export default function BoardPage() {
       setColumns([]);
       setPlacements([]);
       setFetchError(null);
-      setShowManager(false);
       setModalNoteId(null);
 
       const [colResult, placementResult, labelResult, labelMapResult] = await Promise.all([
@@ -105,30 +138,41 @@ export default function BoardPage() {
         listEmailThreadNoteIds(noteIds).then((ids) => {
           if (!cancelled) setEmailThreadNoteIds(ids);
         });
+
+        // Auto-open modal if a note was created on a different board we just switched to
+        if (pendingModalNoteIdRef.current) {
+          const pending = pendingModalNoteIdRef.current;
+          pendingModalNoteIdRef.current = null;
+          const exists = placementResult.data.some((p) => p.note_id === pending);
+          if (exists) setModalNoteId(pending);
+        }
       }
       if (!labelResult.error) setBoardLabels(labelResult.data);
       if (!labelMapResult.error) setNoteLabelMap(labelMapResult.data);
 
       setLoading(false);
     }
-    load();
 
+    load();
     return () => {
       cancelled = true;
     };
   }, [boardId, showArchived]);
 
-  // Visible placements: always filter archived unless showArchived is on.
   const visiblePlacements = showArchived ? placements : placements.filter((p) => !p.archived);
 
-  // Modal note — look up by note_id (any matching placement has the same content)
   const modalPlacement = modalNoteId
     ? placements.find((p) => p.note_id === modalNoteId) ?? null
     : null;
 
   const handleCloseModal = useCallback(() => setModalNoteId(null), []);
 
-  // Refresh email thread indicators after a thread is linked/unlinked in the modal.
+  function handleSelectBoard(id: string) {
+    if (id === boardId) return;
+    localStorage.setItem(STORAGE_KEY, id);
+    setBoardId(id);
+  }
+
   async function handleEmailThreadsChanged() {
     const noteIds = placements.map((p) => p.note_id);
     const ids = await listEmailThreadNoteIds(noteIds);
@@ -144,7 +188,7 @@ export default function BoardPage() {
       return;
     }
     setBoards((prev) => [...prev, data]);
-    router.push(`/board/${data.id}`);
+    handleSelectBoard(data.id);
   }
 
   async function handleRenameBoard(id: string, name: string) {
@@ -169,12 +213,12 @@ export default function BoardPage() {
 
     if (id === boardId) {
       if (remaining.length > 0) {
-        router.push(`/board/${remaining[0].id}`);
+        handleSelectBoard(remaining[0].id);
       } else {
         const { data: newBoard } = await createBoard("My Board");
         if (newBoard) {
           setBoards([newBoard]);
-          router.push(`/board/${newBoard.id}`);
+          handleSelectBoard(newBoard.id);
         }
       }
     }
@@ -200,6 +244,9 @@ export default function BoardPage() {
 
     const { data } = await listPlacements(boardId, showArchived);
     if (data) setPlacements(data);
+
+    // Auto-open modal for the new card
+    setModalNoteId(newNote.id);
     showToast("Note added");
   }
 
@@ -216,7 +263,6 @@ export default function BoardPage() {
   }
 
   async function handleDeleteNoteEverywhere(noteId: string) {
-    // Optimistic: remove all placements for this note from current board
     setPlacements((prev) => prev.filter((p) => p.note_id !== noteId));
     const { error } = await deleteNote(noteId);
     if (error) {
@@ -229,7 +275,6 @@ export default function BoardPage() {
   }
 
   async function handleUpdateNote(noteId: string, content: string) {
-    // Update all placements of this note in local state
     setPlacements((prev) =>
       prev.map((p) => (p.note_id === noteId ? { ...p, content } : p)),
     );
@@ -269,8 +314,6 @@ export default function BoardPage() {
     return true;
   }
 
-  // Called by CardDetailsModal when note content/fields change.
-  // Updates all placements for this note_id in local state.
   function handleNoteChange(noteId: string, fields: Partial<NoteRow>) {
     setPlacements((prev) =>
       prev.map((p) => (p.note_id === noteId ? { ...p, ...fields } : p)),
@@ -285,7 +328,6 @@ export default function BoardPage() {
     setBoardLabels((prev) => [...prev, label]);
   }
 
-  // Link a note to another board.
   async function handleLinkToBoard(
     noteId: string,
     targetBoardId: string,
@@ -300,7 +342,6 @@ export default function BoardPage() {
     });
     if (error) throw new Error(error);
 
-    // If linking to current board, refresh placements
     if (targetBoardId === boardId) {
       const { data } = await listPlacements(boardId, showArchived);
       if (data) setPlacements(data);
@@ -370,7 +411,6 @@ export default function BoardPage() {
       return;
     }
     setColumns((prev) => prev.filter((c) => c.id !== id));
-    // Placements for deleted column's notes cascade via DB (column → note_placements ON DELETE CASCADE for column_id)
     setPlacements((prev) => prev.filter((p) => p.column_id !== id));
     showToast("Column deleted");
   }
@@ -398,7 +438,6 @@ export default function BoardPage() {
     const column = columns.find((c) => c.id === columnId);
     if (!column) return;
 
-    // Build NoteRow-compatible objects from placements in this column
     const colPlacements = placements.filter((p) => p.column_id === columnId);
     const colNotes: NoteRow[] = colPlacements.map((p) => ({
       id: p.note_id,
@@ -422,7 +461,6 @@ export default function BoardPage() {
 
     if (targetBoardId === boardId) {
       setColumns((prev) => [...prev, data.column]);
-      // Refresh placements since copyColumnToBoard creates them
       const { data: pls } = await listPlacements(boardId, showArchived);
       if (pls) setPlacements(pls);
     }
@@ -431,63 +469,98 @@ export default function BoardPage() {
     showToast(`List copied to "${targetBoard?.name ?? "board"}"`);
   }
 
-  const currentBoard = boards.find((b) => b.id === boardId);
+  // --- CreateFromThreadSheet callback ---
+
+  function handleThreadCreated(result: { noteId: string; boardId: string }) {
+    setShowCreateSheet(false);
+    if (result.boardId === boardId) {
+      // Board already loaded — re-fetch placements then open modal
+      listPlacements(boardId, showArchived).then(({ data }) => {
+        if (data) {
+          setPlacements(data);
+          setModalNoteId(result.noteId);
+        }
+      });
+    } else {
+      // Switch to the board the card was created on; modal opens after load
+      pendingModalNoteIdRef.current = result.noteId;
+      handleSelectBoard(result.boardId);
+    }
+  }
+
+  // Landing Pad id for CreateFromThreadSheet
+  const landingPadId = findLandingPad(boards)?.id ?? boardId;
+
+  // Sorted boards: Landing Pad first for the header picker
+  const sortedBoards = [
+    ...boards.filter((b) => b.name === "Landing Pad"),
+    ...boards.filter((b) => b.name !== "Landing Pad"),
+  ];
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
-      <BoardTopBar
-        currentBoard={currentBoard}
-        boards={boards}
-        boardId={boardId}
-        showArchived={showArchived}
-        onShowArchivedChange={setShowArchived}
-        onRenameBoard={handleRenameBoard}
-        onCreateBoard={handleCreateBoard}
-        onDeleteBoard={handleDeleteBoard}
-        showManager={showManager}
-        onToggleManager={() => setShowManager((v) => !v)}
-      />
-
-      {showManager && (
-        <div className="flex-shrink-0 border-b border-white/8 bg-neutral-900/60 px-4 py-3">
-          <ColumnManager
-            columns={columns}
-            onAdd={handleAddColumn}
-            onRename={handleRenameColumn}
-            onUpdateColor={handleUpdateColumnColor}
-            onReorder={handleReorderColumns}
-            onDelete={handleDeleteColumn}
+      {/* Compact header */}
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/8 bg-neutral-900/80 px-4 py-2.5">
+        <span className="text-sm font-semibold text-neutral-200">NotesBoard</span>
+        <span className="text-neutral-600">✉</span>
+        <select
+          className="rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200 outline-none focus:border-neutral-500"
+          value={boardId}
+          onChange={(e) => handleSelectBoard(e.target.value)}
+        >
+          {sortedBoards.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name === "Landing Pad" ? `${b.name} ★` : b.name}
+            </option>
+          ))}
+        </select>
+        <span className="flex-1" />
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-500">
+          <input
+            type="checkbox"
+            className="accent-indigo-500"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
           />
-        </div>
-      )}
+          Archived
+        </label>
+      </div>
+
+      {/* Email actions bar — shows real subject when provided */}
+      <EmailActionsBar
+        subject={activeThread.subject}
+        onCreateFromThread={() => setShowCreateSheet(true)}
+      />
 
       <div
         className="min-h-0 flex-1"
         style={{ background: "linear-gradient(150deg, #1b1e2e 0%, #13151f 60%, #101218 100%)" }}
       >
-        <Board
-          key={boardId}
-          columns={columns}
-          notes={visiblePlacements}
-          loading={loading}
-          error={fetchError}
-          noteLabelMap={noteLabelMap}
-          emailThreadNoteIds={emailThreadNoteIds}
-          boards={boards}
-          currentBoardId={boardId}
-          onAddNote={handleAddNote}
-          onRemoveNote={handleRemoveFromBoard}
-          onUpdateNote={handleUpdateNote}
-          onReorderNotes={handleReorderPlacements}
-          onReorderColumns={handleReorderColumns}
-          onAddColumn={handleAddColumn}
-          onOpenNote={setModalNoteId}
-          onRenameColumn={handleRenameColumn}
-          onDeleteColumn={handleDeleteColumn}
-          onUpdateColumnColor={handleUpdateColumnColor}
-          onMoveColumnToBoard={handleMoveColumnToBoard}
-          onCopyColumnToBoard={handleCopyColumnToBoard}
-        />
+        {boardId && (
+          <Board
+            key={boardId}
+            columns={columns}
+            notes={visiblePlacements}
+            loading={loading}
+            error={fetchError}
+            noteLabelMap={noteLabelMap}
+            emailThreadNoteIds={emailThreadNoteIds}
+            boards={boards}
+            currentBoardId={boardId}
+            onAddNote={handleAddNote}
+            onRemoveNote={handleRemoveFromBoard}
+            onUpdateNote={handleUpdateNote}
+            onReorderNotes={handleReorderPlacements}
+            onReorderColumns={handleReorderColumns}
+            onAddColumn={handleAddColumn}
+            onOpenNote={setModalNoteId}
+            onRenameColumn={handleRenameColumn}
+            onDeleteColumn={handleDeleteColumn}
+            onUpdateColumnColor={handleUpdateColumnColor}
+            onMoveColumnToBoard={handleMoveColumnToBoard}
+            onCopyColumnToBoard={handleCopyColumnToBoard}
+          />
+        )}
       </div>
 
       {/* Toast */}
@@ -499,6 +572,7 @@ export default function BoardPage() {
         </div>
       )}
 
+      {/* Card details modal */}
       {modalPlacement && (
         <CardDetailsModal
           note={modalPlacement}
@@ -514,6 +588,17 @@ export default function BoardPage() {
           onDeleteEverywhere={handleDeleteNoteEverywhere}
           onLinkToBoard={handleLinkToBoard}
           onEmailThreadsChanged={handleEmailThreadsChanged}
+        />
+      )}
+
+      {/* Create-from-thread sheet */}
+      {showCreateSheet && boards.length > 0 && (
+        <CreateFromThreadSheet
+          thread={activeThread}
+          boards={boards}
+          landingPadBoardId={landingPadId}
+          onCreated={handleThreadCreated}
+          onCancel={() => setShowCreateSheet(false)}
         />
       )}
     </div>

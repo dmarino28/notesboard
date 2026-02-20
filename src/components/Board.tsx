@@ -25,6 +25,7 @@ type Props = {
   loading: boolean;
   error: string | null;
   noteLabelMap: Record<string, LabelRow[]>;
+  emailThreadNoteIds: Set<string>;
   boards: BoardRow[];
   currentBoardId: string;
   onAddNote: (content: string, columnId: string) => Promise<void>;
@@ -47,6 +48,7 @@ export function Board({
   loading,
   error,
   noteLabelMap,
+  emailThreadNoteIds,
   boards,
   currentBoardId,
   onAddNote,
@@ -306,6 +308,7 @@ export function Board({
                 column={col}
                 notes={getNotesForColumn(col.id)}
                 noteLabelMap={noteLabelMap}
+                emailThreadNoteIds={emailThreadNoteIds}
                 boards={boards}
                 currentBoardId={currentBoardId}
                 isCollapsed={collapsedColumns.has(col.id)}

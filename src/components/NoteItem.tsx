@@ -9,12 +9,13 @@ import { LabelRow } from "@/lib/labels";
 type Props = {
   note: PlacedNoteRow;
   noteLabels: LabelRow[];
+  hasEmailThread?: boolean;
   onRemove: (placementId: string) => Promise<void>;
   onUpdate: (noteId: string, content: string) => Promise<void>;
   onOpen: () => void;
 };
 
-export function NoteItem({ note, noteLabels, onRemove, onUpdate, onOpen }: Props) {
+export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate, onOpen }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: note.id, // placement_id
     data: { type: "NOTE" },
@@ -146,16 +147,21 @@ export function NoteItem({ note, noteLabels, onRemove, onUpdate, onOpen }: Props
           )}
 
           <div className="mt-2 flex items-center justify-between">
-            {note.placement_count > 1 ? (
-              <span
-                className="text-xs text-neutral-400"
-                title={`Linked to ${note.placement_count} boards`}
-              >
-                🔗
-              </span>
-            ) : (
-              <span />
-            )}
+            <div className="flex items-center gap-1">
+              {hasEmailThread && (
+                <span className="text-xs" title="Email thread linked">
+                  ✉️
+                </span>
+              )}
+              {note.placement_count > 1 && (
+                <span
+                  className="text-xs text-neutral-400"
+                  title={`Linked to ${note.placement_count} boards`}
+                >
+                  🔗
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors"

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="MailApp">
+
+  <Id>a7e4c821-3d2f-4b1a-9c6e-d58f02b13e47</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>NotesBoard</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="NotesBoard"/>
+  <Description DefaultValue="Capture email threads as NotesBoard cards"/>
+  <IconUrl DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon80.png"/>
+  <SupportUrl DefaultValue="https://importance-retirement-moment-february.trycloudflare.com"/>
+
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/outlook/addin"/>
+        <RequestedHeight>350</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadItem</Permissions>
+
+  <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.3">
+          <bt:Set Name="Mailbox"/>
+        </bt:Sets>
+      </Requirements>
+
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="notesboard.Group">
+                  <Label resid="Group.Label"/>
+                  <Control xsi:type="Button" id="notesboard.OpenPane">
+                    <Label resid="Button.Label"/>
+                    <Supertip>
+                      <Title resid="Button.Label"/>
+                      <Description resid="Button.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16"/>
+                      <bt:Image size="32" resid="Icon.32"/>
+                      <bt:Image size="80" resid="Icon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="Url.addin"/>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+
+      <Resources>
+        <bt:Images>
+          <bt:Image id="Icon.16" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon16.png"/>
+          <bt:Image id="Icon.32" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon32.png"/>
+          <bt:Image id="Icon.80" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon80.png"/>
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="Url.addin" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/outlook/addin"/>
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="Group.Label" DefaultValue="NotesBoard"/>
+          <bt:String id="Button.Label" DefaultValue="NotesBoard"/>
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="Button.Tooltip" DefaultValue="Capture this email thread as a NotesBoard card"/>
+        </bt:LongStrings>
+      </Resources>
+
+    </VersionOverrides>
+  </VersionOverrides>
+
+</OfficeApp>

@@ -12,6 +12,13 @@ import {
 import { CommentRow, listComments, addComment, deleteComment } from "@/lib/comments";
 import { ColumnRow, listColumns } from "@/lib/columns";
 import { BoardRow } from "@/lib/boards";
+import {
+  EmailThreadRow,
+  AttachmentRow,
+  listEmailThreadsForNote,
+  deleteEmailThread,
+  listAttachmentsForThread,
+} from "@/lib/emailThreads";
 
 // Minimal shape the modal needs from a note — works for both NoteRow and PlacedNoteRow
 type NoteInput = {
@@ -38,6 +45,7 @@ type Props = {
   onDeleteEverywhere?: (noteId: string) => Promise<void>;
   onLinkToBoard?: (noteId: string, targetBoardId: string, targetColumnId: string) => Promise<void>;
   onNoteDeleted?: (noteId: string) => void;
+  onEmailThreadsChanged?: () => void;
 };
 
 export function CardDetailsModal({
@@ -54,6 +62,7 @@ export function CardDetailsModal({
   onDeleteEverywhere,
   onLinkToBoard,
   onNoteDeleted,
+  onEmailThreadsChanged,
 }: Props) {
   // --- Local field state ---
   const [title, setTitle] = useState(note.content);
@@ -83,6 +92,12 @@ export function CardDetailsModal({
   const [newComment, setNewComment] = useState("");
   const [addingComment, setAddingComment] = useState(false);
 
+  // --- Email threads ---
+  const [emailThreads, setEmailThreads] = useState<EmailThreadRow[]>([]);
+  const [emailThreadsLoading, setEmailThreadsLoading] = useState(true);
+  // Attachments keyed by thread_id, loaded lazily per thread
+  const [attachmentMap, setAttachmentMap] = useState<Record<string, AttachmentRow[]>>({});
+
   // --- Debounced save ---
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,7 +120,7 @@ export function CardDetailsModal({
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
-  // Lazy-load labels and comments
+  // Lazy-load labels, comments, and email threads
   useEffect(() => {
     listNoteLabels(noteId).then(({ data }) => {
       setNoteLabels(data);
@@ -114,6 +129,10 @@ export function CardDetailsModal({
     listComments(noteId).then(({ data }) => {
       setComments(data);
       setCommentsLoading(false);
+    });
+    listEmailThreadsForNote(noteId).then(({ data }) => {
+      setEmailThreads(data);
+      setEmailThreadsLoading(false);
     });
   }, [noteId]);
 
@@ -345,6 +364,26 @@ export function CardDetailsModal({
     setNoteLabels(updated);
     onNoteLabelsChanged(noteId, updated);
     await attachLabel(noteId, data.id);
+  }
+
+  // ------------------------------------------------------------------ email threads
+
+  async function handleUnlinkThread(threadId: string) {
+    setEmailThreads((prev) => prev.filter((t) => t.id !== threadId));
+    const { error } = await deleteEmailThread(threadId);
+    if (error) {
+      // Re-fetch on error
+      listEmailThreadsForNote(noteId).then(({ data }) => setEmailThreads(data));
+      onError("Failed to unlink email thread");
+    } else {
+      onEmailThreadsChanged?.();
+    }
+  }
+
+  async function handleLoadAttachments(threadId: string) {
+    if (attachmentMap[threadId]) return; // already loaded
+    const { data } = await listAttachmentsForThread(threadId);
+    setAttachmentMap((prev) => ({ ...prev, [threadId]: data }));
   }
 
   // ------------------------------------------------------------------ comments
@@ -665,6 +704,96 @@ export function CardDetailsModal({
             )}
           </section>
 
+          {/* Email threads */}
+          {(emailThreadsLoading || emailThreads.length > 0) && (
+            <section>
+              <label className="mb-1.5 block text-xs font-medium text-neutral-500">
+                Email threads
+              </label>
+              {emailThreadsLoading ? (
+                <p className="text-xs text-neutral-600">Loading…</p>
+              ) : (
+                <div className="space-y-2">
+                  {emailThreads.map((thread) => {
+                    const threadAttachments = attachmentMap[thread.id];
+                    return (
+                      <div
+                        key={thread.id}
+                        className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-neutral-200">
+                              ✉️ {thread.subject ?? "Email thread"}
+                            </p>
+                            {thread.last_activity_at && (
+                              <p className="mt-0.5 text-xs text-neutral-500">
+                                {relativeTime(thread.last_activity_at)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {thread.web_link && (
+                              <a
+                                href={thread.web_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                              >
+                                Open in Outlook
+                              </a>
+                            )}
+                            <button
+                              className="text-xs text-neutral-600 hover:text-red-400 transition-colors"
+                              onClick={() => handleUnlinkThread(thread.id)}
+                            >
+                              Unlink
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Attachment section */}
+                        {threadAttachments === undefined ? (
+                          <button
+                            className="mt-1.5 text-xs text-neutral-500 hover:text-neutral-400 underline underline-offset-2"
+                            onClick={() => handleLoadAttachments(thread.id)}
+                          >
+                            Show attachments
+                          </button>
+                        ) : threadAttachments.length > 0 ? (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-xs text-neutral-500">
+                              Attachments ({threadAttachments.length})
+                            </p>
+                            {threadAttachments.map((att) => (
+                              <div
+                                key={att.id}
+                                className="flex items-center justify-between gap-2"
+                              >
+                                <span className="truncate text-xs text-neutral-300">
+                                  {att.file_name}
+                                </span>
+                                <button
+                                  className="shrink-0 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                                  onClick={() => {
+                                    // Phase 1 will wire real Outlook deep-link
+                                    console.log("Open email with attachment", att.message_id);
+                                  }}
+                                >
+                                  Open email
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Link to board */}
           {onLinkToBoard && otherBoards.length > 0 && (
             <section className="border-t border-neutral-800 pt-4">
@@ -766,6 +895,16 @@ export function CardDetailsModal({
       </div>
     </div>
   );
+}
+
+// "2h ago", "45m ago", "3d ago"
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 // Convert UTC ISO string → datetime-local value (local time)

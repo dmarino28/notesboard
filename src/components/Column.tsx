@@ -14,6 +14,7 @@ type Props = {
   column: ColumnRow;
   notes: PlacedNoteRow[];
   noteLabelMap: Record<string, LabelRow[]>;
+  emailThreadNoteIds: Set<string>;
   boards: BoardRow[];
   currentBoardId: string;
   isCollapsed: boolean;
@@ -36,6 +37,7 @@ export function Column({
   column,
   notes,
   noteLabelMap,
+  emailThreadNoteIds,
   boards,
   currentBoardId,
   isCollapsed,
@@ -126,6 +128,7 @@ export function Column({
                   key={note.id}
                   note={note}
                   noteLabels={noteLabelMap[note.note_id] ?? []}
+                  hasEmailThread={emailThreadNoteIds.has(note.note_id)}
                   onRemove={onRemoveNote}
                   onUpdate={onUpdateNote}
                   onOpen={() => onOpenNote(note.note_id)}
