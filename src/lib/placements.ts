@@ -154,6 +154,65 @@ export async function reorderPlacements(
   return { error: null };
 }
 
+// ─── Note placement helpers for the Outlook add-in ──────────────────────────
+
+export type NotePlacementInfo = {
+  placementId: string;
+  boardId: string;
+  boardName: string;
+  columnId: string;
+  columnName: string;
+};
+
+/**
+ * Returns all boards/columns a note lives on, with resolved names.
+ * Used by CardDetailPane to display placement info and populate the move dropdown.
+ */
+export async function getNotePlacements(noteId: string): Promise<NotePlacementInfo[]> {
+  const { data: rawPlacements } = await supabase
+    .from("note_placements")
+    .select("id, board_id, column_id")
+    .eq("note_id", noteId);
+
+  if (!rawPlacements || rawPlacements.length === 0) return [];
+
+  const pRows = rawPlacements as { id: string; board_id: string; column_id: string }[];
+  const boardIds = [...new Set(pRows.map((p) => p.board_id))];
+  const columnIds = [...new Set(pRows.map((p) => p.column_id))];
+
+  const [boardsResult, columnsResult] = await Promise.all([
+    supabase.from("boards").select("id, name").in("id", boardIds),
+    supabase.from("columns").select("id, name").in("id", columnIds),
+  ]);
+
+  const boardMap = new Map(
+    ((boardsResult.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]),
+  );
+  const colMap = new Map(
+    ((columnsResult.data ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]),
+  );
+
+  return pRows.map((p) => ({
+    placementId: p.id,
+    boardId: p.board_id,
+    boardName: boardMap.get(p.board_id) ?? "Unknown",
+    columnId: p.column_id,
+    columnName: colMap.get(p.column_id) ?? "Unknown",
+  }));
+}
+
+/**
+ * Moves a placement to a new column (appended at the end of the target column).
+ */
+export async function movePlacement(
+  placementId: string,
+  boardId: string,
+  newColumnId: string,
+): Promise<{ error: string | null }> {
+  const position = (await maxPlacementPosition(boardId, newColumnId)) + 1;
+  return reorderPlacements([{ id: placementId, column_id: newColumnId, position }]);
+}
+
 /** Max position of existing placements in a given column on a given board. Returns -1 if none. */
 export async function maxPlacementPosition(
   boardId: string,

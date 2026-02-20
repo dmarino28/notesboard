@@ -66,6 +66,15 @@ export async function deleteNote(id: string): Promise<{ error: string | null }> 
   return { error: error?.message ?? null };
 }
 
+export async function getNote(id: string): Promise<{ data: NoteRow | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("notes")
+    .select(NOTE_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  return { data: (data as NoteRow | null) ?? null, error: error?.message ?? null };
+}
+
 export async function updateNote(id: string, content: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("notes").update({ content }).eq("id", id);
   return { error: error?.message ?? null };

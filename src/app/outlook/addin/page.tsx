@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ThreadCapturePane } from "@/components/outlook/ThreadCapturePane";
+import { OutlookAddinShell } from "@/components/outlook/OutlookAddinShell";
 import { readOutlookItem, type ReadItemResult } from "@/lib/outlookContext";
 
 export default function OutlookAddinPage() {
@@ -19,5 +19,5 @@ export default function OutlookAddinPage() {
     );
   }
 
-  return <ThreadCapturePane init={init} />;
+  return <OutlookAddinShell init={init} />;
 }
