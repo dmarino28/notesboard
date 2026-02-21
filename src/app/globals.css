@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -19,6 +20,29 @@
   }
 }
 
+/* NotesBoard add-in dark-theme tokens.
+   Scoped to .nb-addin so they don't bleed into the main app. */
+.nb-addin {
+  --nb-bg:             #0c0c0f;
+  --nb-surface:        #141417;
+  --nb-surface-raised: #1d1d21;
+  --nb-border:         rgba(255, 255, 255, 0.07);
+  --nb-border-strong:  rgba(255, 255, 255, 0.13);
+  --nb-text-1:         #eeeef1;
+  --nb-text-2:         #8e8e9c;
+  --nb-text-3:         #4e4e60;
+  --nb-accent:         #5d5fef;
+  --nb-accent-h:       #7173f2;
+  --nb-accent-sub:     rgba(93, 95, 239, 0.14);
+  --nb-danger:         #e05555;
+  --nb-danger-sub:     rgba(224, 85, 85, 0.12);
+  --nb-warning:        #d9913a;
+  --nb-warning-sub:    rgba(217, 145, 58, 0.12);
+  --nb-success:        #3ab568;
+  --nb-success-sub:    rgba(58, 181, 104, 0.12);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
 html,
 body {
   height: 100%;
@@ -27,5 +51,17 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Thin scrollbar utility (add-in panels) ───────────────────────────────── */
+.nb-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.nb-scroll::-webkit-scrollbar        { width: 4px; }
+.nb-scroll::-webkit-scrollbar-track  { background: transparent; }
+.nb-scroll::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.nb-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.17); }

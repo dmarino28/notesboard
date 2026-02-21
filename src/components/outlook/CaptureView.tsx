@@ -11,25 +11,27 @@ type LinkRef = { noteId: string; noteTitle: string; boardId: string };
 type Props = {
   thread: OutlookThread;
   isDevMode: boolean;
-  /** Called after a card is created — navigates directly to Card Details. */
   onOpenCard: (noteId: string) => void;
-  /** Called when user clicks "Link to a Card →" — enters linking mode in Browse. */
   onStartLinking: () => void;
 };
 
-export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: Props) {
-  const [existingLinks, setExistingLinks] = useState<LinkRef[] | null>(null);
-  const [createExpanded, setCreateExpanded] = useState(false);
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="block text-[11px] font-medium text-neutral-600">{children}</label>
+  );
+}
 
-  // Create form state (boards/columns pre-loaded on mount so the form is instant)
-  const [boards, setBoards] = useState<BoardRow[]>([]);
-  const [columns, setColumns] = useState<ColumnRow[]>([]);
+export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: Props) {
+  const [existingLinks, setExistingLinks]     = useState<LinkRef[] | null>(null);
+  const [createExpanded, setCreateExpanded]   = useState(false);
+  const [boards, setBoards]                   = useState<BoardRow[]>([]);
+  const [columns, setColumns]                 = useState<ColumnRow[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState("");
   const [selectedColumnId, setSelectedColumnId] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating]               = useState(false);
+  const [createError, setCreateError]         = useState<string | null>(null);
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       const [links, boardsResult] = await Promise.all([
@@ -50,7 +52,6 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.conversationId]);
 
-  // ── Load columns when board changes ──────────────────────────────────────────
   useEffect(() => {
     if (!selectedBoardId) return;
     listColumns(selectedBoardId).then(({ data }) => {
@@ -64,7 +65,7 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
     });
   }, [selectedBoardId]);
 
-  // ── Create card ───────────────────────────────────────────────────────────────
+  // ── Create ───────────────────────────────────────────────────────────────────
   async function handleCreate() {
     if (!selectedBoardId || !selectedColumnId) return;
     setCreating(true);
@@ -96,62 +97,62 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
   }
 
   return (
-    // No overflow-y-auto on the outer wrapper — scroll only happens on the inner flex-1 div
     <div className="flex h-full flex-col">
 
-      {/* Subject + mailbox */}
-      <div className="flex-shrink-0 border-b border-white/8 px-4 py-3">
+      {/* Thread identity */}
+      <div className="flex-shrink-0 space-y-0.5 border-b border-white/[0.07] px-4 py-3">
         <p className="line-clamp-2 text-sm font-medium leading-snug text-neutral-100">
           {thread.subject || "(no subject)"}
         </p>
         {thread.mailbox && (
-          <p className="mt-0.5 truncate text-xs text-neutral-500">{thread.mailbox}</p>
+          <p className="truncate text-xs text-neutral-600">{thread.mailbox}</p>
         )}
         {isDevMode && (
-          <span className="mt-1 inline-block rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+          <span className="mt-1 inline-block rounded-md bg-amber-950/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-400/80 ring-1 ring-amber-800/40">
             dev mode
           </span>
         )}
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      {/* Scrollable body */}
+      <div className="nb-scroll flex-1 space-y-3 overflow-y-auto p-4">
 
-        {/* Linked status banner */}
-        {existingLinks === null && (
-          <p className="text-xs text-neutral-600">Checking links…</p>
-        )}
-        {existingLinks && existingLinks.length > 0 && (
-          <div className="rounded-lg border border-sky-800/50 bg-sky-900/20 px-3 py-2.5">
-            <p className="text-xs font-medium text-sky-400">
+        {/* Link status */}
+        {existingLinks === null ? (
+          <p className="text-xs text-neutral-700">Checking links…</p>
+        ) : existingLinks.length > 0 ? (
+          <div className="rounded-xl border border-sky-800/30 bg-sky-950/25 px-3 py-2.5 space-y-1.5">
+            <p className="text-xs font-semibold text-sky-400">
               Linked to {existingLinks.length} card{existingLinks.length > 1 ? "s" : ""}
             </p>
-            <ul className="mt-1.5 space-y-0.5">
+            <ul className="space-y-0.5">
               {existingLinks.map((link) => (
-                <li key={link.noteId} className="line-clamp-1 text-xs text-neutral-400">
+                <li key={link.noteId} className="line-clamp-1 text-xs text-neutral-500">
                   {link.noteTitle || "(untitled)"}
                 </li>
               ))}
             </ul>
           </div>
-        )}
+        ) : null}
 
-        {/* Primary action buttons */}
+        {/* Primary actions */}
         <div className="space-y-2">
           <button
             type="button"
             onClick={() => { setCreateExpanded((v) => !v); setCreateError(null); }}
-            className={`w-full cursor-pointer rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+            className={`w-full cursor-pointer rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
               createExpanded
-                ? "border border-neutral-700 bg-transparent text-neutral-400 hover:text-neutral-200"
-                : "bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700"
+                ? "border border-white/[0.08] bg-transparent text-neutral-500 hover:text-neutral-300"
+                : "bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 active:bg-indigo-700"
             }`}
           >
             {createExpanded ? "↑ Cancel" : "Create Card"}
           </button>
+
           <button
             type="button"
             onClick={onStartLinking}
-            className="w-full cursor-pointer rounded-md border border-neutral-700 bg-transparent px-3 py-2.5 text-sm font-medium text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100"
+            className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-transparent px-3 py-2.5 text-sm font-medium text-neutral-400 transition-colors duration-150 hover:border-white/[0.16] hover:text-neutral-200"
           >
             Link to a Card →
           </button>
@@ -159,13 +160,14 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
         {/* Expandable create form */}
         {createExpanded && (
-          <div className="space-y-3 rounded-lg border border-white/8 bg-neutral-900/60 p-3">
+          <div className="rounded-xl border border-white/[0.07] bg-neutral-900/60 p-3 space-y-3">
+
             <div className="space-y-1">
-              <label className="text-xs text-neutral-500">Board</label>
+              <FieldLabel>Board</FieldLabel>
               <select
                 value={selectedBoardId}
                 onChange={(e) => { setSelectedBoardId(e.target.value); setCreateError(null); }}
-                className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-500"
+                className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-800 px-2.5 py-1.5 text-sm text-neutral-200 outline-none transition-colors focus:border-white/[0.16]"
               >
                 {boards.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -174,26 +176,34 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
                 ))}
               </select>
             </div>
+
             <div className="space-y-1">
-              <label className="text-xs text-neutral-500">Column</label>
+              <FieldLabel>Column</FieldLabel>
               <select
                 value={selectedColumnId}
                 onChange={(e) => setSelectedColumnId(e.target.value)}
-                className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-500"
+                className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-800 px-2.5 py-1.5 text-sm text-neutral-200 outline-none transition-colors focus:border-white/[0.16]"
               >
                 {columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 {columns.length === 0 && <option value="" disabled>No columns</option>}
               </select>
             </div>
-            {createError && <p className="text-xs text-red-400">{createError}</p>}
+
+            {createError && (
+              <p className="rounded-lg border border-red-900/40 bg-red-950/30 px-2.5 py-1.5 text-xs text-red-400">
+                {createError}
+              </p>
+            )}
+
             <button
               type="button"
               onClick={handleCreate}
               disabled={creating || !selectedBoardId || !selectedColumnId}
-              className="w-full cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full cursor-pointer rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-indigo-500 active:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {creating ? "Creating…" : "Create Card"}
             </button>
+
           </div>
         )}
 

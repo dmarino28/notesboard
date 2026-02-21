@@ -10,11 +10,8 @@ import { searchNotes } from "@/lib/noteSearch";
 
 type Props = {
   onOpenCard: (noteId: string) => void;
-  /** When set, the view is in "linking mode" — card clicks select instead of navigate. */
   linkingThread?: OutlookThread | null;
-  /** Called after a successful link in linking mode. */
   onLinkCreated?: (noteId: string) => void;
-  /** Called when the user cancels linking mode. */
   onCancelLinking?: () => void;
 };
 
@@ -26,28 +23,28 @@ export function BoardBrowserView({
 }: Props) {
   const isLinking = Boolean(linkingThread);
 
-  // ── Board / column / card state ───────────────────────────────────────────────
-  const [boards, setBoards] = useState<BoardRow[]>([]);
-  const [columns, setColumns] = useState<ColumnRow[]>([]);
+  // ── Board / column / card ─────────────────────────────────────────────────────
+  const [boards, setBoards]                   = useState<BoardRow[]>([]);
+  const [columns, setColumns]                 = useState<ColumnRow[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState("");
   const [selectedColumnId, setSelectedColumnId] = useState("");
-  const [allCards, setAllCards] = useState<PlacedNoteRow[]>([]);
-  const [cardsLoading, setCardsLoading] = useState(false);
-  const [emailNoteIds, setEmailNoteIds] = useState<Set<string>>(new Set());
-  const [boardsLoading, setBoardsLoading] = useState(true);
+  const [allCards, setAllCards]               = useState<PlacedNoteRow[]>([]);
+  const [cardsLoading, setCardsLoading]       = useState(false);
+  const [emailNoteIds, setEmailNoteIds]       = useState<Set<string>>(new Set());
+  const [boardsLoading, setBoardsLoading]     = useState(true);
 
-  // ── Search state ──────────────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ id: string; content: string }[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  // ── Search ────────────────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery]         = useState("");
+  const [searchResults, setSearchResults]     = useState<{ id: string; content: string }[] | null>(null);
+  const [searching, setSearching]             = useState(false);
 
-  // ── Linking-mode selection ────────────────────────────────────────────────────
-  const [selectedForLink, setSelectedForLink] = useState<string | null>(null);
+  // ── Linking selection ─────────────────────────────────────────────────────────
+  const [selectedForLink, setSelectedForLink]         = useState<string | null>(null);
   const [selectedCardContent, setSelectedCardContent] = useState<string | null>(null);
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linking, setLinking]                         = useState(false);
+  const [linkError, setLinkError]                     = useState<string | null>(null);
 
-  // ── Init: load boards ─────────────────────────────────────────────────────────
+  // ── Load boards ───────────────────────────────────────────────────────────────
   useEffect(() => {
     listBoards().then(({ data }) => {
       if (data?.length) {
@@ -84,8 +81,7 @@ export function BoardBrowserView({
       setCardsLoading(false);
 
       if (cards.length > 0) {
-        const noteIds = cards.map((c) => c.note_id);
-        listEmailThreadNoteIds(noteIds).then(setEmailNoteIds);
+        listEmailThreadNoteIds(cards.map((c) => c.note_id)).then(setEmailNoteIds);
       }
     });
   }, [selectedBoardId]);
@@ -102,7 +98,7 @@ export function BoardBrowserView({
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  // ── Reset selection when entering / exiting linking mode ──────────────────────
+  // ── Reset selection on linking context change ─────────────────────────────────
   useEffect(() => {
     setSelectedForLink(null);
     setSelectedCardContent(null);
@@ -148,21 +144,20 @@ export function BoardBrowserView({
   // ── Derived ───────────────────────────────────────────────────────────────────
   const columnCards = allCards.filter((c) => c.column_id === selectedColumnId);
   const isSearching = searchQuery.trim() !== "";
-  // Add bottom padding to card list when CTA bar is visible so the last card isn't covered
-  const cardListClass = `min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`;
 
-  // ── Loading / empty guards ────────────────────────────────────────────────────
+  // ── Guards ────────────────────────────────────────────────────────────────────
   if (boardsLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-xs text-neutral-600">Loading boards…</p>
+        <p className="text-xs text-neutral-700">Loading boards…</p>
       </div>
     );
   }
   if (boards.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-4">
-        <p className="text-xs text-neutral-500">No boards yet.</p>
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+        <p className="text-sm text-neutral-500">No boards yet</p>
+        <p className="text-xs text-neutral-700">Create a board in NotesBoard first.</p>
       </div>
     );
   }
@@ -172,31 +167,32 @@ export function BoardBrowserView({
 
       {/* Linking mode banner */}
       {isLinking && (
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-amber-800/40 bg-amber-900/20 px-3 py-2">
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-amber-800/30 bg-amber-950/30 px-3 py-2">
+          <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
           <p className="flex-1 text-xs font-medium text-amber-300">
             Select a card to link this email
           </p>
           <button
             type="button"
             onClick={onCancelLinking}
-            className="flex-shrink-0 cursor-pointer rounded px-2 py-0.5 text-xs text-amber-500 hover:text-amber-300"
+            className="flex-shrink-0 cursor-pointer rounded-md px-2 py-0.5 text-xs text-amber-500 transition-colors hover:text-amber-300"
           >
             Cancel
           </button>
         </div>
       )}
 
-      {/* Board selector */}
-      <div className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-white/8 bg-neutral-900/60 px-3 py-2">
+      {/* Board selector — scrollable chip row */}
+      <div className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-white/[0.07] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {boards.map((b) => (
           <button
             key={b.id}
             type="button"
             onClick={() => setSelectedBoardId(b.id)}
-            className={`flex-shrink-0 cursor-pointer rounded px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex-shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
               selectedBoardId === b.id
                 ? "bg-neutral-700 text-neutral-100"
-                : "text-neutral-500 hover:text-neutral-300"
+                : "text-neutral-500 hover:bg-white/[0.05] hover:text-neutral-300"
             }`}
           >
             {b.name}
@@ -206,16 +202,16 @@ export function BoardBrowserView({
 
       {/* Column tabs */}
       {columns.length > 0 && (
-        <div className="flex flex-shrink-0 overflow-x-auto border-b border-white/8">
+        <div className="flex flex-shrink-0 overflow-x-auto border-b border-white/[0.07] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {columns.map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => setSelectedColumnId(c.id)}
-              className={`flex-shrink-0 cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
+              className={`flex-shrink-0 cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors duration-150 ${
                 selectedColumnId === c.id
                   ? "border-indigo-500 text-indigo-300"
-                  : "border-transparent text-neutral-500 hover:text-neutral-300"
+                  : "border-transparent text-neutral-600 hover:text-neutral-400"
               }`}
             >
               {c.name}
@@ -224,111 +220,145 @@ export function BoardBrowserView({
         </div>
       )}
 
-      {/* Search input */}
-      <div className="flex-shrink-0 border-b border-white/8 px-3 py-2">
+      {/* Search */}
+      <div className="flex-shrink-0 border-b border-white/[0.07] px-3 py-2">
         <input
-          type="text"
+          type="search"
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);
             setSelectedForLink(null);
           }}
           placeholder="Search all cards…"
-          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-xs text-neutral-200 placeholder-neutral-600 outline-none focus:border-neutral-500"
+          className="w-full rounded-xl border border-white/[0.08] bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 transition-colors focus:border-white/[0.16]"
         />
       </div>
 
-      {/* Card list — padding-bottom increases when CTA bar is visible */}
-      <div className={cardListClass}>
+      {/* Card list */}
+      <div className={`nb-scroll min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`}>
         {isSearching ? (
-          /* ── Search results ── */
           searching ? (
-            <p className="text-xs text-neutral-600">Searching…</p>
+            <p className="pt-2 text-xs text-neutral-700">Searching…</p>
           ) : !searchResults || searchResults.length === 0 ? (
-            <p className="text-xs text-neutral-500">No cards found.</p>
+            <EmptyState>No cards found for "{searchQuery}"</EmptyState>
           ) : (
-            <ul className="space-y-2">
-              {searchResults.map((note) => {
-                const isSelected = selectedForLink === note.id;
-                return (
-                  <li key={note.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleCardClick(note.id, note.content)}
-                      className={`w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
-                        isSelected
-                          ? "border-indigo-500/50 bg-indigo-600/20 text-indigo-200"
-                          : "border-white/8 bg-neutral-900 text-neutral-200 hover:border-white/15 hover:bg-neutral-800"
-                      }`}
-                    >
-                      <span className="line-clamp-2 leading-snug">{note.content}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <CardList
+              items={searchResults.map((n) => ({ id: n.id, noteId: n.id, content: n.content, hasEmail: false, multiBoard: false }))}
+              selectedForLink={selectedForLink}
+              isLinking={isLinking}
+              onCardClick={handleCardClick}
+            />
           )
         ) : (
-          /* ── Browse results ── */
           cardsLoading ? (
-            <p className="text-xs text-neutral-600">Loading cards…</p>
+            <p className="pt-2 text-xs text-neutral-700">Loading cards…</p>
           ) : columns.length === 0 ? (
-            <p className="text-xs text-neutral-500">No columns in this board.</p>
+            <EmptyState>No columns in this board</EmptyState>
           ) : columnCards.length === 0 ? (
-            <p className="text-xs text-neutral-500">No cards in this column.</p>
+            <EmptyState>No cards in this column</EmptyState>
           ) : (
-            <ul className="space-y-2">
-              {columnCards.map((card) => {
-                const isSelected = selectedForLink === card.note_id;
-                return (
-                  <li key={card.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleCardClick(card.note_id, card.content)}
-                      className={`w-full cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                        isSelected
-                          ? "border-indigo-500/50 bg-indigo-600/20 text-indigo-200"
-                          : "border-white/8 bg-neutral-900 text-neutral-200 hover:border-white/15 hover:bg-neutral-800"
-                      }`}
-                    >
-                      <p className="line-clamp-2 text-sm leading-snug">{card.content}</p>
-                      {(emailNoteIds.has(card.note_id) || card.placement_count > 1) && (
-                        <div className="mt-1 flex items-center gap-1.5">
-                          {emailNoteIds.has(card.note_id) && (
-                            <span className="text-[11px]" title="Has linked email thread">✉</span>
-                          )}
-                          {card.placement_count > 1 && (
-                            <span className="text-[11px] text-neutral-500" title="On multiple boards">🔗</span>
-                          )}
-                        </div>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <CardList
+              items={columnCards.map((c) => ({
+                id: c.id,
+                noteId: c.note_id,
+                content: c.content,
+                hasEmail: emailNoteIds.has(c.note_id),
+                multiBoard: c.placement_count > 1,
+              }))}
+              selectedForLink={selectedForLink}
+              isLinking={isLinking}
+              onCardClick={handleCardClick}
+            />
           )
         )}
       </div>
 
-      {/* Linking CTA bar — sticky bottom, shown when a card is selected in linking mode */}
+      {/* Linking CTA — sticky bottom */}
       {isLinking && selectedForLink && (
-        <div className="flex-shrink-0 space-y-2 border-t border-white/8 bg-neutral-950 p-3">
-          <p className="line-clamp-1 text-xs text-neutral-400">
+        <div className="flex-shrink-0 space-y-2 border-t border-white/[0.07] bg-neutral-950 p-3">
+          <p className="line-clamp-1 text-xs text-neutral-500">
             {selectedCardContent || "(untitled)"}
           </p>
-          {linkError && <p className="text-xs text-red-400">{linkError}</p>}
+          {linkError && (
+            <p className="text-xs text-red-400">{linkError}</p>
+          )}
           <button
             type="button"
             onClick={handleLink}
             disabled={linking}
-            className="w-full cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 active:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full cursor-pointer rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-indigo-500 active:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {linking ? "Linking…" : "Link this email to this card"}
+            {linking ? "Linking…" : "Link email to this card"}
           </button>
         </div>
       )}
 
     </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="pt-2 text-xs text-neutral-600">{children}</p>
+  );
+}
+
+type CardItem = {
+  id: string;
+  noteId: string;
+  content: string;
+  hasEmail: boolean;
+  multiBoard: boolean;
+};
+
+function CardList({
+  items,
+  selectedForLink,
+  isLinking,
+  onCardClick,
+}: {
+  items: CardItem[];
+  selectedForLink: string | null;
+  isLinking: boolean;
+  onCardClick: (noteId: string, content: string) => void;
+}) {
+  return (
+    <ul className="space-y-1.5">
+      {items.map((item) => {
+        const isSelected = selectedForLink === item.noteId;
+        return (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => onCardClick(item.noteId, item.content)}
+              className={`w-full cursor-pointer rounded-xl border px-3 py-2.5 text-left transition-all duration-150 ${
+                isSelected
+                  ? "border-indigo-500/50 bg-indigo-600/[0.15] ring-1 ring-indigo-500/20"
+                  : "border-white/[0.07] bg-neutral-900/70 hover:border-white/[0.13] hover:bg-neutral-800/70"
+              }`}
+            >
+              <p className={`line-clamp-2 text-sm leading-snug ${isSelected ? "text-indigo-100" : "text-neutral-200"}`}>
+                {item.content}
+              </p>
+              {(item.hasEmail || item.multiBoard) && (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  {item.hasEmail && (
+                    <span className="text-[11px] leading-none text-neutral-600" title="Has linked email thread">✉</span>
+                  )}
+                  {item.multiBoard && (
+                    <span className="text-[11px] leading-none text-neutral-600" title="On multiple boards">⬡</span>
+                  )}
+                </div>
+              )}
+              {isLinking && !isSelected && (
+                <p className="mt-1 text-[10px] text-neutral-700">Tap to select</p>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

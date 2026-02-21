@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getNote, updateNote } from "@/lib/notes";
 import { getNotePlacements, movePlacement, type NotePlacementInfo } from "@/lib/placements";
 import {
@@ -27,50 +27,73 @@ function relativeTime(iso: string | null): string {
   if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
-/** Returns the OWA base URL for a mailbox address. */
 function owaBase(mailbox: string | null): string {
   const domain = (mailbox ?? "").split("@")[1]?.toLowerCase() ?? "";
   const isConsumer = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain);
   return isConsumer ? "https://outlook.live.com" : "https://outlook.office.com";
 }
 
+// Save status dot colours
+const STATUS_DOT: Record<SaveStatus, string> = {
+  idle:    "bg-transparent",
+  pending: "bg-amber-400",
+  saving:  "bg-indigo-400 animate-pulse",
+  saved:   "bg-emerald-400",
+  error:   "bg-red-400",
+};
+
+type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
+
+// ── Section label ──────────────────────────────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-600">
+      {children}
+    </p>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 type Props = {
   noteId: string;
-  /** The active email thread from Outlook context, used for "Link current email" feature. */
   currentThread?: OutlookThread;
 };
 
 export function CardDetailPane({ noteId, currentThread }: Props) {
-  const [content, setContent] = useState("");
+  // ── Content + save ────────────────────────────────────────────────────────────
+  const [content, setContent]           = useState("");
   const [savedContent, setSavedContent] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [loading, setLoading]           = useState(true);
+  const [saveStatus, setSaveStatus]     = useState<SaveStatus>("idle");
+  const [saveError, setSaveError]       = useState<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [placements, setPlacements] = useState<NotePlacementInfo[]>([]);
-  const [moveColumns, setMoveColumns] = useState<ColumnRow[]>([]);
+  // ── Placements + move ─────────────────────────────────────────────────────────
+  const [placements, setPlacements]                   = useState<NotePlacementInfo[]>([]);
+  const [moveColumns, setMoveColumns]                 = useState<ColumnRow[]>([]);
   const [selectedMoveColumnId, setSelectedMoveColumnId] = useState("");
-  const [moving, setMoving] = useState(false);
-  const [moveMsg, setMoveMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [moving, setMoving]                           = useState(false);
+  const [moveMsg, setMoveMsg]                         = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const [threads, setThreads] = useState<EmailThreadRow[]>([]);
+  // ── Linked threads ────────────────────────────────────────────────────────────
+  const [threads, setThreads]             = useState<EmailThreadRow[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
+  const [openError, setOpenError]         = useState<string | null>(null);
 
-  // Toast error for "Open in Outlook" failures
-  const [openError, setOpenError] = useState<string | null>(null);
-
-  // "Link current email to this card" state
+  // ── Link-current state ────────────────────────────────────────────────────────
   const [linkCurrentState, setLinkCurrentState] = useState<"idle" | "linking" | "done" | "error">("idle");
   const [linkCurrentError, setLinkCurrentError] = useState<string | null>(null);
 
-  // ── Load all card data ────────────────────────────────────────────────────────
+  // ── Load ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
+    setSaveStatus("idle");
+    setSaveError(null);
+    setLoading(true);
+
     async function load() {
       const [noteResult, placementsResult, threadsResult] = await Promise.all([
         getNote(noteId),
@@ -87,7 +110,6 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
       setThreads(threadsResult.data);
       setThreadsLoading(false);
 
-      // Load columns for the first placement's board (move dropdown)
       if (placementsResult.length > 0) {
         const { data: cols } = await listColumns(placementsResult[0].boardId);
         if (cols?.length) {
@@ -96,29 +118,58 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
         }
       }
     }
+
     load();
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
   }, [noteId]);
 
-  // Reset link-current state when the card changes
   useEffect(() => {
     setLinkCurrentState("idle");
     setLinkCurrentError(null);
   }, [noteId]);
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
-  async function handleSave() {
-    setSaving(true);
+  // ── Autosave ──────────────────────────────────────────────────────────────────
+  function handleContentChange(newContent: string) {
+    setContent(newContent);
     setSaveError(null);
-    const { error } = await updateNote(noteId, content);
-    if (error) {
-      setSaveError(error);
-    } else {
-      setSavedContent(content);
+
+    if (newContent === savedContent) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      setSaveStatus("idle");
+      return;
     }
-    setSaving(false);
+
+    setSaveStatus("pending");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void performSave(newContent);
+    }, 1_400);
   }
 
-  // ── Move card ─────────────────────────────────────────────────────────────────
+  async function performSave(contentToSave: string) {
+    setSaveStatus("saving");
+    const { error } = await updateNote(noteId, contentToSave);
+    if (error) {
+      setSaveError(error);
+      setSaveStatus("error");
+    } else {
+      setSavedContent(contentToSave);
+      setSaveError(null);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus((s) => (s === "saved" ? "idle" : s)), 2_500);
+    }
+  }
+
+  function handleManualSave() {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (content === savedContent && saveStatus !== "error") return;
+    void performSave(content);
+  }
+
+  // ── Move ──────────────────────────────────────────────────────────────────────
   async function handleMove() {
     if (!placements[0] || !selectedMoveColumnId) return;
     if (selectedMoveColumnId === placements[0].columnId) return;
@@ -138,44 +189,25 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
           i === 0 ? { ...p, columnId: selectedMoveColumnId, columnName: colName } : p,
         ),
       );
-      setMoveMsg({ kind: "ok", text: `Moved to ${colName}.` });
+      setMoveMsg({ kind: "ok", text: `Moved to ${colName}` });
     }
     setMoving(false);
   }
 
-  // ── Open thread in Outlook ────────────────────────────────────────────────────
-  /**
-   * Opens the email thread in Outlook as a search results view so the user sees
-   * the full conversation chain rather than a single message.
-   *
-   * Priority:
-   *   1. web_link (Phase 3 Graph deep-link) — opens conversation view directly.
-   *   2. OWA search by quoted subject — surfaces the full thread in search results.
-   *      Consumer accounts → outlook.live.com; enterprise → outlook.office.com.
-   *   3. No subject: show inline error toast. Never open generic inbox.
-   */
+  // ── Open thread ───────────────────────────────────────────────────────────────
   function openThreadInOutlook(thread: EmailThreadRow) {
     setOpenError(null);
-
-    // Path 1: Phase 3 Graph API conversation deep-link
-    if (thread.web_link) {
-      openBrowserUrl(thread.web_link);
-      return;
-    }
-
-    // Path 2: OWA search by quoted subject → shows full conversation chain
+    if (thread.web_link) { openBrowserUrl(thread.web_link); return; }
     const subject = thread.subject?.trim() ?? "";
     if (!subject) {
-      setOpenError(
-        "Can't open this thread — no subject to search by. Find it manually in Outlook.",
-      );
+      setOpenError("No subject — find this thread manually in Outlook.");
       return;
     }
     const url = `${owaBase(thread.mailbox)}/mail/search?q=${encodeURIComponent(`"${subject}"`)}`;
     openBrowserUrl(url);
   }
 
-  // ── Link current email to this card ──────────────────────────────────────────
+  // ── Link current email ────────────────────────────────────────────────────────
   async function handleLinkCurrentEmail() {
     if (!currentThread) return;
     setLinkCurrentState("linking");
@@ -196,7 +228,6 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
     } else {
       if (data) {
         setThreads((prev) => {
-          // Replace if already in list (upsert may return existing), otherwise append
           const exists = prev.some((t) => t.conversation_id === data.conversation_id);
           return exists
             ? prev.map((t) => (t.conversation_id === data.conversation_id ? data : t))
@@ -219,162 +250,187 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-xs text-neutral-600">Loading…</p>
+        <span className="text-xs text-neutral-600">Loading…</span>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="space-y-5 p-4">
+    <div className="flex h-full flex-col">
 
-        {/* Content editor */}
-        <div className="space-y-2">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={5}
-            className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm leading-relaxed text-neutral-200 outline-none focus:border-neutral-500"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !dirty}
-              className="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-            {!dirty && !saving && savedContent && (
-              <span className="text-xs text-neutral-600">Saved</span>
+      {/* ── Scrollable body ──────────────────────────────────────────────── */}
+      <div className="nb-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="space-y-5 p-4 pb-2">
+
+          {/* Content editor */}
+          <section className="space-y-1.5">
+            <SectionLabel>Content</SectionLabel>
+            <textarea
+              value={content}
+              onChange={(e) => handleContentChange(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  handleManualSave();
+                }
+              }}
+              rows={7}
+              placeholder="Add notes…"
+              className="w-full resize-none rounded-xl border border-white/[0.08] bg-neutral-900 px-3 py-2.5 text-sm leading-relaxed text-neutral-100 outline-none placeholder:text-neutral-700 transition-colors duration-150 focus:border-white/[0.18] focus:bg-neutral-900"
+            />
+          </section>
+
+          {/* Placement info + move */}
+          {placements.length > 0 && (
+            <section className="space-y-2">
+              <SectionLabel>Location</SectionLabel>
+              <div className="rounded-xl border border-white/[0.07] bg-neutral-900/70 px-3 py-2.5 space-y-2">
+                {placements.map((p) => (
+                  <p key={p.placementId} className="text-xs text-neutral-400">
+                    <span className="text-neutral-300 font-medium">{p.boardName}</span>
+                    <span className="mx-1 text-neutral-700">›</span>
+                    <span className="text-neutral-400">{p.columnName}</span>
+                  </p>
+                ))}
+                {moveColumns.length > 1 && (
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <select
+                      value={selectedMoveColumnId}
+                      onChange={(e) => { setSelectedMoveColumnId(e.target.value); setMoveMsg(null); }}
+                      className="flex-1 rounded-lg border border-white/[0.08] bg-neutral-800 px-2 py-1 text-xs text-neutral-300 outline-none focus:border-white/[0.16] cursor-pointer"
+                    >
+                      {moveColumns.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleMove}
+                      disabled={moving || selectedMoveColumnId === placements[0]?.columnId}
+                      className="cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-800 px-2.5 py-1 text-xs font-medium text-neutral-300 transition-colors duration-150 hover:bg-neutral-700 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {moving ? "…" : "Move"}
+                    </button>
+                  </div>
+                )}
+                {moveMsg && (
+                  <p className={`text-xs ${moveMsg.kind === "ok" ? "text-emerald-400" : "text-red-400"}`}>
+                    {moveMsg.text}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Linked email threads */}
+          <section className="space-y-2">
+            <SectionLabel>Linked Emails</SectionLabel>
+
+            {threadsLoading ? (
+              <p className="text-xs text-neutral-700">Loading…</p>
+            ) : threads.length === 0 ? (
+              <p className="text-xs text-neutral-700">No linked threads yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {threads.map((t) => (
+                  <li
+                    key={t.id}
+                    className="rounded-xl border border-white/[0.07] bg-neutral-900/70 px-3 py-2.5 space-y-1.5"
+                  >
+                    <p className="line-clamp-1 text-sm font-medium text-neutral-200">
+                      {t.subject || "(no subject)"}
+                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-600">
+                      {t.mailbox && <span className="truncate">{t.mailbox}</span>}
+                      {t.last_activity_at && (
+                        <>
+                          <span>·</span>
+                          <span>{relativeTime(t.last_activity_at)}</span>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openThreadInOutlook(t)}
+                      className="w-full cursor-pointer rounded-lg bg-neutral-800 px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 transition-colors duration-150 hover:bg-neutral-700 hover:text-neutral-200 active:bg-neutral-600"
+                    >
+                      Open in Outlook →
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-            {saveError && <span className="text-xs text-red-400">{saveError}</span>}
-          </div>
-        </div>
 
-        {/* Placement info + move */}
-        {placements.length > 0 && (
-          <div className="space-y-2 rounded-lg border border-white/8 bg-neutral-900/60 px-3 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600">
-              Placement{placements.length > 1 ? "s" : ""}
-            </p>
-            {placements.map((p, i) => (
-              <p key={p.placementId} className="text-xs text-neutral-400">
-                {i > 0 && <span className="text-neutral-600">&amp; </span>}
-                <span className="text-neutral-300">{p.boardName}</span>
-                <span className="text-neutral-600"> › </span>
-                <span className="text-neutral-300">{p.columnName}</span>
-              </p>
-            ))}
-
-            {/* Move dropdown (first placement only) */}
-            {moveColumns.length > 1 && (
-              <div className="flex items-center gap-2 pt-1">
-                <select
-                  value={selectedMoveColumnId}
-                  onChange={(e) => { setSelectedMoveColumnId(e.target.value); setMoveMsg(null); }}
-                  className="flex-1 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200 outline-none focus:border-neutral-500"
-                >
-                  {moveColumns.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+            {/* Open error */}
+            {openError && (
+              <div className="flex items-start gap-2 rounded-xl border border-red-900/40 bg-red-950/30 px-3 py-2.5">
+                <p className="flex-1 text-xs text-red-400">{openError}</p>
                 <button
                   type="button"
-                  onClick={handleMove}
-                  disabled={moving || selectedMoveColumnId === placements[0]?.columnId}
-                  className="cursor-pointer rounded bg-neutral-700 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => setOpenError(null)}
+                  className="flex-shrink-0 cursor-pointer text-xs text-red-700 hover:text-red-500"
                 >
-                  {moving ? "Moving…" : "Move"}
+                  ✕
                 </button>
               </div>
             )}
-            {moveMsg && (
-              <p className={`text-xs ${moveMsg.kind === "ok" ? "text-emerald-400" : "text-red-400"}`}>
-                {moveMsg.text}
-              </p>
-            )}
-          </div>
-        )}
 
-        {/* Linked email threads */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600">
-            Linked Emails
-          </p>
-
-          {threadsLoading ? (
-            <p className="text-xs text-neutral-600">Loading…</p>
-          ) : threads.length === 0 ? (
-            <p className="text-xs text-neutral-600">No linked email threads.</p>
-          ) : (
-            <ul className="space-y-2">
-              {threads.map((t) => (
-                <li
-                  key={t.id}
-                  className="rounded-lg border border-white/8 bg-neutral-900/60 px-3 py-2.5"
+            {/* Link current email */}
+            {currentThread && !threadsLoading && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleLinkCurrentEmail}
+                  disabled={linkButtonDisabled}
+                  className={`w-full cursor-pointer rounded-xl border px-3 py-2 text-xs font-medium transition-colors duration-150 disabled:cursor-not-allowed ${
+                    isAlreadyLinked || linkCurrentState === "done"
+                      ? "border-emerald-800/40 bg-emerald-950/30 text-emerald-400"
+                      : "border-white/[0.08] bg-neutral-900 text-neutral-400 hover:border-white/[0.14] hover:text-neutral-200 disabled:opacity-50"
+                  }`}
                 >
-                  <p className="line-clamp-1 text-sm font-medium text-neutral-200">
-                    {t.subject || "(no subject)"}
-                  </p>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500">
-                    {t.mailbox && <span className="truncate">{t.mailbox}</span>}
-                    {t.last_activity_at && (
-                      <>
-                        <span>·</span>
-                        <span>{relativeTime(t.last_activity_at)}</span>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openThreadInOutlook(t)}
-                    className="mt-2 w-full cursor-pointer rounded bg-neutral-800 px-2.5 py-1.5 text-left text-xs font-medium text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-neutral-100"
-                  >
-                    Open in Outlook →
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                  {isAlreadyLinked || linkCurrentState === "done"
+                    ? "Linked to this card ✓"
+                    : linkCurrentState === "linking"
+                    ? "Linking…"
+                    : "Link this email to card"}
+                </button>
+                {linkCurrentError && (
+                  <p className="mt-1.5 text-xs text-red-400">{linkCurrentError}</p>
+                )}
+              </div>
+            )}
+          </section>
 
-          {/* Open error toast */}
-          {openError && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2.5">
-              <p className="flex-1 text-xs text-red-400">{openError}</p>
-              <button
-                type="button"
-                onClick={() => setOpenError(null)}
-                className="flex-shrink-0 cursor-pointer text-xs text-red-700 hover:text-red-500"
-              >
-                ✕
-              </button>
-            </div>
-          )}
+          {/* Bottom padding so sticky footer doesn't cover last item */}
+          <div className="h-2" />
+        </div>
+      </div>
 
-          {/* Link current email to this card */}
-          {currentThread && !threadsLoading && (
-            <div className="mt-3 border-t border-white/8 pt-3">
-              <button
-                type="button"
-                onClick={handleLinkCurrentEmail}
-                disabled={linkButtonDisabled}
-                className="w-full cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-medium text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isAlreadyLinked || linkCurrentState === "done"
-                  ? "Already linked ✓"
-                  : linkCurrentState === "linking"
-                  ? "Linking…"
-                  : "Link current email to this card"}
-              </button>
-              {linkCurrentError && (
-                <p className="mt-1 text-xs text-red-400">{linkCurrentError}</p>
-              )}
-            </div>
-          )}
+      {/* ── Sticky save footer ────────────────────────────────────────────── */}
+      <div className="flex flex-shrink-0 items-center gap-2 border-t border-white/[0.07] bg-neutral-950 px-4 py-2.5">
+        {/* Status indicator */}
+        <div className="flex flex-1 items-center gap-2 min-w-0">
+          <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full transition-colors duration-300 ${STATUS_DOT[saveStatus]}`} />
+          <span className="truncate text-xs text-neutral-600">
+            {saveStatus === "idle"    && (dirty ? "Unsaved changes" : "Saved")}
+            {saveStatus === "pending" && "Modified — autosaving…"}
+            {saveStatus === "saving"  && "Saving…"}
+            {saveStatus === "saved"   && "Saved ✓"}
+            {saveStatus === "error"   && (saveError ?? "Save failed")}
+          </span>
         </div>
 
+        {/* Manual save button */}
+        <button
+          type="button"
+          onClick={handleManualSave}
+          disabled={saveStatus === "saving" || (!dirty && saveStatus !== "error")}
+          className="flex-shrink-0 cursor-pointer rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-indigo-500 active:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {saveStatus === "saving" ? "Saving…" : "Save"}
+        </button>
       </div>
+
     </div>
   );
 }

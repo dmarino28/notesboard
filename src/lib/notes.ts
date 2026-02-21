@@ -76,8 +76,16 @@ export async function getNote(id: string): Promise<{ data: NoteRow | null; error
 }
 
 export async function updateNote(id: string, content: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.from("notes").update({ content }).eq("id", id);
-  return { error: error?.message ?? null };
+  // .select("id") is required: without it a blocked RLS UPDATE returns
+  // { data: null, error: null } — a silent no-op that looks like success.
+  const { data, error } = await supabase
+    .from("notes")
+    .update({ content })
+    .eq("id", id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "Save failed — no rows updated. Check RLS policy." };
+  return { error: null };
 }
 
 export async function updateNoteFields(

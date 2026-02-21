@@ -27,11 +27,9 @@ export function OutlookAddinShell({ init }: Props) {
   const thread = init.kind === "ok" ? init.thread : DEV_THREAD;
 
   const [view, setView] = useState<ViewState>({ kind: "list", tab: "capture" });
-
-  // linkingCtx is set while the user is in "pick a card to link this email" mode.
   const [linkingCtx, setLinkingCtx] = useState<OutlookThread | null>(null);
 
-  // ── Navigation helpers ────────────────────────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────────────────────────
   function openCard(noteId: string) {
     const returnTab: Tab = view.kind === "list" ? view.tab : "browse";
     setLinkingCtx(null);
@@ -61,7 +59,6 @@ export function OutlookAddinShell({ init }: Props) {
   }
 
   function handleTabChange(newTab: Tab) {
-    // Switching away from browse while linking cancels the linking flow.
     if (linkingCtx && newTab !== "browse") setLinkingCtx(null);
     setView({ kind: "list", tab: newTab });
   }
@@ -72,33 +69,36 @@ export function OutlookAddinShell({ init }: Props) {
   // ── Error state ───────────────────────────────────────────────────────────────
   if (init.kind === "error") {
     return (
-      <div className="flex h-screen flex-col bg-neutral-950 text-neutral-200">
-        <ShellHeader />
-        <div className="flex flex-1 items-center justify-center p-6 text-center">
-          <p className="text-sm text-neutral-400">{init.message}</p>
+      <div className="nb-addin flex h-screen flex-col bg-neutral-950 text-neutral-200">
+        <AddinHeader />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900">
+            <span className="text-lg">⚠️</span>
+          </div>
+          <p className="text-sm leading-relaxed text-neutral-400">{init.message}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen flex-col bg-neutral-950 text-neutral-200">
+    <div className="nb-addin flex h-screen flex-col bg-neutral-950 text-neutral-100">
 
-      {/* Header */}
-      <ShellHeader isDevMode={isDevMode} isCardDetail={isCardDetail} onBack={goBack} />
+      {/* App chrome */}
+      <AddinHeader isDevMode={isDevMode} isCardDetail={isCardDetail} onBack={goBack} />
 
-      {/* Tab bar (hidden during card-detail) */}
+      {/* Tab bar — hidden when viewing a card */}
       {!isCardDetail && (
-        <div className="flex flex-shrink-0 gap-0.5 border-b border-white/8 bg-neutral-900 p-1">
+        <div className="flex flex-shrink-0 gap-1 border-b border-white/[0.07] bg-neutral-950 px-2 py-1.5">
           {(["capture", "browse"] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => handleTabChange(t)}
-              className={`flex-1 cursor-pointer rounded-md py-1.5 text-xs font-medium transition-colors ${
+              className={`flex-1 cursor-pointer rounded-md py-1.5 text-xs font-medium transition-colors duration-150 ${
                 activeTab === t
-                  ? "bg-neutral-700 text-neutral-100"
-                  : "text-neutral-500 hover:text-neutral-300"
+                  ? "bg-neutral-800 text-neutral-100 shadow-sm"
+                  : "text-neutral-500 hover:bg-white/[0.04] hover:text-neutral-300"
               }`}
             >
               {t === "capture" ? "Capture" : "Browse"}
@@ -107,7 +107,7 @@ export function OutlookAddinShell({ init }: Props) {
         </div>
       )}
 
-      {/* Main content */}
+      {/* Main content area */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {isCardDetail ? (
           <CardDetailPane
@@ -135,9 +135,9 @@ export function OutlookAddinShell({ init }: Props) {
   );
 }
 
-// ── Shell header ──────────────────────────────────────────────────────────────
+// ── Shared header ─────────────────────────────────────────────────────────────
 
-function ShellHeader({
+function AddinHeader({
   isDevMode = false,
   isCardDetail = false,
   onBack,
@@ -147,22 +147,26 @@ function ShellHeader({
   onBack?: () => void;
 }) {
   return (
-    <div className="flex flex-shrink-0 items-center gap-2 border-b border-white/8 bg-neutral-900 px-3 py-2.5">
-      {isCardDetail && onBack && (
+    <div className="flex flex-shrink-0 items-center gap-1.5 border-b border-white/[0.07] bg-neutral-950 px-2.5 py-2">
+      {isCardDetail && onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className="mr-0.5 flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          className="flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-400 transition-colors duration-150 hover:bg-white/[0.06] hover:text-neutral-200 active:bg-white/[0.1]"
         >
-          ← Back
+          <span className="text-[11px]">←</span>
+          <span>Back</span>
         </button>
+      ) : (
+        <span className="flex h-5 w-5 items-center justify-center text-sm leading-none">✉️</span>
       )}
-      {!isCardDetail && <span className="text-sm">✉️</span>}
-      <span className="text-sm font-semibold">
-        {isCardDetail ? "Card Details" : "NotesBoard"}
+
+      <span className="text-[13px] font-semibold tracking-tight text-neutral-100">
+        {isCardDetail ? "Card" : "NotesBoard"}
       </span>
+
       {isDevMode && !isCardDetail && (
-        <span className="ml-auto rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+        <span className="ml-auto rounded-md bg-amber-950/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-400/80 ring-1 ring-amber-800/40">
           dev
         </span>
       )}
