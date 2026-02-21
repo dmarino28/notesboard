@@ -6,7 +6,7 @@
   xsi:type="MailApp">
 
   <Id>a7e4c821-3d2f-4b1a-9c6e-d58f02b13e47</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.0.1</Version>
   <ProviderName>NotesBoard</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="NotesBoard"/>
