@@ -3,46 +3,22 @@
 import { useEffect, useState } from "react";
 import { getNote, updateNote } from "@/lib/notes";
 import { getNotePlacements, movePlacement, type NotePlacementInfo } from "@/lib/placements";
-import { listEmailThreadsForNote, type EmailThreadRow } from "@/lib/emailThreads";
+import {
+  listEmailThreadsForNote,
+  upsertEmailThreadForNote,
+  type EmailThreadRow,
+} from "@/lib/emailThreads";
 import { listColumns, type ColumnRow } from "@/lib/columns";
+import { type OutlookThread } from "@/lib/outlookContext";
 
-// ── Outlook URL builder ───────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Builds the best available URL to open an email thread in Outlook Web.
- *
- * Phase 0 (now): Opens OWA with a quoted-subject search.
- *   Label "Open in Outlook" is retained so Phase 3 (web_link from Graph API)
- *   is a transparent upgrade with no UI change.
- *
- * Phase 3 (future): web_link will be a direct conversation deep-link.
- */
-function buildOutlookUrl(thread: EmailThreadRow): string {
-  if (thread.web_link) return thread.web_link;
-
-  const mailbox = thread.mailbox ?? "";
-  const domain = mailbox.split("@")[1]?.toLowerCase() ?? "";
-  const isConsumer = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain);
-  const base = isConsumer ? "https://outlook.live.com" : "https://outlook.office.com";
-
-  const subject = thread.subject ?? "";
-  if (subject) {
-    return `${base}/mail/search?q=${encodeURIComponent(`"${subject}"`)}`;
-  }
-  return `${base}/mail/`;
-}
-
-function openInOutlook(url: string) {
+function openBrowserUrl(url: string) {
   if (typeof Office !== "undefined") {
-    try {
-      Office.context.ui.openBrowserWindow(url);
-      return;
-    } catch {}
+    try { Office.context.ui.openBrowserWindow(url); return; } catch {}
   }
   window.open(url, "_blank");
 }
-
-// ── Relative time helper ──────────────────────────────────────────────────────
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
@@ -55,11 +31,22 @@ function relativeTime(iso: string | null): string {
   return `${days}d ago`;
 }
 
+/** Returns the OWA base URL for a mailbox address. */
+function owaBase(mailbox: string | null): string {
+  const domain = (mailbox ?? "").split("@")[1]?.toLowerCase() ?? "";
+  const isConsumer = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain);
+  return isConsumer ? "https://outlook.live.com" : "https://outlook.office.com";
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
-type Props = { noteId: string };
+type Props = {
+  noteId: string;
+  /** The active email thread from Outlook context, used for "Link current email" feature. */
+  currentThread?: OutlookThread;
+};
 
-export function CardDetailPane({ noteId }: Props) {
+export function CardDetailPane({ noteId, currentThread }: Props) {
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,6 +61,13 @@ export function CardDetailPane({ noteId }: Props) {
 
   const [threads, setThreads] = useState<EmailThreadRow[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
+
+  // Toast error for "Open in Outlook" failures
+  const [openError, setOpenError] = useState<string | null>(null);
+
+  // "Link current email to this card" state
+  const [linkCurrentState, setLinkCurrentState] = useState<"idle" | "linking" | "done" | "error">("idle");
+  const [linkCurrentError, setLinkCurrentError] = useState<string | null>(null);
 
   // ── Load all card data ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -103,6 +97,12 @@ export function CardDetailPane({ noteId }: Props) {
       }
     }
     load();
+  }, [noteId]);
+
+  // Reset link-current state when the card changes
+  useEffect(() => {
+    setLinkCurrentState("idle");
+    setLinkCurrentError(null);
   }, [noteId]);
 
   // ── Save ──────────────────────────────────────────────────────────────────────
@@ -143,7 +143,77 @@ export function CardDetailPane({ noteId }: Props) {
     setMoving(false);
   }
 
+  // ── Open thread in Outlook ────────────────────────────────────────────────────
+  /**
+   * Opens the email thread in Outlook as a search results view so the user sees
+   * the full conversation chain rather than a single message.
+   *
+   * Priority:
+   *   1. web_link (Phase 3 Graph deep-link) — opens conversation view directly.
+   *   2. OWA search by quoted subject — surfaces the full thread in search results.
+   *      Consumer accounts → outlook.live.com; enterprise → outlook.office.com.
+   *   3. No subject: show inline error toast. Never open generic inbox.
+   */
+  function openThreadInOutlook(thread: EmailThreadRow) {
+    setOpenError(null);
+
+    // Path 1: Phase 3 Graph API conversation deep-link
+    if (thread.web_link) {
+      openBrowserUrl(thread.web_link);
+      return;
+    }
+
+    // Path 2: OWA search by quoted subject → shows full conversation chain
+    const subject = thread.subject?.trim() ?? "";
+    if (!subject) {
+      setOpenError(
+        "Can't open this thread — no subject to search by. Find it manually in Outlook.",
+      );
+      return;
+    }
+    const url = `${owaBase(thread.mailbox)}/mail/search?q=${encodeURIComponent(`"${subject}"`)}`;
+    openBrowserUrl(url);
+  }
+
+  // ── Link current email to this card ──────────────────────────────────────────
+  async function handleLinkCurrentEmail() {
+    if (!currentThread) return;
+    setLinkCurrentState("linking");
+    setLinkCurrentError(null);
+    const { data, error } = await upsertEmailThreadForNote({
+      noteId,
+      provider: currentThread.provider,
+      conversationId: currentThread.conversationId,
+      messageId: currentThread.messageId,
+      webLink: currentThread.webLink,
+      subject: currentThread.subject,
+      mailbox: currentThread.mailbox,
+      lastActivityAt: new Date().toISOString(),
+    });
+    if (error) {
+      setLinkCurrentState("error");
+      setLinkCurrentError(error);
+    } else {
+      if (data) {
+        setThreads((prev) => {
+          // Replace if already in list (upsert may return existing), otherwise append
+          const exists = prev.some((t) => t.conversation_id === data.conversation_id);
+          return exists
+            ? prev.map((t) => (t.conversation_id === data.conversation_id ? data : t))
+            : [...prev, data];
+        });
+      }
+      setLinkCurrentState("done");
+    }
+  }
+
+  // ── Derived ───────────────────────────────────────────────────────────────────
   const dirty = content !== savedContent;
+  const isAlreadyLinked =
+    currentThread !== undefined &&
+    threads.some((t) => t.conversation_id === currentThread.conversationId);
+  const linkButtonDisabled =
+    isAlreadyLinked || linkCurrentState === "linking" || linkCurrentState === "done";
 
   // ── Render ────────────────────────────────────────────────────────────────────
   if (loading) {
@@ -168,9 +238,10 @@ export function CardDetailPane({ noteId }: Props) {
           />
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handleSave}
               disabled={saving || !dirty}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -209,9 +280,10 @@ export function CardDetailPane({ noteId }: Props) {
                   ))}
                 </select>
                 <button
+                  type="button"
                   onClick={handleMove}
                   disabled={moving || selectedMoveColumnId === placements[0]?.columnId}
-                  className="rounded bg-neutral-700 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="cursor-pointer rounded bg-neutral-700 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {moving ? "Moving…" : "Move"}
                 </button>
@@ -255,14 +327,50 @@ export function CardDetailPane({ noteId }: Props) {
                     )}
                   </div>
                   <button
-                    onClick={() => openInOutlook(buildOutlookUrl(t))}
-                    className="mt-2 w-full rounded bg-neutral-800 px-2.5 py-1.5 text-xs font-medium text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-neutral-100"
+                    type="button"
+                    onClick={() => openThreadInOutlook(t)}
+                    className="mt-2 w-full cursor-pointer rounded bg-neutral-800 px-2.5 py-1.5 text-left text-xs font-medium text-neutral-300 transition-colors hover:bg-neutral-700 hover:text-neutral-100"
                   >
                     Open in Outlook →
                   </button>
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* Open error toast */}
+          {openError && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2.5">
+              <p className="flex-1 text-xs text-red-400">{openError}</p>
+              <button
+                type="button"
+                onClick={() => setOpenError(null)}
+                className="flex-shrink-0 cursor-pointer text-xs text-red-700 hover:text-red-500"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Link current email to this card */}
+          {currentThread && !threadsLoading && (
+            <div className="mt-3 border-t border-white/8 pt-3">
+              <button
+                type="button"
+                onClick={handleLinkCurrentEmail}
+                disabled={linkButtonDisabled}
+                className="w-full cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-medium text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isAlreadyLinked || linkCurrentState === "done"
+                  ? "Already linked ✓"
+                  : linkCurrentState === "linking"
+                  ? "Linking…"
+                  : "Link current email to this card"}
+              </button>
+              {linkCurrentError && (
+                <p className="mt-1 text-xs text-red-400">{linkCurrentError}</p>
+              )}
+            </div>
           )}
         </div>
 

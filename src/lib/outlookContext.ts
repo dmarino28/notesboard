@@ -85,10 +85,10 @@ export async function readOutlookItem(): Promise<ReadItemResult> {
     };
   }
 
-  // Prefer internetMessageId (RFC 5322 Message-Id, req set 1.5) as the stable
-  // per-message identifier. Fall back to itemId (EWS format) which is always available.
-  const msgItem = item as Office.MessageRead;
-  const messageId = msgItem.internetMessageId || item.itemId || "";
+  // Store the EWS item.itemId — this is what displayMessageForm() needs to open
+  // the exact message inside Outlook. internetMessageId is more stable across
+  // folder moves but cannot be used with displayMessageForm.
+  const messageId = item.itemId || "";
 
   return {
     kind: "ok",

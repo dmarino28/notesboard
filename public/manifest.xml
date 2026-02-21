@@ -11,9 +11,9 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="NotesBoard"/>
   <Description DefaultValue="Capture email threads as NotesBoard cards"/>
-  <IconUrl DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon80.png"/>
-  <HighResolutionIconUrl DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon80.png"/>
-  <SupportUrl DefaultValue="https://importance-retirement-moment-february.trycloudflare.com"/>
+  <IconUrl DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon80.png"/>
+  <SupportUrl DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com"/>
 
   <Hosts>
     <Host Name="Mailbox"/>
@@ -28,7 +28,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/outlook/addin"/>
+        <SourceLocation DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/outlook/addin"/>
         <RequestedHeight>350</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -44,7 +44,7 @@
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
 
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.3">
+        <bt:Sets DefaultMinVersion="1.5">
           <bt:Set Name="Mailbox"/>
         </bt:Sets>
       </Requirements>
@@ -70,6 +70,7 @@
                     </Icon>
                     <Action xsi:type="ShowTaskpane">
                       <SourceLocation resid="Url.addin"/>
+                      <SupportsPinning>true</SupportsPinning>
                     </Action>
                   </Control>
                 </Group>
@@ -82,12 +83,12 @@
 
       <Resources>
         <bt:Images>
-          <bt:Image id="Icon.16" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon16.png"/>
-          <bt:Image id="Icon.32" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon32.png"/>
-          <bt:Image id="Icon.80" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/icon80.png"/>
+          <bt:Image id="Icon.16" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon16.png"/>
+          <bt:Image id="Icon.32" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon32.png"/>
+          <bt:Image id="Icon.80" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="Url.addin" DefaultValue="https://importance-retirement-moment-february.trycloudflare.com/outlook/addin"/>
+          <bt:Url id="Url.addin" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/outlook/addin"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="Group.Label" DefaultValue="NotesBoard"/>
