@@ -11,9 +11,9 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="NotesBoard"/>
   <Description DefaultValue="Capture email threads as NotesBoard cards"/>
-  <IconUrl DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon80.png"/>
-  <HighResolutionIconUrl DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon80.png"/>
-  <SupportUrl DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com"/>
+  <IconUrl DefaultValue="https://notesboard-wine.vercel.app/icon80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://notesboard-wine.vercel.app/icon80.png"/>
+  <SupportUrl DefaultValue="https://notesboard-wine.vercel.app"/>
 
   <Hosts>
     <Host Name="Mailbox"/>
@@ -28,7 +28,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/outlook/addin"/>
+        <SourceLocation DefaultValue="https://notesboard-wine.vercel.app/outlook/addin"/>
         <RequestedHeight>350</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -83,12 +83,12 @@
 
       <Resources>
         <bt:Images>
-          <bt:Image id="Icon.16" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon16.png"/>
-          <bt:Image id="Icon.32" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon32.png"/>
-          <bt:Image id="Icon.80" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/icon80.png"/>
+          <bt:Image id="Icon.16" DefaultValue="https://notesboard-wine.vercel.app/icon16.png"/>
+          <bt:Image id="Icon.32" DefaultValue="https://notesboard-wine.vercel.app/icon32.png"/>
+          <bt:Image id="Icon.80" DefaultValue="https://notesboard-wine.vercel.app/icon80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="Url.addin" DefaultValue="https://mostly-animal-mar-classic.trycloudflare.com/outlook/addin"/>
+          <bt:Url id="Url.addin" DefaultValue="https://notesboard-wine.vercel.app/outlook/addin"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="Group.Label" DefaultValue="NotesBoard"/>
