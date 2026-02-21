@@ -17,19 +17,21 @@ type Props = {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-[11px] font-medium text-neutral-600">{children}</label>
+    <label className="block text-[11px] font-medium text-neutral-600">
+      {children}
+    </label>
   );
 }
 
 export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: Props) {
-  const [existingLinks, setExistingLinks]     = useState<LinkRef[] | null>(null);
-  const [createExpanded, setCreateExpanded]   = useState(false);
-  const [boards, setBoards]                   = useState<BoardRow[]>([]);
-  const [columns, setColumns]                 = useState<ColumnRow[]>([]);
+  const [existingLinks, setExistingLinks] = useState<LinkRef[] | null>(null);
+  const [createExpanded, setCreateExpanded] = useState(false);
+  const [boards, setBoards] = useState<BoardRow[]>([]);
+  const [columns, setColumns] = useState<ColumnRow[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState("");
   const [selectedColumnId, setSelectedColumnId] = useState("");
-  const [creating, setCreating]               = useState(false);
-  const [createError, setCreateError]         = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -98,12 +100,19 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
   return (
     <div className="flex h-full flex-col">
-
       {/* Thread identity */}
       <div className="flex-shrink-0 space-y-0.5 border-b border-white/[0.07] px-4 py-3">
         <p className="line-clamp-2 text-sm font-medium leading-snug text-neutral-100">
           {thread.subject || "(no subject)"}
         </p>
+
+        {/* 🔎 Build marker (remove later) */}
+        <div className="mt-1 flex items-center gap-2">
+          <span className="inline-flex items-center rounded-md bg-fuchsia-950/60 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300 ring-1 ring-fuchsia-800/40">
+            POLISH TEST • eaf51b2
+          </span>
+        </div>
+
         {thread.mailbox && (
           <p className="truncate text-xs text-neutral-600">{thread.mailbox}</p>
         )}
@@ -116,12 +125,11 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
       {/* Scrollable body */}
       <div className="nb-scroll flex-1 space-y-3 overflow-y-auto p-4">
-
         {/* Link status */}
         {existingLinks === null ? (
           <p className="text-xs text-neutral-700">Checking links…</p>
         ) : existingLinks.length > 0 ? (
-          <div className="rounded-xl border border-sky-800/30 bg-sky-950/25 px-3 py-2.5 space-y-1.5">
+          <div className="space-y-1.5 rounded-xl border border-sky-800/30 bg-sky-950/25 px-3 py-2.5">
             <p className="text-xs font-semibold text-sky-400">
               Linked to {existingLinks.length} card{existingLinks.length > 1 ? "s" : ""}
             </p>
@@ -139,7 +147,10 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
         <div className="space-y-2">
           <button
             type="button"
-            onClick={() => { setCreateExpanded((v) => !v); setCreateError(null); }}
+            onClick={() => {
+              setCreateExpanded((v) => !v);
+              setCreateError(null);
+            }}
             className={`w-full cursor-pointer rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
               createExpanded
                 ? "border border-white/[0.08] bg-transparent text-neutral-500 hover:text-neutral-300"
@@ -160,13 +171,15 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
         {/* Expandable create form */}
         {createExpanded && (
-          <div className="rounded-xl border border-white/[0.07] bg-neutral-900/60 p-3 space-y-3">
-
+          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-neutral-900/60 p-3">
             <div className="space-y-1">
               <FieldLabel>Board</FieldLabel>
               <select
                 value={selectedBoardId}
-                onChange={(e) => { setSelectedBoardId(e.target.value); setCreateError(null); }}
+                onChange={(e) => {
+                  setSelectedBoardId(e.target.value);
+                  setCreateError(null);
+                }}
                 className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-800 px-2.5 py-1.5 text-sm text-neutral-200 outline-none transition-colors focus:border-white/[0.16]"
               >
                 {boards.map((b) => (
@@ -184,8 +197,16 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
                 onChange={(e) => setSelectedColumnId(e.target.value)}
                 className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-neutral-800 px-2.5 py-1.5 text-sm text-neutral-200 outline-none transition-colors focus:border-white/[0.16]"
               >
-                {columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                {columns.length === 0 && <option value="" disabled>No columns</option>}
+                {columns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+                {columns.length === 0 && (
+                  <option value="" disabled>
+                    No columns
+                  </option>
+                )}
               </select>
             </div>
 
@@ -203,10 +224,8 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
             >
               {creating ? "Creating…" : "Create Card"}
             </button>
-
           </div>
         )}
-
       </div>
     </div>
   );
