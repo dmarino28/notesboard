@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { type ReadItemResult, type OutlookThread } from "@/lib/outlookContext";
 import { BoardBrowserView } from "./BoardBrowserView";
 import { CaptureView } from "./CaptureView";
@@ -30,19 +30,6 @@ export function OutlookAddinShell({ init }: Props) {
 
   // linkingCtx is set while the user is in "pick a card to link this email" mode.
   const [linkingCtx, setLinkingCtx] = useState<OutlookThread | null>(null);
-
-  // ── Pin hint (shown once, dismissed to localStorage) ─────────────────────────
-  const [showPinHint, setShowPinHint] = useState(false);
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem("nb_pin_hint_dismissed")) setShowPinHint(true);
-    } catch {}
-  }, []);
-
-  function dismissPinHint() {
-    try { localStorage.setItem("nb_pin_hint_dismissed", "1"); } catch {}
-    setShowPinHint(false);
-  }
 
   // ── Navigation helpers ────────────────────────────────────────────────────────
   function openCard(noteId: string) {
@@ -99,22 +86,6 @@ export function OutlookAddinShell({ init }: Props) {
 
       {/* Header */}
       <ShellHeader isDevMode={isDevMode} isCardDetail={isCardDetail} onBack={goBack} />
-
-      {/* Pin hint — shown once in real Outlook context */}
-      {showPinHint && !isDevMode && !isCardDetail && (
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-white/5 bg-neutral-900/60 px-3 py-1.5">
-          <p className="flex-1 text-[10px] text-neutral-500">
-            Tip: Pin this pane to keep NotesBoard open while switching emails.
-          </p>
-          <button
-            type="button"
-            onClick={dismissPinHint}
-            className="flex-shrink-0 cursor-pointer text-[10px] text-neutral-600 hover:text-neutral-400"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Tab bar (hidden during card-detail) */}
       {!isCardDetail && (

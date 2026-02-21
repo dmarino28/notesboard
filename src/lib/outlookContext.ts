@@ -1,7 +1,7 @@
 export type OutlookThread = {
   conversationId: string;
   messageId: string;
-  webLink: string | null; // null until Phase 3 (requires Graph API + getItemRestId)
+  webLink: string | null;
   subject: string;
   provider: "outlook";
   mailbox: string;
@@ -18,6 +18,64 @@ export type ReadItemResult =
   | { kind: "no_office" }
   | { kind: "error"; message: string }
   | { kind: "ok"; thread: OutlookThread };
+
+// ── Outlook REST web-link helper ──────────────────────────────────────────────
+
+/**
+ * Best-effort fetch of the OWA deep-link for the current message using the
+ * Office.js REST callback token (Exchange Online + Outlook.com).
+ *
+ * 4-second timeout — silently returns null on any failure (deprecated
+ * endpoint, permission denied, network error, timeout, etc.).
+ * Callers fall back to OWA subject-search or the MSAL connect flow.
+ */
+async function fetchRestWebLink(
+  mailbox: Office.Mailbox,
+  ewsItemId: string,
+): Promise<string | null> {
+  if (!ewsItemId) return null;
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), 4_000);
+    try {
+      mailbox.getCallbackTokenAsync({ isRest: true }, (result) => {
+        if (result.status !== Office.AsyncResultStatus.Succeeded) {
+          clearTimeout(timeout);
+          resolve(null);
+          return;
+        }
+        let restId: string;
+        try {
+          restId = mailbox.convertToRestId(
+            ewsItemId,
+            Office.MailboxEnums.RestVersion.v2_0,
+          );
+        } catch {
+          clearTimeout(timeout);
+          resolve(null);
+          return;
+        }
+        // mailbox.restUrl is available when isRest token was granted
+        const restBase =
+          (mailbox as unknown as { restUrl?: string }).restUrl ??
+          "https://outlook.office.com/api";
+        const url = `${restBase}/v2.0/me/messages/${encodeURIComponent(restId)}?$select=WebLink`;
+        fetch(url, { headers: { Authorization: `Bearer ${result.value}` } })
+          .then(async (res) => {
+            clearTimeout(timeout);
+            if (!res.ok) { resolve(null); return; }
+            const json = await res.json() as { WebLink?: string };
+            resolve(json.WebLink ?? null);
+          })
+          .catch(() => { clearTimeout(timeout); resolve(null); });
+      });
+    } catch {
+      clearTimeout(timeout);
+      resolve(null);
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 100;
 const POLL_TIMEOUT_MS = 10_000; // wait up to 10s for Office.js to appear
@@ -90,15 +148,21 @@ export async function readOutlookItem(): Promise<ReadItemResult> {
   // folder moves but cannot be used with displayMessageForm.
   const messageId = item.itemId || "";
 
+  // Best-effort: fetch the OWA deep-link via the Outlook REST callback token.
+  // Silently returns null for consumer accounts or if the endpoint is
+  // unavailable — the board view MSAL connect flow handles that case.
+  const mailbox = Office.context.mailbox;
+  const webLink = await fetchRestWebLink(mailbox, messageId);
+
   return {
     kind: "ok",
     thread: {
       conversationId,
       messageId,
-      webLink: null,
+      webLink,
       subject: item.subject ?? "",
       provider: "outlook",
-      mailbox: Office.context.mailbox.userProfile.emailAddress ?? "",
+      mailbox: mailbox.userProfile.emailAddress ?? "",
     },
   };
 }

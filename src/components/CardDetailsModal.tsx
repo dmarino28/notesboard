@@ -18,7 +18,10 @@ import {
   listEmailThreadsForNote,
   deleteEmailThread,
   listAttachmentsForThread,
+  upsertEmailThreadForNote,
 } from "@/lib/emailThreads";
+import { getMsalInstance, GRAPH_MAIL_SCOPE } from "@/lib/msalConfig";
+import { fetchWebLinkForConversation } from "@/lib/graphClient";
 
 // Minimal shape the modal needs from a note — works for both NoteRow and PlacedNoteRow
 type NoteInput = {
@@ -97,6 +100,8 @@ export function CardDetailsModal({
   const [emailThreadsLoading, setEmailThreadsLoading] = useState(true);
   // Attachments keyed by thread_id, loaded lazily per thread
   const [attachmentMap, setAttachmentMap] = useState<Record<string, AttachmentRow[]>>({});
+  // Thread being connected via MSAL (shows "Connecting…" on its button)
+  const [connectingThreadId, setConnectingThreadId] = useState<string | null>(null);
 
   // --- Debounced save ---
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -367,6 +372,83 @@ export function CardDetailsModal({
   }
 
   // ------------------------------------------------------------------ email threads
+
+  /** Opens a thread by falling back to an OWA subject-search URL. */
+  function openThreadFallback(thread: EmailThreadRow) {
+    const subject = thread.subject?.trim() ?? "";
+    if (!subject) return;
+    const domain = (thread.mailbox ?? "").split("@")[1]?.toLowerCase() ?? "";
+    const isConsumer = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain);
+    const base = isConsumer ? "https://outlook.live.com" : "https://outlook.office.com";
+    window.open(
+      `${base}/mail/search?q=${encodeURIComponent(`"${subject}"`)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
+
+  /**
+   * Opens the thread in Outlook.
+   * - If web_link is stored: opens it directly.
+   * - Otherwise: authenticates via MSAL, fetches the webLink from Graph,
+   *   persists it to the DB, then opens it. Falls back to OWA subject-search
+   *   if MSAL is not configured or Graph returns nothing.
+   */
+  async function handleOpenThread(thread: EmailThreadRow) {
+    if (thread.web_link) {
+      window.open(thread.web_link, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setConnectingThreadId(thread.id);
+    try {
+      const msal = await getMsalInstance();
+      if (!msal) {
+        openThreadFallback(thread);
+        return;
+      }
+
+      // Try silent token first; fall back to popup login.
+      let accessToken: string;
+      try {
+        const accounts = msal.getAllAccounts();
+        if (accounts.length === 0) throw new Error("no accounts");
+        const result = await msal.acquireTokenSilent({ scopes: [GRAPH_MAIL_SCOPE], account: accounts[0] });
+        accessToken = result.accessToken;
+      } catch {
+        const result = await msal.acquireTokenPopup({ scopes: [GRAPH_MAIL_SCOPE] });
+        accessToken = result.accessToken;
+      }
+
+      const webLink = await fetchWebLinkForConversation(accessToken, thread.conversation_id);
+
+      if (webLink) {
+        // Persist so future clicks skip the auth round-trip.
+        await upsertEmailThreadForNote({
+          noteId,
+          provider: thread.provider,
+          conversationId: thread.conversation_id,
+          messageId: thread.message_id,
+          webLink,
+          subject: thread.subject,
+          mailbox: thread.mailbox,
+          lastActivityAt: thread.last_activity_at,
+          unreadCount: thread.unread_count,
+        });
+        setEmailThreads((prev) =>
+          prev.map((t) => (t.id === thread.id ? { ...t, web_link: webLink } : t)),
+        );
+        window.open(webLink, "_blank", "noopener,noreferrer");
+      } else {
+        openThreadFallback(thread);
+      }
+    } catch {
+      // User cancelled login or popup was blocked — fall back gracefully.
+      openThreadFallback(thread);
+    } finally {
+      setConnectingThreadId(null);
+    }
+  }
 
   async function handleUnlinkThread(threadId: string) {
     setEmailThreads((prev) => prev.filter((t) => t.id !== threadId));
@@ -733,17 +815,18 @@ export function CardDetailsModal({
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
-                            {thread.web_link && (
-                              <a
-                                href={thread.web_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                              >
-                                Open in Outlook
-                              </a>
-                            )}
                             <button
+                              type="button"
+                              disabled={connectingThreadId === thread.id}
+                              onClick={() => handleOpenThread(thread)}
+                              className="text-xs text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
+                            >
+                              {connectingThreadId === thread.id
+                                ? "Connecting…"
+                                : "Open in Outlook →"}
+                            </button>
+                            <button
+                              type="button"
                               className="text-xs text-neutral-600 hover:text-red-400 transition-colors"
                               onClick={() => handleUnlinkThread(thread.id)}
                             >
