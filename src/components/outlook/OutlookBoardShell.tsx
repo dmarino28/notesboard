@@ -451,6 +451,10 @@ export function OutlookBoardShell({ thread }: Props) {
       board_id: p.board_id,
       position: p.position,
       created_at: p.created_at,
+      status: p.status,
+      last_public_activity_at: p.last_public_activity_at,
+      last_public_activity_type: p.last_public_activity_type,
+      last_public_activity_preview: p.last_public_activity_preview,
     }));
 
     const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);

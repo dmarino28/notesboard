@@ -12,16 +12,20 @@ export type NoteRow = {
   event_start: string | null;
   event_end: string | null;
   archived: boolean;
+  status: string | null;
+  last_public_activity_at: string | null;
+  last_public_activity_type: string | null;
+  last_public_activity_preview: string | null;
 };
 
 export type ReorderUpdate = { id: string; column_id: string; position: number };
 
 export type NoteFieldUpdates = Partial<
-  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived">
+  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived" | "status">
 >;
 
 const NOTE_SELECT =
-  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived";
+  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_type, last_public_activity_preview";
 
 export async function listNotes(
   boardId: string,

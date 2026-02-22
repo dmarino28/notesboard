@@ -39,6 +39,13 @@ import { useToast } from "@/lib/useToast";
 import { Board } from "@/components/Board";
 import { BoardTopBar } from "@/components/BoardTopBar";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
+import { ActionContext } from "@/lib/ActionContext";
+import {
+  fetchActionsForNotes,
+  setNoteAction,
+  type ActionState,
+  type NoteActionMap,
+} from "@/lib/userActions";
 
 export default function BoardPage() {
   const params = useParams();
@@ -61,6 +68,9 @@ export default function BoardPage() {
 
   // Email thread indicators for card tiles
   const [emailThreadNoteIds, setEmailThreadNoteIds] = useState<Set<string>>(new Set());
+
+  // Per-user action states (keyed by note_id, invisible to other users)
+  const [noteActionMap, setNoteActionMap] = useState<NoteActionMap>({});
 
   const { toast, showToast } = useToast();
 
@@ -97,10 +107,16 @@ export default function BoardPage() {
         setColumns(colResult.data);
         setPlacements(placementResult.data);
 
-        // Load email thread indicators for card tiles
+        // Load email thread indicators + per-user action states in parallel
         const noteIds = placementResult.data.map((p) => p.note_id);
-        listEmailThreadNoteIds(noteIds).then((ids) => {
-          if (!cancelled) setEmailThreadNoteIds(ids);
+        Promise.all([
+          listEmailThreadNoteIds(noteIds),
+          fetchActionsForNotes(noteIds),
+        ]).then(([ids, actionMap]) => {
+          if (!cancelled) {
+            setEmailThreadNoteIds(ids);
+            setNoteActionMap(actionMap);
+          }
         });
       }
       if (!labelResult.error) setBoardLabels(labelResult.data);
@@ -124,6 +140,21 @@ export default function BoardPage() {
     : null;
 
   const handleCloseModal = useCallback(() => setModalNoteId(null), []);
+
+  // Cycle a note's personal action state (optimistic + async persist).
+  async function handleActionChange(noteId: string, next: ActionState | "none") {
+    setNoteActionMap((prev) => {
+      if (next === "none") {
+        const { [noteId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return {
+        ...prev,
+        [noteId]: { action_state: next, personal_due_date: prev[noteId]?.personal_due_date ?? null },
+      };
+    });
+    await setNoteAction(noteId, next);
+  }
 
   // Refresh email thread indicators after a thread is linked/unlinked in the modal.
   async function handleEmailThreadsChanged() {
@@ -409,6 +440,10 @@ export default function BoardPage() {
       board_id: p.board_id,
       position: p.position,
       created_at: p.created_at,
+      status: p.status,
+      last_public_activity_at: p.last_public_activity_at,
+      last_public_activity_type: p.last_public_activity_type,
+      last_public_activity_preview: p.last_public_activity_preview,
     }));
 
     const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);
@@ -431,6 +466,7 @@ export default function BoardPage() {
   const currentBoard = boards.find((b) => b.id === boardId);
 
   return (
+    <ActionContext.Provider value={{ actionMap: noteActionMap, onActionChange: handleActionChange }}>
     <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
       <BoardTopBar
         boards={boards}
@@ -498,5 +534,6 @@ export default function BoardPage() {
         />
       )}
     </div>
+    </ActionContext.Provider>
   );
 }

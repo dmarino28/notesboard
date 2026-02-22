@@ -23,6 +23,16 @@ import {
 import { getMsalInstance, GRAPH_MAIL_SCOPE } from "@/lib/msalConfig";
 import { LABEL_PALETTE } from "@/lib/palette";
 import { fetchWebLinkForConversation } from "@/lib/graphClient";
+import {
+  CollabData,
+  NoteActivity,
+  NoteStatus,
+  NoteUpdate,
+  STATUS_META,
+  STATUS_VALUES,
+  listCollab,
+  postNoteUpdate,
+} from "@/lib/collab";
 
 // Minimal shape the modal needs from a note — works for both NoteRow and PlacedNoteRow
 type NoteInput = {
@@ -33,6 +43,7 @@ type NoteInput = {
   event_end: string | null;
   archived: boolean;
   board_id: string;
+  status: string | null;
 };
 
 type Props = {
@@ -104,6 +115,19 @@ export function CardDetailsModal({
   // Thread being connected via MSAL (shows "Connecting…" on its button)
   const [connectingThreadId, setConnectingThreadId] = useState<string | null>(null);
 
+  // --- Status ---
+  const [status, setStatus] = useState<NoteStatus | null>(
+    (note.status as NoteStatus | null) ?? null,
+  );
+
+  // --- Collab (updates + activity) ---
+  const [updates, setUpdates] = useState<NoteUpdate[]>([]);
+  const [activity, setActivity] = useState<NoteActivity[]>([]);
+  const [collabLoading, setCollabLoading] = useState(true);
+  const [newUpdate, setNewUpdate] = useState("");
+  const [updateStatusChange, setUpdateStatusChange] = useState<NoteStatus | null>(null);
+  const [postingUpdate, setPostingUpdate] = useState(false);
+
   // --- Debounced save ---
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,7 +150,7 @@ export function CardDetailsModal({
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
-  // Lazy-load labels, comments, and email threads
+  // Lazy-load labels, comments, email threads, and collab data
   useEffect(() => {
     listNoteLabels(noteId).then(({ data }) => {
       setNoteLabels(data);
@@ -139,6 +163,11 @@ export function CardDetailsModal({
     listEmailThreadsForNote(noteId).then(({ data }) => {
       setEmailThreads(data);
       setEmailThreadsLoading(false);
+    });
+    listCollab(noteId).then((data: CollabData) => {
+      setUpdates(data.updates);
+      setActivity(data.activity);
+      setCollabLoading(false);
     });
   }, [noteId]);
 
@@ -168,6 +197,10 @@ export function CardDetailsModal({
     setEventStart(note.event_start ? toDatetimeLocal(note.event_start) : "");
     setEventEnd(note.event_end ? toDatetimeLocal(note.event_end) : "");
     setArchived(note.archived);
+    setStatus((note.status as NoteStatus | null) ?? null);
+    setUpdates([]);
+    setActivity([]);
+    setCollabLoading(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
@@ -262,6 +295,80 @@ export function CardDetailsModal({
     }
 
     triggerClose();
+  }
+
+  // ------------------------------------------------------------------ status
+
+  async function handleStatusChange(newStatus: NoteStatus | null) {
+    const prevStatus = status;
+    setStatus(newStatus);
+    onNoteChange(noteId, { status: newStatus });
+    const { error } = await updateNoteFields(noteId, { status: newStatus });
+    if (error) {
+      setStatus(prevStatus);
+      onNoteChange(noteId, { status: prevStatus });
+      onError("Failed to update status");
+    }
+  }
+
+  // ------------------------------------------------------------------ updates
+
+  async function handlePostUpdate() {
+    const trimmed = newUpdate.trim();
+    if (!trimmed) return;
+    setPostingUpdate(true);
+
+    const { error } = await postNoteUpdate(noteId, {
+      content: trimmed,
+      statusChange: updateStatusChange,
+    });
+
+    setPostingUpdate(false);
+    if (error) {
+      onError(error === "HTTP 401" ? "Sign in to post updates" : `Failed to post: ${error}`);
+      return;
+    }
+
+    // Optimistic add
+    const optimistic: NoteUpdate = {
+      id: `temp-${Date.now()}`,
+      note_id: noteId,
+      user_id: null,
+      content: trimmed,
+      status_change: updateStatusChange,
+      due_date_change: null,
+      created_at: new Date().toISOString(),
+    };
+    setUpdates((prev) => [...prev, optimistic]);
+
+    // Sync status if changed
+    if (updateStatusChange) {
+      setStatus(updateStatusChange);
+      onNoteChange(noteId, { status: updateStatusChange });
+    }
+
+    // Log optimistic activity
+    const newActivityRows: NoteActivity[] = [];
+    if (updateStatusChange) {
+      newActivityRows.push({
+        id: `temp-act-s-${Date.now()}`,
+        note_id: noteId,
+        activity_type: "status_changed",
+        payload: { from: status, to: updateStatusChange },
+        created_at: new Date().toISOString(),
+      });
+    }
+    newActivityRows.push({
+      id: `temp-act-u-${Date.now()}`,
+      note_id: noteId,
+      activity_type: "update_posted",
+      payload: { preview: trimmed.slice(0, 80) },
+      created_at: new Date().toISOString(),
+    });
+    setActivity((prev) => [...prev, ...newActivityRows]);
+
+    setNewUpdate("");
+    setUpdateStatusChange(null);
   }
 
   // ------------------------------------------------------------------ delete everywhere
@@ -559,6 +666,32 @@ export function CardDetailsModal({
         </div>
 
         <div className="space-y-5 p-5">
+          {/* Status */}
+          <section>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+              Status
+            </label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {STATUS_VALUES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleStatusChange(status === s ? null : s)}
+                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                    status === s
+                      ? `${STATUS_META[s].badgeClass} ring-1 ring-inset ring-white/20`
+                      : "border border-neutral-800 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[s].dotClass} ${status !== s ? "opacity-40" : ""}`}
+                  />
+                  {STATUS_META[s].label}
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* Description */}
           <section>
             <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
@@ -742,6 +875,78 @@ export function CardDetailsModal({
             )}
           </section>
 
+          {/* Updates */}
+          <section>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+              Updates
+            </label>
+            {collabLoading ? (
+              <p className="text-xs text-neutral-600">Loading…</p>
+            ) : (
+              <div className="space-y-2">
+                {updates.length === 0 && (
+                  <p className="text-xs text-neutral-600">No updates yet.</p>
+                )}
+                {updates.map((u) => (
+                  <div
+                    key={u.id}
+                    className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
+                  >
+                    <p className="break-words text-sm text-neutral-200">{u.content}</p>
+                    {u.status_change && (
+                      <p className="mt-0.5 text-xs text-neutral-500">
+                        → Status:{" "}
+                        {STATUS_META[u.status_change as NoteStatus]?.label ?? u.status_change}
+                      </p>
+                    )}
+                    {u.due_date_change && (
+                      <p className="mt-0.5 text-xs text-neutral-500">
+                        → Due:{" "}
+                        {u.due_date_change === "cleared" ? "cleared" : u.due_date_change}
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-xs text-neutral-600">{relativeTime(u.created_at)}</p>
+                  </div>
+                ))}
+
+                {/* Composer */}
+                <div className="space-y-1.5">
+                  <textarea
+                    className="w-full resize-none rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-700"
+                    placeholder="Post an update…"
+                    value={newUpdate}
+                    onChange={(e) => setNewUpdate(e.target.value)}
+                    rows={2}
+                    disabled={postingUpdate}
+                  />
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-400 outline-none focus:border-neutral-700"
+                      value={updateStatusChange ?? ""}
+                      onChange={(e) =>
+                        setUpdateStatusChange((e.target.value as NoteStatus) || null)
+                      }
+                    >
+                      <option value="">No status change</option>
+                      {STATUS_VALUES.map((s) => (
+                        <option key={s} value={s}>
+                          {STATUS_META[s].label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                      onClick={handlePostUpdate}
+                      disabled={postingUpdate || !newUpdate.trim()}
+                    >
+                      {postingUpdate ? "…" : "Post"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
           {/* Comments */}
           <section>
             <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Comments</label>
@@ -795,6 +1000,28 @@ export function CardDetailsModal({
               </div>
             )}
           </section>
+
+          {/* Activity */}
+          {(collabLoading || activity.length > 0) && (
+            <section>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+                Activity
+              </label>
+              {collabLoading ? (
+                <p className="text-xs text-neutral-600">Loading…</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {activity.map((a) => (
+                    <div key={a.id} className="flex items-start gap-2 text-xs text-neutral-600">
+                      <span className="mt-[5px] h-1.5 w-1.5 flex-shrink-0 rounded-full bg-neutral-700" />
+                      <span className="flex-1">{formatActivity(a)}</span>
+                      <span className="shrink-0">{relativeTime(a.created_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Email threads */}
           {(emailThreadsLoading || emailThreads.length > 0) && (
@@ -988,6 +1215,20 @@ export function CardDetailsModal({
       </div>
     </div>
   );
+}
+
+function formatActivity(a: NoteActivity): string {
+  const p = a.payload as Record<string, string>;
+  switch (a.activity_type) {
+    case "status_changed":
+      return `Status → ${STATUS_META[p.to as NoteStatus]?.label ?? p.to}`;
+    case "due_date_changed":
+      return `Due date → ${p.value === "cleared" || !p.value ? "cleared" : p.value}`;
+    case "update_posted":
+      return `Update posted`;
+    default:
+      return a.activity_type;
+  }
 }
 
 // "2h ago", "45m ago", "3d ago"

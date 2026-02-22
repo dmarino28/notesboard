@@ -5,6 +5,25 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { PlacedNoteRow } from "@/lib/placements";
 import { LabelRow } from "@/lib/labels";
+import { useActions } from "@/lib/ActionContext";
+import { cycleActionState } from "@/lib/userActions";
+import type { ActionState } from "@/lib/userActions";
+import { STATUS_META } from "@/lib/collab";
+import type { NoteStatus } from "@/lib/collab";
+
+const ACTION_DOT: Record<ActionState | "none", string> = {
+  none: "bg-neutral-600",
+  needs_action: "bg-orange-500",
+  waiting: "bg-sky-500",
+  done: "bg-emerald-500",
+};
+
+const ACTION_LABEL: Record<ActionState | "none", string> = {
+  none: "Mark as needs action",
+  needs_action: "Needs action — click to set waiting",
+  waiting: "Waiting — click to mark done",
+  done: "Done — click to clear",
+};
 
 type Props = {
   note: PlacedNoteRow;
@@ -16,6 +35,13 @@ type Props = {
 };
 
 export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate, onOpen }: Props) {
+  const { actionMap, onActionChange } = useActions();
+  const currActionState = (actionMap[note.note_id]?.action_state ?? null) as ActionState | null;
+
+  function handleCycleAction(e: React.MouseEvent) {
+    e.stopPropagation();
+    onActionChange(note.note_id, cycleActionState(currActionState));
+  }
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: note.id, // placement_id
     data: { type: "NOTE" },
@@ -110,8 +136,20 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
         <>
           <p className="whitespace-pre-wrap text-sm leading-tight text-neutral-100">{note.content}</p>
 
-          {(note.due_date || note.event_start) && (
+          {(note.due_date || note.event_start || note.status) && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {note.status && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    STATUS_META[note.status as NoteStatus]?.badgeClass ?? "bg-neutral-800/60 text-neutral-500"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[note.status as NoteStatus]?.dotClass ?? "bg-neutral-500"}`}
+                  />
+                  {STATUS_META[note.status as NoteStatus]?.label ?? note.status}
+                </span>
+              )}
               {note.due_date && (
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -135,6 +173,17 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
 
           <div className="mt-2 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
+              {/* Per-user action state — 1-click cycle */}
+              <button
+                type="button"
+                onClick={handleCycleAction}
+                title={ACTION_LABEL[currActionState ?? "none"]}
+                className={`transition-opacity duration-150 ${!currActionState ? "opacity-0 group-hover:opacity-100" : ""}`}
+              >
+                <span
+                  className={`block h-2 w-2 rounded-full transition-colors duration-150 ${ACTION_DOT[currActionState ?? "none"]}`}
+                />
+              </button>
               {hasEmailThread && (
                 <span className="text-[11px] leading-none text-neutral-600" title="Email thread linked">✉</span>
               )}
@@ -144,6 +193,14 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   title={`On ${note.placement_count} boards`}
                 >
                   ⬡
+                </span>
+              )}
+              {note.last_public_activity_at && (
+                <span
+                  className="text-[10px] text-neutral-700"
+                  title={note.last_public_activity_preview ?? ""}
+                >
+                  {relativeTimeShort(note.last_public_activity_at)}
                 </span>
               )}
             </div>
@@ -203,4 +260,13 @@ function formatDateRange(start: string, end: string): string {
 
 function isPast(iso: string): boolean {
   return new Date(iso) < new Date();
+}
+
+function relativeTimeShort(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }

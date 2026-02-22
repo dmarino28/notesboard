@@ -27,6 +27,7 @@ export function BoardTopBar({
   const pathname = usePathname();
 
   const views = [
+    { label: "Actions", href: "/actions" },
     { label: "Board", href: `/board/${boardId}` },
     { label: "Calendar", href: "/calendar" },
     { label: "Timeline", href: "/timeline" },

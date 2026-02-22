@@ -37,7 +37,7 @@ export const DEFAULT_FILTERS: CalendarFilters = {
 // ------------------------------------------------------------------ data fetching
 
 const NOTE_SELECT =
-  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived";
+  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_type, last_public_activity_preview";
 
 /** Fetches all notes across all boards (including archived). Filter client-side. */
 export async function listAllNotes(): Promise<{ data: NoteRow[]; error: string | null }> {

@@ -10,6 +10,12 @@ import {
 } from "@/lib/emailThreads";
 import { listColumns, type ColumnRow } from "@/lib/columns";
 import { type OutlookThread } from "@/lib/outlookContext";
+import {
+  fetchActionsForNotes,
+  setNoteAction,
+  cycleActionState,
+  type ActionState,
+} from "@/lib/userActions";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -88,6 +94,11 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
   const [linkCurrentState, setLinkCurrentState] = useState<"idle" | "linking" | "done" | "error">("idle");
   const [linkCurrentError, setLinkCurrentError] = useState<string | null>(null);
 
+  // ── My Action (per-user, personal) ───────────────────────────────────────────
+  const [addinActionState, setAddinActionState] = useState<ActionState | null>(null);
+  const [addinPersonalDue, setAddinPersonalDue] = useState<string>("");
+  const [addinActionSaving, setAddinActionSaving] = useState(false);
+
   // ── Load ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     setSaveStatus("idle");
@@ -95,11 +106,17 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
     setLoading(true);
 
     async function load() {
-      const [noteResult, placementsResult, threadsResult] = await Promise.all([
+      const [noteResult, placementsResult, threadsResult, actionResult] = await Promise.all([
         getNote(noteId),
         getNotePlacements(noteId),
         listEmailThreadsForNote(noteId),
+        fetchActionsForNotes([noteId]),
       ]);
+
+      // Restore action state (null = no action set)
+      const action = actionResult[noteId];
+      setAddinActionState(action?.action_state ?? null);
+      setAddinPersonalDue(action?.personal_due_date ?? "");
 
       const c = noteResult.data?.content ?? "";
       setContent(c);
@@ -238,6 +255,23 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
     }
   }
 
+  // ── My Action handlers ────────────────────────────────────────────────────────
+  async function handleCycleAction() {
+    const next = cycleActionState(addinActionState);
+    setAddinActionState(next === "none" ? null : next);
+    setAddinActionSaving(true);
+    await setNoteAction(noteId, next, addinPersonalDue || null);
+    setAddinActionSaving(false);
+  }
+
+  async function handlePersonalDueChange(value: string) {
+    setAddinPersonalDue(value);
+    if (!addinActionState) return; // only persist if there's an active state
+    setAddinActionSaving(true);
+    await setNoteAction(noteId, addinActionState, value || null);
+    setAddinActionSaving(false);
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────────
   const dirty = content !== savedContent;
   const isAlreadyLinked =
@@ -278,6 +312,45 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
               placeholder="Add notes…"
               className="w-full resize-none rounded-xl border border-white/[0.08] bg-neutral-900 px-3 py-2.5 text-sm leading-relaxed text-neutral-100 outline-none placeholder:text-neutral-700 transition-colors duration-150 focus:border-white/[0.18] focus:bg-neutral-900"
             />
+          </section>
+
+          {/* My Action — per-user, invisible to others */}
+          <section className="space-y-2">
+            <SectionLabel>My Action</SectionLabel>
+            <div className="flex items-center gap-2">
+              {/* Cycle button */}
+              <button
+                type="button"
+                onClick={() => void handleCycleAction()}
+                disabled={addinActionSaving}
+                title={addinActionState ? `${addinActionState.replace("_", " ")} — click to cycle` : "Mark as needs action"}
+                className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-neutral-900 px-2.5 py-1.5 text-xs font-medium text-neutral-300 transition-colors duration-150 hover:border-white/[0.14] hover:text-neutral-100 disabled:opacity-50 cursor-pointer"
+              >
+                <span className={`block h-2 w-2 flex-shrink-0 rounded-full ${
+                  addinActionState === "needs_action" ? "bg-orange-500" :
+                  addinActionState === "waiting"      ? "bg-sky-500" :
+                  addinActionState === "done"         ? "bg-emerald-500" :
+                  "bg-neutral-600"
+                }`} />
+                {addinActionState
+                  ? addinActionState.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())
+                  : "No action"}
+              </button>
+              {addinActionSaving && (
+                <span className="text-[10px] text-neutral-600">Saving…</span>
+              )}
+            </div>
+            {/* Personal due date (only shown when an action state is active) */}
+            {addinActionState && addinActionState !== "done" && (
+              <input
+                type="date"
+                value={addinPersonalDue}
+                onChange={(e) => void handlePersonalDueChange(e.target.value)}
+                disabled={addinActionSaving}
+                className="w-full rounded-lg border border-white/[0.08] bg-neutral-900 px-2.5 py-1.5 text-xs text-neutral-300 outline-none focus:border-indigo-500/40 disabled:opacity-50 cursor-pointer"
+                title="Personal due date (only visible to you)"
+              />
+            )}
           </section>
 
           {/* Placement info + move */}
