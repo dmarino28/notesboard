@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUserClient, extractBearerToken } from "@/lib/supabaseServer";
+import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 import type { NoteActionMap } from "@/lib/userActions";
 
 export async function GET(req: NextRequest) {
-  const token = extractBearerToken(req.headers.get("authorization"));
-  // No auth → return empty map silently (board still renders, actions just disabled)
-  if (!token) return NextResponse.json({} satisfies NoteActionMap);
-
-  const client = createUserClient(token);
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) return NextResponse.json({} satisfies NoteActionMap);
+  const auth = await getAuthedSupabase(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { client } = auth;
 
   const { searchParams } = new URL(req.url);
   const ids = searchParams.get("ids")?.split(",").filter(Boolean) ?? [];

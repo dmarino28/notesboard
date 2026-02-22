@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
 import { NoteRow } from "@/lib/notes";
+import { SharedTopBar } from "@/components/SharedTopBar";
 import { LabelRow } from "@/lib/labels";
 import { BoardRow, listBoards } from "@/lib/boards";
 import {
@@ -217,26 +217,12 @@ export default function TimelinePage() {
     );
   }
 
+  const boardHref = boards.length > 0 ? `/board/${boards[0].id}` : "/";
+
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      {/* Static page header */}
-      <div className="flex items-center gap-4 border-b border-white/[0.07] bg-neutral-950 px-6 py-3">
-        <Link
-          href="/"
-          className="text-xs text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
-        >
-          ← Boards
-        </Link>
-        <h1 className="text-[13px] font-semibold tracking-tight text-neutral-100">
-          Global Timeline
-        </h1>
-        <Link
-          href="/calendar"
-          className="ml-auto text-xs text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
-        >
-          Calendar →
-        </Link>
-      </div>
+      {/* Shared nav — same segmented control + auth widget as board and actions */}
+      <SharedTopBar boardHref={boardHref} />
 
       <div className="mx-auto max-w-[1600px] px-4 py-4">
         {/* Toast */}

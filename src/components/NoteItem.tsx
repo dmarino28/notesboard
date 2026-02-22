@@ -11,18 +11,22 @@ import type { ActionState } from "@/lib/userActions";
 import { STATUS_META } from "@/lib/collab";
 import type { NoteStatus } from "@/lib/collab";
 
-const ACTION_DOT: Record<ActionState | "none", string> = {
-  none: "bg-neutral-600",
-  needs_action: "bg-orange-500",
-  waiting: "bg-sky-500",
-  done: "bg-emerald-500",
+const ACTION_DOT: Record<ActionState, string> = {
+  needs_action: "bg-orange-400",
+  waiting: "bg-sky-400",
+  done: "bg-emerald-400",
 };
 
-const ACTION_LABEL: Record<ActionState | "none", string> = {
-  none: "Mark as needs action",
-  needs_action: "Needs action — click to set waiting",
-  waiting: "Waiting — click to mark done",
-  done: "Done — click to clear",
+const ACTION_BADGE: Record<ActionState, string> = {
+  needs_action: "bg-orange-950/60 text-orange-400 border border-orange-900/30",
+  waiting: "bg-sky-950/60 text-sky-400 border border-sky-900/30",
+  done: "bg-emerald-950/60 text-emerald-400 border border-emerald-900/30",
+};
+
+const ACTION_TEXT: Record<ActionState, string> = {
+  needs_action: "Needs Action",
+  waiting: "Waiting",
+  done: "Done",
 };
 
 type Props = {
@@ -173,17 +177,18 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
 
           <div className="mt-2 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              {/* Per-user action state — 1-click cycle */}
-              <button
-                type="button"
-                onClick={handleCycleAction}
-                title={ACTION_LABEL[currActionState ?? "none"]}
-                className={`transition-opacity duration-150 ${!currActionState ? "opacity-0 group-hover:opacity-100" : ""}`}
-              >
-                <span
-                  className={`block h-2 w-2 rounded-full transition-colors duration-150 ${ACTION_DOT[currActionState ?? "none"]}`}
-                />
-              </button>
+              {/* Action pill — only shown when the note is in My Actions (row exists) */}
+              {currActionState && (
+                <button
+                  type="button"
+                  onClick={handleCycleAction}
+                  title={`${ACTION_TEXT[currActionState]} — click to advance`}
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${ACTION_BADGE[currActionState]}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${ACTION_DOT[currActionState]}`} />
+                  {ACTION_TEXT[currActionState]}
+                </button>
+              )}
               {hasEmailThread && (
                 <span className="text-[11px] leading-none text-neutral-600" title="Email thread linked">✉</span>
               )}
@@ -205,6 +210,19 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
               )}
             </div>
             <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              {/* Quick add to My Actions — visible on hover when note is not already tracked */}
+              {!currActionState && (
+                <button
+                  type="button"
+                  className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onActionChange(note.note_id, "needs_action");
+                  }}
+                >
+                  + Actions
+                </button>
+              )}
               <button
                 className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
                 onClick={(e) => {

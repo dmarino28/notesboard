@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useActions } from "@/lib/ActionContext";
+import type { ActionState } from "@/lib/userActions";
 import { NoteFieldUpdates, updateNoteFields, deleteNote } from "@/lib/notes";
 import {
   LabelRow,
@@ -79,6 +82,10 @@ export function CardDetailsModal({
   onNoteDeleted,
   onEmailThreadsChanged,
 }: Props) {
+  // --- Personal action (from context) ---
+  const { actionMap, onActionChange } = useActions();
+  const currAction = (actionMap[noteId]?.action_state ?? null) as ActionState | null;
+
   // --- Local field state ---
   const [title, setTitle] = useState(note.content);
   const [description, setDescription] = useState(note.description ?? "");
@@ -124,6 +131,7 @@ export function CardDetailsModal({
   const [updates, setUpdates] = useState<NoteUpdate[]>([]);
   const [activity, setActivity] = useState<NoteActivity[]>([]);
   const [collabLoading, setCollabLoading] = useState(true);
+  const [collabAuthed, setCollabAuthed] = useState<boolean | null>(null); // null=loading, false=unauthed
   const [newUpdate, setNewUpdate] = useState("");
   const [updateStatusChange, setUpdateStatusChange] = useState<NoteStatus | null>(null);
   const [postingUpdate, setPostingUpdate] = useState(false);
@@ -164,9 +172,14 @@ export function CardDetailsModal({
       setEmailThreads(data);
       setEmailThreadsLoading(false);
     });
-    listCollab(noteId).then((data: CollabData) => {
-      setUpdates(data.updates);
-      setActivity(data.activity);
+    listCollab(noteId).then((data) => {
+      if (data === null) {
+        setCollabAuthed(false);
+      } else {
+        setCollabAuthed(true);
+        setUpdates(data.updates);
+        setActivity(data.activity);
+      }
       setCollabLoading(false);
     });
   }, [noteId]);
@@ -201,6 +214,7 @@ export function CardDetailsModal({
     setUpdates([]);
     setActivity([]);
     setCollabLoading(true);
+    setCollabAuthed(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
@@ -730,6 +744,66 @@ export function CardDetailsModal({
             )}
           </section>
 
+          {/* My Action (Private) */}
+          <section>
+            <div className="mb-2 flex items-baseline gap-2">
+              <label className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">My Action</label>
+              <span className="text-[11px] text-neutral-700">Visible only to you</span>
+            </div>
+            <div className="space-y-2">
+              {/* Opt-in toggle — clicking creates or removes the note_user_actions row */}
+              <button
+                type="button"
+                onClick={() => onActionChange(noteId, currAction ? "none" : "needs_action")}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  currAction
+                    ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
+                    : "border-neutral-800 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                    currAction ? "bg-indigo-400" : "bg-neutral-600"
+                  }`}
+                />
+                {currAction ? "In My Actions" : "Add to My Actions"}
+              </button>
+
+              {/* State buttons — only visible when the note is in My Actions */}
+              {currAction && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(["needs_action", "waiting", "done"] as const).map((s) => {
+                    const isActive = currAction === s;
+                    const labels = {
+                      needs_action: "Needs Action",
+                      waiting: "Waiting",
+                      done: "Done",
+                    };
+                    const activeClass = {
+                      needs_action: "bg-orange-950/60 text-orange-400 border-orange-900/30",
+                      waiting: "bg-sky-950/60 text-sky-400 border-sky-900/30",
+                      done: "bg-emerald-950/60 text-emerald-400 border-emerald-900/30",
+                    };
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => onActionChange(noteId, s)}
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                          isActive
+                            ? activeClass[s]
+                            : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
+                        }`}
+                      >
+                        {labels[s]}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* Event Range */}
           <section>
             <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Event</label>
@@ -882,6 +956,13 @@ export function CardDetailsModal({
             </label>
             {collabLoading ? (
               <p className="text-xs text-neutral-600">Loading…</p>
+            ) : collabAuthed === false ? (
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs text-neutral-600">Sign in to view and post updates.</p>
+                <Link href="/login" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Sign in →
+                </Link>
+              </div>
             ) : (
               <div className="space-y-2">
                 {updates.length === 0 && (
@@ -1002,7 +1083,7 @@ export function CardDetailsModal({
           </section>
 
           {/* Activity */}
-          {(collabLoading || activity.length > 0) && (
+          {collabAuthed !== false && (collabLoading || activity.length > 0) && (
             <section>
               <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
                 Activity

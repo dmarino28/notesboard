@@ -67,7 +67,7 @@ export async function fetchActionsForNotes(noteIds: string[]): Promise<NoteActio
 /**
  * Set (or clear) the action state for a note.
  * Passing "none" deletes the row.
- * Returns the saved row, or null on failure / unauthenticated.
+ * Returns the saved row, or null on delete / failure / unauthenticated.
  */
 export async function setNoteAction(
   noteId: string,
@@ -102,6 +102,25 @@ export async function setNoteAction(
     return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Explicitly remove a note from My Actions (deletes the note_user_actions row).
+ * Preferred over setNoteAction(id, "none") when the intent is an opt-out toggle,
+ * because the in_my_actions:false path makes the intent clear to the server.
+ */
+export async function removeNoteAction(noteId: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  if (!headers.Authorization) return;
+  try {
+    await fetch("/api/actions/set", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ note_id: noteId, in_my_actions: false }),
+    });
+  } catch {
+    // Best-effort; caller should optimistically update state before calling.
   }
 }
 

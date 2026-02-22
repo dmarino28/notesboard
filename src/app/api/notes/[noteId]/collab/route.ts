@@ -1,30 +1,32 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 
 export async function GET(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ noteId: string }> },
 ) {
+  const auth = await getAuthedSupabase(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { client } = auth;
+
   const { noteId } = await params;
 
   const [updatesResult, activityResult] = await Promise.all([
-    supabase
+    client
       .from("note_updates")
       .select("id, note_id, user_id, content, status_change, due_date_change, created_at")
       .eq("note_id", noteId)
       .order("created_at", { ascending: true }),
-    supabase
+    client
       .from("note_activity")
       .select("id, note_id, activity_type, payload, created_at")
       .eq("note_id", noteId)
       .order("created_at", { ascending: true }),
   ]);
 
-  return Response.json({
+  return NextResponse.json({
     updates: updatesResult.data ?? [],
     activity: activityResult.data ?? [],
   });

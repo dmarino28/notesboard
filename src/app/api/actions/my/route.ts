@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUserClient, extractBearerToken } from "@/lib/supabaseServer";
+import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 import type { BucketedNote, MyActionsResult } from "@/lib/userActions";
 
 type RawActionRow = {
@@ -20,7 +20,6 @@ function resolveNote(
   return n;
 }
 
-/** Compare two date strings (YYYY-MM-DD) for equality. */
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -30,21 +29,21 @@ function sameDay(a: Date, b: Date): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const token = extractBearerToken(req.headers.get("authorization"));
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await getAuthedSupabase(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { client } = auth;
 
-  const client = createUserClient(token);
-  const { data: { user }, error: authErr } = await client.auth.getUser();
-  if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  // Filter explicitly to the three valid states — guards against any future nullable rows.
   const { data, error } = await client
     .from("note_user_actions")
     .select("note_id, action_state, personal_due_date, notes(id, content, due_date)")
+    .in("action_state", ["needs_action", "waiting", "done"])
     .order("created_at", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Bucket boundaries (wall-clock dates, no time)
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowStart = new Date(todayStart);
@@ -81,12 +80,10 @@ export async function GET(req: NextRequest) {
     } else if (row.action_state === "waiting") {
       result.waiting.push(card);
     } else {
-      // needs_action — bucket by effective due date
       if (!effectiveDue) {
         result.beyond.push(card);
         continue;
       }
-      // Parse as local date (YYYY-MM-DD without time → no timezone shift)
       const [y, m, d] = effectiveDue.split("-").map(Number);
       const due = new Date(y, m - 1, d);
 

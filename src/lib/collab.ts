@@ -1,5 +1,3 @@
-import { supabase } from "./supabase";
-
 export type NoteStatus = "on_track" | "at_risk" | "blocked" | "done";
 
 export const STATUS_VALUES: NoteStatus[] = ["on_track", "at_risk", "blocked", "done"];
@@ -53,26 +51,44 @@ export type CollabData = {
   activity: NoteActivity[];
 };
 
-export async function listCollab(noteId: string): Promise<CollabData> {
-  const [updatesResult, activityResult] = await Promise.all([
-    supabase
-      .from("note_updates")
-      .select("id, note_id, user_id, content, status_change, due_date_change, created_at")
-      .eq("note_id", noteId)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("note_activity")
-      .select("id, note_id, activity_type, payload, created_at")
-      .eq("note_id", noteId)
-      .order("created_at", { ascending: true }),
-  ]);
+type CollabOpts = {
+  /** Explicit Bearer token — used by the Outlook add-in which has no browser cookie. */
+  bearerToken?: string;
+};
 
-  return {
-    updates: (updatesResult.data ?? []) as NoteUpdate[],
-    activity: (activityResult.data ?? []) as NoteActivity[],
-  };
+/**
+ * Fetch collab data (updates + activity) for a note.
+ *
+ * Web app: no Authorization header needed — the browser sends auth cookies
+ * automatically and the route handler resolves them via getAuthedSupabase.
+ *
+ * Outlook add-in: pass opts.bearerToken to attach an Authorization header.
+ *
+ * Returns:
+ *   - CollabData on success
+ *   - null when unauthenticated (HTTP 401) — caller should show "Sign in" state
+ *   - CollabData with empty arrays on other errors (non-critical)
+ */
+export async function listCollab(noteId: string, opts?: CollabOpts): Promise<CollabData | null> {
+  const headers: Record<string, string> = {};
+  if (opts?.bearerToken) headers["Authorization"] = `Bearer ${opts.bearerToken}`;
+
+  try {
+    const res = await fetch(`/api/notes/${noteId}/collab`, { headers });
+    if (res.status === 401) return null;
+    if (!res.ok) return { updates: [], activity: [] };
+    return (await res.json()) as CollabData;
+  } catch {
+    return { updates: [], activity: [] };
+  }
 }
 
+/**
+ * Post an update for a note.
+ *
+ * Web app: cookies authenticate automatically.
+ * Outlook add-in: pass opts.bearerToken.
+ */
 export async function postNoteUpdate(
   noteId: string,
   params: {
@@ -80,16 +96,14 @@ export async function postNoteUpdate(
     statusChange?: NoteStatus | null;
     dueDateChange?: string | null;
   },
+  opts?: CollabOpts,
 ): Promise<{ error: string | null }> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token ?? null;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts?.bearerToken) headers["Authorization"] = `Bearer ${opts.bearerToken}`;
 
   const res = await fetch(`/api/notes/${noteId}/update`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
     body: JSON.stringify({
       content: params.content,
       status_change: params.statusChange ?? null,

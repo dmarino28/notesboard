@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUserClient, extractBearerToken } from "@/lib/supabaseServer";
+import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 
 type RequestBody = {
   content: string;
@@ -11,19 +11,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ noteId: string }> },
 ) {
-  const token = extractBearerToken(req.headers.get("authorization"));
-  if (!token) {
+  const auth = await getAuthedSupabase(req);
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const client = createUserClient(token);
-  const {
-    data: { user },
-    error: authErr,
-  } = await client.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { client, user } = auth;
 
   const { noteId } = await params;
 
@@ -50,7 +42,7 @@ export async function POST(
     prevStatus = (noteData as { status: string | null } | null)?.status ?? null;
   }
 
-  // 1. Insert the update row
+  // 1. Insert update row
   const { error: updateErr } = await client.from("note_updates").insert({
     note_id: noteId,
     user_id: user.id,
@@ -62,22 +54,18 @@ export async function POST(
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  // 2. Apply field changes to notes table
-  const noteUpdates: Record<string, unknown> = {};
+  // 2. Apply field changes + activity fields to notes table
+  const noteUpdates: Record<string, unknown> = {
+    last_public_activity_at: new Date().toISOString(),
+    last_public_activity_type: "update_posted",
+    last_public_activity_preview: content.trim().slice(0, 120),
+  };
   if (status_change) noteUpdates.status = status_change;
   if (due_date_change !== undefined) {
     noteUpdates.due_date = due_date_change === "cleared" ? null : due_date_change;
   }
 
-  const now = new Date().toISOString();
-  noteUpdates.last_public_activity_at = now;
-  noteUpdates.last_public_activity_type = "update_posted";
-  noteUpdates.last_public_activity_preview = content.trim().slice(0, 120);
-
-  const { error: noteErr } = await client
-    .from("notes")
-    .update(noteUpdates)
-    .eq("id", noteId);
+  const { error: noteErr } = await client.from("notes").update(noteUpdates).eq("id", noteId);
   if (noteErr) {
     return NextResponse.json({ error: noteErr.message }, { status: 500 });
   }
@@ -92,7 +80,6 @@ export async function POST(
       payload: { from: prevStatus, to: status_change },
     });
   }
-
   if (due_date_change !== undefined) {
     activityRows.push({
       note_id: noteId,
@@ -100,16 +87,13 @@ export async function POST(
       payload: { value: due_date_change },
     });
   }
-
   activityRows.push({
     note_id: noteId,
     activity_type: "update_posted",
     payload: { preview: content.trim().slice(0, 80) },
   });
 
-  if (activityRows.length > 0) {
-    await client.from("note_activity").insert(activityRows);
-  }
+  await client.from("note_activity").insert(activityRows);
 
   return NextResponse.json({ ok: true });
 }

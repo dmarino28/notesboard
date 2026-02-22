@@ -37,6 +37,17 @@ npm run lint     # eslint
 npx tsc --noEmit # type-check without building
 ```
 
+## ⚠ After pulling new migrations
+Run `supabase db push` to apply schema changes before starting the dev server.
+New migrations add columns (`notes.status`, `last_public_activity_*`) and tables
+(`note_updates`, `note_activity`). The app will crash with "column does not exist"
+if migrations are not applied.
+
+## Supabase Dashboard Settings (required for auth)
+- **Authentication → Providers → Email**: must be enabled; "Confirm email" can be ON (magic link) or OFF (passwordless)
+- **Authentication → URL Configuration → Redirect URLs**: add `http://localhost:3000/auth/callback` (dev) and your production URL e.g. `https://notesboard.vercel.app/auth/callback`
+- Without the redirect URL allowlist entry, `signInWithOtp` will silently fail on the magic link click
+
 ## Architecture
 - `src/app/page.tsx` — client component, orchestrates state (notes, loading, errors, toast); delegates to components
 - `src/lib/notes.ts` — data layer: `NoteRow` type, `listNotes()`, `createNote()`

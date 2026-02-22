@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BoardSelector } from "./BoardSelector";
 import type { BoardRow } from "@/lib/boards";
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   boards: BoardRow[];
@@ -25,6 +27,17 @@ export function BoardTopBar({
   onDeleteBoard,
 }: Props) {
   const pathname = usePathname();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const views = [
     { label: "Actions", href: "/actions" },
@@ -67,8 +80,8 @@ export function BoardTopBar({
         })}
       </nav>
 
-      {/* Right: archived toggle */}
-      <div className="ml-auto flex items-center">
+      {/* Right: archived toggle + auth */}
+      <div className="ml-auto flex items-center gap-3">
         <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-neutral-500 transition-colors hover:text-neutral-300">
           <input
             type="checkbox"
@@ -78,6 +91,22 @@ export function BoardTopBar({
           />
           Archived
         </label>
+        {userEmail ? (
+          <div className="flex items-center gap-2">
+            <span className="max-w-[140px] truncate text-[11px] text-neutral-500">{userEmail}</span>
+            <button
+              type="button"
+              className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
+              onClick={() => supabase.auth.signOut()}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <Link href="/login" className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300">
+            Sign in
+          </Link>
+        )}
       </div>
     </header>
   );
