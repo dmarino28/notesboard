@@ -175,17 +175,19 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Page header */}
-      <div className="flex items-center gap-4 border-b border-neutral-800 px-6 py-3">
+      <div className="flex items-center gap-4 border-b border-white/[0.07] bg-neutral-950 px-6 py-3">
         <Link
           href="/"
-          className="text-sm text-neutral-400 transition-colors hover:text-neutral-200"
+          className="text-xs text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
         >
           ← Boards
         </Link>
-        <h1 className="text-base font-semibold text-neutral-100">Global Calendar</h1>
+        <h1 className="text-[13px] font-semibold tracking-tight text-neutral-100">
+          Global Calendar
+        </h1>
         <Link
           href="/timeline"
-          className="ml-auto text-sm text-neutral-400 transition-colors hover:text-neutral-200"
+          className="ml-auto text-xs text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
         >
           Timeline →
         </Link>

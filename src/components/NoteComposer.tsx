@@ -50,7 +50,7 @@ export function NoteComposer({ onAdd }: Props) {
     return (
       <button
         onClick={handleExpand}
-        className="w-full rounded-lg border border-dashed border-white/15 bg-transparent px-3 py-2 text-left text-xs text-neutral-500 transition-colors hover:border-white/25 hover:bg-white/5 hover:text-neutral-300"
+        className="w-full rounded-lg border border-dashed border-white/[0.10] bg-transparent px-3 py-2 text-left text-xs text-neutral-600 transition-colors duration-150 hover:border-white/[0.20] hover:bg-white/[0.03] hover:text-neutral-400"
       >
         + Add card
       </button>
@@ -66,7 +66,7 @@ export function NoteComposer({ onAdd }: Props) {
       onKeyDown={handleKeyDown}
       onBlur={submit}
       placeholder="Card title…"
-      className="w-full rounded-lg border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-600"
+      className="w-full rounded-lg border border-white/[0.14] bg-neutral-900/80 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-600 transition-colors focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
     />
   );
 }

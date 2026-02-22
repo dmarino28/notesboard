@@ -81,19 +81,11 @@ export function ListHeader({
 
   return (
     <div
-      className="flex flex-shrink-0 items-center gap-1.5 rounded-t-xl px-2 py-2.5"
+      className="flex flex-shrink-0 cursor-grab items-center gap-1.5 rounded-t-xl px-2 py-2.5 active:cursor-grabbing"
       style={headerBg ? { backgroundColor: headerBg } : undefined}
+      {...dragHandleListeners}
+      {...dragHandleAttributes}
     >
-      {/* Drag handle */}
-      <button
-        className="flex-shrink-0 cursor-grab touch-none text-neutral-500 transition-colors hover:text-neutral-300 active:cursor-grabbing"
-        aria-label="Drag to reorder column"
-        {...dragHandleListeners}
-        {...dragHandleAttributes}
-      >
-        <GrabIcon />
-      </button>
-
       {/* Color dot */}
       {column.color && (
         <span
@@ -123,7 +115,7 @@ export function ListHeader({
       )}
 
       {/* Card count */}
-      <span className="flex-shrink-0 tabular-nums text-xs text-neutral-500">{noteCount}</span>
+      <span className="flex-shrink-0 min-w-[1.25rem] rounded bg-white/[0.06] px-1 text-center tabular-nums text-[11px] font-medium text-neutral-500">{noteCount}</span>
 
       {/* Collapse/expand */}
       <button
@@ -147,19 +139,6 @@ export function ListHeader({
         onDelete={onDelete}
       />
     </div>
-  );
-}
-
-function GrabIcon() {
-  return (
-    <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
-      <circle cx="2.5" cy="2" r="1.5" />
-      <circle cx="7.5" cy="2" r="1.5" />
-      <circle cx="2.5" cy="7" r="1.5" />
-      <circle cx="7.5" cy="7" r="1.5" />
-      <circle cx="2.5" cy="12" r="1.5" />
-      <circle cx="7.5" cy="12" r="1.5" />
-    </svg>
   );
 }
 

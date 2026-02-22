@@ -19,6 +19,24 @@ import { TimelineGrid } from "@/components/TimelineGrid";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
 import { useToast } from "@/lib/useToast";
 
+// ------------------------------------------------------------------ icons
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="9,2 5,7 9,12" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="5,2 9,7 5,12" />
+    </svg>
+  );
+}
+
 // ------------------------------------------------------------------ range helpers
 
 type RangeType = "7d" | "30d" | "month";
@@ -202,17 +220,19 @@ export default function TimelinePage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Static page header */}
-      <div className="flex items-center gap-4 border-b border-neutral-800 px-6 py-3">
+      <div className="flex items-center gap-4 border-b border-white/[0.07] bg-neutral-950 px-6 py-3">
         <Link
           href="/"
-          className="text-sm text-neutral-400 transition-colors hover:text-neutral-200"
+          className="text-xs text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
         >
           ← Boards
         </Link>
-        <h1 className="text-base font-semibold text-neutral-100">Global Timeline</h1>
+        <h1 className="text-[13px] font-semibold tracking-tight text-neutral-100">
+          Global Timeline
+        </h1>
         <Link
           href="/calendar"
-          className="ml-auto text-sm text-neutral-400 transition-colors hover:text-neutral-200"
+          className="ml-auto text-xs text-neutral-500 transition-colors duration-150 hover:text-neutral-200"
         >
           Calendar →
         </Link>
@@ -237,17 +257,17 @@ export default function TimelinePage() {
         />
 
         {/* Range controls — sticky below the page header */}
-        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-3 border-b border-neutral-800 bg-neutral-950 px-4 py-2">
+        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-3 border-b border-white/[0.07] bg-neutral-950 px-4 py-2">
           {/* Range type selector */}
-          <div className="flex items-center gap-0.5 rounded-md border border-neutral-700 p-0.5">
+          <div className="flex items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
             {(["7d", "30d", "month"] as RangeType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => switchRangeType(t)}
-                className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors duration-150 ${
                   rangeType === t
-                    ? "bg-neutral-200 text-neutral-900"
-                    : "text-neutral-400 hover:text-neutral-200"
+                    ? "bg-neutral-700 text-neutral-100 shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-200"
                 }`}
               >
                 {t === "7d" ? "7 days" : t === "30d" ? "30 days" : "Month"}
@@ -256,26 +276,26 @@ export default function TimelinePage() {
           </div>
 
           {/* Prev / Today / Next */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={prev}
-              className="rounded px-2 py-1 text-base text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
               aria-label="Previous"
             >
-              ‹
+              <ChevronLeftIcon />
             </button>
             <button
               onClick={goToday}
-              className="rounded px-2.5 py-1 text-xs text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+              className="rounded-md border border-white/[0.08] px-2.5 py-1 text-xs text-neutral-500 transition-colors hover:border-white/[0.14] hover:text-neutral-200"
             >
               Today
             </button>
             <button
               onClick={next}
-              className="rounded px-2 py-1 text-base text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
               aria-label="Next"
             >
-              ›
+              <ChevronRightIcon />
             </button>
           </div>
 

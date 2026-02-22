@@ -131,7 +131,7 @@ function EventBar({
 
   return (
     <div
-      className="absolute inset-y-[18%] z-[2] cursor-pointer rounded-sm bg-indigo-600 ring-1 ring-indigo-500/50 transition-colors hover:bg-indigo-500"
+      className="absolute inset-y-[18%] z-[2] cursor-pointer rounded-sm bg-indigo-500/70 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/90"
       style={{ left: `${bar.leftPct}%`, width: `${Math.max(bar.widthPct, 0.4)}%` }}
       onClick={() => onNoteClick(note.id)}
       onMouseEnter={() => setHovered(true)}
@@ -171,7 +171,7 @@ function DueMarker({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="h-3 w-3 rounded-full border-2 border-amber-400 bg-amber-900/70 transition-colors hover:bg-amber-700/80" />
+      <div className="h-3 w-3 rounded-full border-2 border-neutral-500/60 bg-neutral-800 transition-colors hover:border-neutral-400/80 hover:bg-neutral-700" />
       {hovered && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 max-w-xs whitespace-pre-wrap rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-100 shadow-xl ring-1 ring-neutral-700">
           {tooltip}
@@ -215,12 +215,12 @@ export function TimelineGrid({
   }, [notes, boardMap, rangeStartMs, rangeEndMs]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-800 text-sm">
+    <div className="overflow-hidden rounded-xl border border-white/[0.08] text-sm">
       {/* ── Sticky axis header ── */}
-      <div className="sticky top-0 z-10 flex border-b border-neutral-700 bg-neutral-900">
+      <div className="sticky top-0 z-10 flex border-b border-white/[0.07] bg-neutral-900/80">
         {/* Label column */}
         <div
-          className="shrink-0 border-r border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-500"
+          className="shrink-0 border-r border-white/[0.07] px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-600"
           style={{ width: NOTE_COL_W }}
         >
           Note
@@ -229,7 +229,7 @@ export function TimelineGrid({
         {/* Day cells */}
         <div className="relative min-w-0 flex-1">
           <div
-            className="grid h-full divide-x divide-neutral-800"
+            className="grid h-full divide-x divide-white/[0.04]"
             style={{ gridTemplateColumns: `repeat(${numDays}, 1fr)` }}
           >
             {days.map((d) => {
@@ -238,7 +238,7 @@ export function TimelineGrid({
                 <div
                   key={d.toISOString()}
                   className={`py-2 text-center text-[10px] leading-tight ${
-                    isToday ? "font-semibold text-blue-400" : "text-neutral-500"
+                    isToday ? "font-semibold text-indigo-400" : "text-neutral-600"
                   }`}
                 >
                   {formatDayLabel(d, numDays)}
@@ -249,7 +249,7 @@ export function TimelineGrid({
           {/* Today tick in header */}
           {showToday && (
             <div
-              className="pointer-events-none absolute inset-y-0 w-px bg-blue-500/70"
+              className="pointer-events-none absolute inset-y-0 w-px bg-indigo-500/30"
               style={{ left: `${todayPct}%` }}
             />
           )}
@@ -267,9 +267,9 @@ export function TimelineGrid({
         {groups.map(({ board, notes: boardNotes }) => (
           <div key={board.id}>
             {/* Board header */}
-            <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900/50 px-3 py-1.5">
-              <span className="text-xs font-semibold text-neutral-300">{board.name}</span>
-              <span className="text-xs text-neutral-600">({boardNotes.length})</span>
+            <div className="flex items-center gap-2 border-b border-white/[0.05] bg-neutral-900/30 px-3 py-1.5">
+              <span className="text-xs font-semibold text-neutral-400">{board.name}</span>
+              <span className="text-[11px] text-neutral-600">({boardNotes.length})</span>
             </div>
 
             {/* Note rows */}
@@ -281,11 +281,11 @@ export function TimelineGrid({
               return (
                 <div
                   key={note.id}
-                  className="flex min-h-[30px] border-b border-neutral-800/50 hover:bg-neutral-900/30"
+                  className="flex min-h-[30px] border-b border-white/[0.04] hover:bg-neutral-900/25"
                 >
                   {/* Title column */}
                   <div
-                    className="shrink-0 border-r border-neutral-800 px-2 py-1"
+                    className="shrink-0 border-r border-white/[0.05] px-2 py-1"
                     style={{ width: NOTE_COL_W }}
                   >
                     <button
@@ -300,7 +300,7 @@ export function TimelineGrid({
                           style={{ backgroundColor: l.color }}
                         />
                       ))}
-                      <span className="truncate text-xs text-neutral-300 hover:text-neutral-100">
+                      <span className="truncate text-xs text-neutral-400 hover:text-neutral-200">
                         {note.content}
                       </span>
                     </button>
@@ -313,7 +313,7 @@ export function TimelineGrid({
                       i === 0 ? null : (
                         <div
                           key={i}
-                          className="pointer-events-none absolute inset-y-0 w-px bg-neutral-800/60"
+                          className="pointer-events-none absolute inset-y-0 w-px bg-white/[0.03]"
                           style={{ left: `${(i / numDays) * 100}%` }}
                         />
                       ),
@@ -322,7 +322,7 @@ export function TimelineGrid({
                     {/* Today line */}
                     {showToday && (
                       <div
-                        className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-blue-500/25"
+                        className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-indigo-500/20"
                         style={{ left: `${todayPct}%` }}
                       />
                     )}

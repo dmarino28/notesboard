@@ -58,36 +58,43 @@ export function Column({
   // NoteItem sortable id = placement_id = note.id
   const noteIds = notes.map((n) => n.id);
 
-  const headerBg = column.color ? hexToRgba(column.color, 0.22) : undefined;
-  const bodyBg = column.color ? hexToRgba(column.color, 0.08) : undefined;
+  const bodyBg = column.color ? hexBlendOnDark(column.color, 0.05) : undefined;
+  const headerBg = column.color ? hexToRgba(column.color, 0.12) : undefined;
 
-  // ── Collapsed pill ─────────────────────────────────────────────────────────
+  // ── Collapsed rail ─────────────────────────────────────────────────────────
   if (isCollapsed) {
     return (
       <div
-        className="flex w-14 flex-shrink-0 cursor-pointer flex-col items-center gap-2 rounded-xl border border-white/8 bg-neutral-800/55 py-3 shadow-lg backdrop-blur-sm"
+        className="flex w-14 flex-shrink-0 cursor-grab flex-col items-center gap-2 self-stretch rounded-xl bg-neutral-900 py-3 shadow-xl shadow-black/40 ring-1 ring-inset ring-white/[0.03] transition-shadow duration-150 hover:ring-white/[0.06] active:cursor-grabbing"
         style={bodyBg ? { backgroundColor: bodyBg } : undefined}
         onClick={onToggleCollapse}
-        title={`${column.name} (${notes.length} cards) — click to expand`}
+        {...dragHandleListeners}
+        {...dragHandleAttributes}
       >
+        {/* Dot — tertiary, top */}
         {column.color && (
           <span
-            className="h-2 w-2 flex-shrink-0 rounded-full"
+            className="h-1.5 w-1.5 flex-shrink-0 rounded-full opacity-60"
             style={{ backgroundColor: column.color }}
           />
         )}
+
+        {/* Name — primary, vertical */}
         <span
-          className="flex-1 select-none truncate text-xs font-semibold text-neutral-400"
+          className="flex-1 select-none overflow-hidden text-[11px] font-medium text-neutral-100"
+          title={column.name}
           style={{
             writingMode: "vertical-rl",
             textOrientation: "mixed",
             transform: "rotate(180deg)",
-            maxHeight: "160px",
+            maxHeight: "180px",
           }}
         >
           {column.name}
         </span>
-        <span className="tabular-nums text-xs text-neutral-600">{notes.length}</span>
+
+        {/* Count — secondary, bottom */}
+        <span className="tabular-nums text-[10px] text-neutral-500">{notes.length}</span>
       </div>
     );
   }
@@ -95,7 +102,7 @@ export function Column({
   // ── Expanded column ────────────────────────────────────────────────────────
   return (
     <div
-      className="flex max-h-[calc(100vh-100px)] w-72 flex-shrink-0 flex-col rounded-xl border border-white/8 bg-neutral-800/55 shadow-lg backdrop-blur-sm"
+      className="flex max-h-[calc(100vh-100px)] w-72 flex-shrink-0 flex-col rounded-xl bg-neutral-900 shadow-xl shadow-black/40 ring-1 ring-inset ring-white/[0.03]"
       style={bodyBg ? { backgroundColor: bodyBg } : undefined}
     >
       <ListHeader
@@ -153,4 +160,18 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(cleaned.slice(2, 4), 16);
   const b = parseInt(cleaned.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Blends a color over neutral-900 (#171717) to produce a solid rgb value.
+// Avoids transparency bleed-through when columns sit on varying canvas backgrounds.
+function hexBlendOnDark(hex: string, alpha: number): string {
+  const cleaned = hex.replace("#", "");
+  const r = parseInt(cleaned.slice(0, 2), 16);
+  const g = parseInt(cleaned.slice(2, 4), 16);
+  const b = parseInt(cleaned.slice(4, 6), 16);
+  const base = 23; // rgb(23,23,23) = #171717 (neutral-900)
+  const br = Math.round(base + (r - base) * alpha);
+  const bg = Math.round(base + (g - base) * alpha);
+  const bb = Math.round(base + (b - base) * alpha);
+  return `rgb(${br}, ${bg}, ${bb})`;
 }

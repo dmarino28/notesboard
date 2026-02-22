@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ColumnRow } from "@/lib/columns";
 import { BoardRow } from "@/lib/boards";
+import { LABEL_PALETTE } from "@/lib/palette";
 
 type Props = {
   column: ColumnRow;
@@ -28,7 +29,6 @@ export function ListMenu({
   const [open, setOpen] = useState(false);
   const [subMenu, setSubMenu] = useState<"color" | "move" | "copy" | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
-  const [colorDraft, setColorDraft] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const otherBoards = boards.filter((b) => b.id !== currentBoardId);
@@ -51,14 +51,12 @@ export function ListMenu({
     setOpen((v) => !v);
     setSubMenu(null);
     setPendingDelete(false);
-    setColorDraft(null);
   }
 
   function close() {
     setOpen(false);
     setSubMenu(null);
     setPendingDelete(false);
-    setColorDraft(null);
   }
 
   function toggleSub(name: "color" | "move" | "copy") {
@@ -95,23 +93,29 @@ export function ListMenu({
           </MenuItem>
           {subMenu === "color" && (
             <div className="border-t border-neutral-800 px-3 py-2.5">
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <input
-                  type="color"
-                  value={colorDraft ?? column.color ?? "#6b7280"}
-                  onChange={(e) => setColorDraft(e.target.value)}
-                  onBlur={() => {
-                    const color = colorDraft;
-                    if (color && color !== column.color) onChangeColor(color);
-                    setColorDraft(null);
-                  }}
-                  className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent p-0"
-                  title="Pick color"
-                />
-                <span className="text-xs text-neutral-400">
-                  {colorDraft ?? column.color ?? "No color"}
-                </span>
-              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {/* No color option */}
+                <button
+                  onClick={() => { onChangeColor(""); close(); }}
+                  className={`flex h-5 w-5 items-center justify-center rounded-full border border-neutral-600 text-[9px] text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-300${!column.color ? " ring-2 ring-white/40 ring-offset-1 ring-offset-neutral-900" : ""}`}
+                  title="No color"
+                >
+                  ✕
+                </button>
+                {LABEL_PALETTE.map(({ hex, label }) => (
+                  <button
+                    key={hex}
+                    onClick={() => { onChangeColor(hex); close(); }}
+                    className={`h-5 w-5 rounded-full transition-all duration-100${
+                      column.color === hex
+                        ? " scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-900"
+                        : " opacity-65 hover:opacity-100 hover:scale-105"
+                    }`}
+                    style={{ backgroundColor: hex }}
+                    title={label}
+                  />
+                ))}
+              </div>
             </div>
           )}
 

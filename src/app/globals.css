@@ -56,7 +56,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Thin scrollbar utility (add-in panels) ───────────────────────────────── */
+/* ── Thin scrollbar utilities ─────────────────────────────────────────────── */
+
+/* Vertical thin scrollbar (add-in panels + card lists) */
 .nb-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
@@ -65,3 +67,21 @@ body {
 .nb-scroll::-webkit-scrollbar-track  { background: transparent; }
 .nb-scroll::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); border-radius: 2px; }
 .nb-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.17); }
+
+/* Horizontal thin scrollbar (main board canvas) */
+.nb-board-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+.nb-board-scroll::-webkit-scrollbar        { height: 4px; }
+.nb-board-scroll::-webkit-scrollbar-track  { background: transparent; }
+.nb-board-scroll::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.08); border-radius: 2px; }
+.nb-board-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+/* Label card tint glow — applied by NoteItem when a label color is present */
+.nb-card-glow:hover {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.15),
+    0 0 0 1px var(--label-glow-ring, transparent),
+    0 0 14px var(--label-glow, transparent);
+}

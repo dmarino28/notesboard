@@ -26,14 +26,20 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const accentColor = noteLabels.length > 0 ? noteLabels[0].color : undefined;
+  const tintColor = noteLabels.length > 0 ? noteLabels[0].color : undefined;
 
-  const style: React.CSSProperties = {
+  const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.25 : undefined,
-    ...(accentColor ? { borderLeft: `3px solid ${accentColor}` } : {}),
-  };
+    opacity: isDragging ? 0.22 : undefined,
+    ...(tintColor
+      ? {
+          backgroundColor: hexToRgba(tintColor, 0.07),
+          "--label-glow": hexToRgba(tintColor, 0.12),
+          "--label-glow-ring": hexToRgba(tintColor, 0.07),
+        }
+      : {}),
+  } as React.CSSProperties;
 
   async function handleSave() {
     const trimmed = editContent.trim();
@@ -61,9 +67,6 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
     await onRemove(note.id);
   }
 
-  const shownLabels = noteLabels.slice(0, 3);
-  const extraLabels = noteLabels.length > 3 ? noteLabels.length - 3 : 0;
-
   return (
     <li
       ref={setNodeRef}
@@ -73,12 +76,12 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className="group cursor-pointer rounded-lg border border-neutral-200/80 bg-white p-3 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-neutral-300"
+      className={`group cursor-grab active:cursor-grabbing rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-200 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45${tintColor ? " nb-card-glow" : ""}`}
     >
       {editing ? (
         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
           <textarea
-            className="w-full rounded border border-neutral-300 bg-white p-2 text-sm text-neutral-900 outline-none focus:border-neutral-500"
+            className="w-full rounded-lg border border-white/[0.12] bg-neutral-800 p-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-indigo-500/40"
             rows={3}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
@@ -87,57 +90,41 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
           />
           <div className="flex items-center gap-2">
             <button
-              className="rounded bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
               onClick={handleSave}
               disabled={saving || !editContent.trim()}
             >
               {saving ? "Saving…" : "Save"}
             </button>
             <button
-              className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 disabled:opacity-50"
+              className="rounded-lg border border-white/[0.08] px-3 py-1 text-xs text-neutral-400 transition-colors hover:text-neutral-200 disabled:opacity-50"
               onClick={handleCancel}
               disabled={saving}
             >
               Cancel
             </button>
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            {error && <p className="text-xs text-red-400">{error}</p>}
           </div>
         </div>
       ) : (
         <>
-          {noteLabels.length > 0 && (
-            <div className="mb-2 flex flex-wrap items-center gap-1">
-              {shownLabels.map((label) => (
-                <span
-                  key={label.id}
-                  className="h-1.5 w-8 rounded-full"
-                  style={{ backgroundColor: label.color }}
-                  title={label.name}
-                />
-              ))}
-              {extraLabels > 0 && (
-                <span className="text-xs text-neutral-400">+{extraLabels}</span>
-              )}
-            </div>
-          )}
-
-          <p className="whitespace-pre-wrap text-sm leading-snug text-neutral-900">{note.content}</p>
+          <p className="whitespace-pre-wrap text-sm leading-tight text-neutral-100">{note.content}</p>
 
           {(note.due_date || note.event_start) && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {note.due_date && (
                 <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
                     isPast(note.due_date)
-                      ? "bg-red-100 text-red-600"
-                      : "bg-neutral-100 text-neutral-500"
+                      ? "bg-red-950/60 text-red-400"
+                      : "bg-neutral-800/60 text-neutral-500"
                   }`}
                 >
                   Due {formatDateOnly(note.due_date)}
                 </span>
               )}
               {note.event_start && (
-                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+                <span className="inline-flex items-center rounded-full bg-neutral-800/60 px-2 py-0.5 text-[11px] text-neutral-500">
                   {note.event_end
                     ? formatDateRange(note.event_start, note.event_end)
                     : formatDateOnly(note.event_start)}
@@ -147,24 +134,22 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
           )}
 
           <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               {hasEmailThread && (
-                <span className="text-xs" title="Email thread linked">
-                  ✉️
-                </span>
+                <span className="text-[11px] leading-none text-neutral-600" title="Email thread linked">✉</span>
               )}
               {note.placement_count > 1 && (
                 <span
-                  className="text-xs text-neutral-400"
-                  title={`Linked to ${note.placement_count} boards`}
+                  className="text-[11px] leading-none text-neutral-600"
+                  title={`On ${note.placement_count} boards`}
                 >
-                  🔗
+                  ⬡
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
               <button
-                className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors"
+                className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditing(true);
@@ -173,7 +158,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                 Edit
               </button>
               <button
-                className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                className="text-[11px] text-neutral-600 transition-colors hover:text-red-400"
                 onClick={(e) => {
                   e.stopPropagation();
                   void handleRemove();
@@ -187,6 +172,14 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       )}
     </li>
   );
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function formatDateOnly(iso: string): string {

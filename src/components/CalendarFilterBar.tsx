@@ -31,7 +31,6 @@ export function CalendarFilterBar({
       patch({ boardIds: cur.filter((b) => b !== id) });
     } else {
       const next = [...cur, id];
-      // Normalize: if all boards selected, treat as "all" (empty)
       patch({ boardIds: next.length === boards.length ? [] : next });
     }
   }
@@ -58,18 +57,20 @@ export function CalendarFilterBar({
     filters.showArchived;
 
   return (
-    <div className="mb-4 space-y-2.5 rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-sm">
+    <div className="mb-4 space-y-2.5 rounded-xl border border-white/[0.07] bg-neutral-900/50 p-3 text-sm">
       {/* Row 1: Boards + Labels + Type */}
       <div className="flex flex-wrap gap-4">
         {/* Boards */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-medium text-neutral-500">Boards</span>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+            Boards
+          </span>
           <button
             onClick={() => patch({ boardIds: [] })}
-            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-150 ${
               allBoards
-                ? "bg-neutral-200 text-neutral-900 font-medium"
-                : "bg-neutral-800 text-neutral-500 hover:text-neutral-300"
+                ? "bg-neutral-700 font-medium text-neutral-100"
+                : "bg-white/[0.04] text-neutral-500 hover:bg-white/[0.07] hover:text-neutral-300"
             }`}
           >
             All
@@ -78,10 +79,10 @@ export function CalendarFilterBar({
             <button
               key={board.id}
               onClick={() => toggleBoard(board.id)}
-              className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+              className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-150 ${
                 isBoardOn(board.id)
-                  ? "bg-blue-700 text-white font-medium"
-                  : "bg-neutral-800 text-neutral-500 hover:text-neutral-300"
+                  ? "border border-indigo-500/25 bg-indigo-500/15 font-medium text-indigo-300"
+                  : "bg-white/[0.04] text-neutral-500 hover:bg-white/[0.07] hover:text-neutral-300"
               }`}
             >
               {board.name}
@@ -92,15 +93,17 @@ export function CalendarFilterBar({
         {/* Labels */}
         {labels.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-medium text-neutral-500">Labels</span>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+              Labels
+            </span>
             {labels.map((label) => {
               const on = filters.labelIds.includes(label.id);
               return (
                 <button
                   key={label.id}
                   onClick={() => toggleLabel(label.id)}
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium text-white transition-opacity ${
-                    on ? "opacity-100 ring-2 ring-white/30" : "opacity-40 hover:opacity-65"
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium text-white transition-opacity duration-150 ${
+                    on ? "opacity-100 ring-1 ring-white/25" : "opacity-35 hover:opacity-60"
                   }`}
                   style={{ backgroundColor: label.color }}
                 >
@@ -113,7 +116,9 @@ export function CalendarFilterBar({
 
         {/* Type */}
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-neutral-500">Type</span>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+            Type
+          </span>
           {(
             [
               { v: "both", label: "Both" },
@@ -124,10 +129,10 @@ export function CalendarFilterBar({
             <button
               key={v}
               onClick={() => patch({ type: v })}
-              className={`rounded px-2.5 py-0.5 text-xs transition-colors ${
+              className={`rounded-lg px-2.5 py-0.5 text-xs transition-colors duration-150 ${
                 filters.type === v
-                  ? "bg-neutral-100 text-neutral-900 font-medium"
-                  : "text-neutral-400 hover:text-neutral-200"
+                  ? "bg-neutral-700/80 font-medium text-neutral-100"
+                  : "text-neutral-500 hover:text-neutral-200"
               }`}
             >
               {label}
@@ -138,7 +143,9 @@ export function CalendarFilterBar({
 
       {/* Row 2: Time-state toggles */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-neutral-500">Due:</span>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+          Due:
+        </span>
         {(
           [
             { key: "overdue", label: "Overdue" },
@@ -149,17 +156,19 @@ export function CalendarFilterBar({
           <button
             key={key}
             onClick={() => toggleTime(key)}
-            className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+            className={`rounded-lg border px-2 py-0.5 text-xs transition-colors duration-150 ${
               filters.timeState[key]
-                ? "border-amber-500 bg-amber-900/40 text-amber-300"
-                : "border-neutral-700 text-neutral-500 hover:border-neutral-500 hover:text-neutral-300"
+                ? "border-red-500/30 bg-red-950/40 text-red-300"
+                : "border-white/[0.08] text-neutral-600 hover:border-white/[0.14] hover:text-neutral-300"
             }`}
           >
             {label}
           </button>
         ))}
 
-        <span className="ml-2 text-xs font-medium text-neutral-500">Events:</span>
+        <span className="ml-2 text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+          Events:
+        </span>
         {(
           [
             { key: "happeningNow", label: "Happening now" },
@@ -170,10 +179,10 @@ export function CalendarFilterBar({
           <button
             key={key}
             onClick={() => toggleTime(key)}
-            className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+            className={`rounded-lg border px-2 py-0.5 text-xs transition-colors duration-150 ${
               filters.timeState[key]
-                ? "border-indigo-500 bg-indigo-900/40 text-indigo-300"
-                : "border-neutral-700 text-neutral-500 hover:border-neutral-500 hover:text-neutral-300"
+                ? "border-indigo-500/30 bg-indigo-950/40 text-indigo-300"
+                : "border-white/[0.08] text-neutral-600 hover:border-white/[0.14] hover:text-neutral-300"
             }`}
           >
             {label}
@@ -185,10 +194,10 @@ export function CalendarFilterBar({
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => patch({ showArchived: !filters.showArchived })}
-          className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+          className={`rounded-lg border px-2 py-0.5 text-xs transition-colors duration-150 ${
             filters.showArchived
-              ? "border-neutral-500 text-neutral-200"
-              : "border-neutral-700 text-neutral-500 hover:text-neutral-300"
+              ? "border-white/[0.14] text-neutral-200"
+              : "border-white/[0.08] text-neutral-600 hover:text-neutral-300"
           }`}
         >
           {filters.showArchived ? "Showing archived" : "Show archived"}
@@ -197,13 +206,13 @@ export function CalendarFilterBar({
         {hasActiveFilters && (
           <button
             onClick={() => onChange({ ...DEFAULT_FILTERS })}
-            className="text-xs text-neutral-500 underline hover:text-neutral-300"
+            className="text-xs text-neutral-600 underline underline-offset-2 transition-colors hover:text-neutral-400"
           >
             Clear filters
           </button>
         )}
 
-        <span className="ml-auto text-xs text-neutral-500">
+        <span className="ml-auto text-[11px] text-neutral-600">
           {shownCount === totalCount
             ? `${shownCount} items`
             : `${shownCount} / ${totalCount} shown`}

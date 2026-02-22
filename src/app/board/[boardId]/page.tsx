@@ -37,7 +37,6 @@ import { listEmailThreadNoteIds } from "@/lib/emailThreads";
 import { moveColumnToBoard, copyColumnToBoard } from "@/lib/columnOps";
 import { useToast } from "@/lib/useToast";
 import { Board } from "@/components/Board";
-import { ColumnManager } from "@/components/ColumnManager";
 import { BoardTopBar } from "@/components/BoardTopBar";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
 
@@ -51,7 +50,6 @@ export default function BoardPage() {
   const [boards, setBoards] = useState<BoardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [showManager, setShowManager] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   // Modal — keyed on note_id
@@ -82,7 +80,6 @@ export default function BoardPage() {
       setColumns([]);
       setPlacements([]);
       setFetchError(null);
-      setShowManager(false);
       setModalNoteId(null);
 
       const [colResult, placementResult, labelResult, labelMapResult] = await Promise.all([
@@ -436,7 +433,6 @@ export default function BoardPage() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
       <BoardTopBar
-        currentBoard={currentBoard}
         boards={boards}
         boardId={boardId}
         showArchived={showArchived}
@@ -444,22 +440,7 @@ export default function BoardPage() {
         onRenameBoard={handleRenameBoard}
         onCreateBoard={handleCreateBoard}
         onDeleteBoard={handleDeleteBoard}
-        showManager={showManager}
-        onToggleManager={() => setShowManager((v) => !v)}
       />
-
-      {showManager && (
-        <div className="flex-shrink-0 border-b border-white/8 bg-neutral-900/60 px-4 py-3">
-          <ColumnManager
-            columns={columns}
-            onAdd={handleAddColumn}
-            onRename={handleRenameColumn}
-            onUpdateColor={handleUpdateColumnColor}
-            onReorder={handleReorderColumns}
-            onDelete={handleDeleteColumn}
-          />
-        </div>
-      )}
 
       <div
         className="min-h-0 flex-1"

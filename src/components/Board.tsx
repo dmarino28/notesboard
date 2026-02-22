@@ -300,8 +300,8 @@ export function Board({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
-        <div className="h-full overflow-x-auto overflow-y-hidden">
-          <div className="flex h-full items-start gap-4 px-6 py-5 pb-6">
+        <div className="nb-board-scroll h-full overflow-x-auto overflow-y-hidden">
+          <div className="flex h-full items-stretch gap-5 px-6 py-6 pb-8">
             {displayColumns.map((col) => (
               <ColumnContainer
                 key={col.id}
@@ -331,12 +331,12 @@ export function Board({
 
       <DragOverlay>
         {activeNote && (
-          <div className="w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-2xl ring-1 ring-black/5">
-            <p className="whitespace-pre-wrap text-sm text-neutral-900">{activeNote.content}</p>
+          <div className="w-72 rounded-xl border border-white/[0.12] bg-neutral-800/80 p-3 shadow-2xl shadow-black/60">
+            <p className="whitespace-pre-wrap text-sm text-neutral-200">{activeNote.content}</p>
           </div>
         )}
         {activeColumn && (
-          <div className="w-72 flex-shrink-0 rounded-xl border border-neutral-600/40 bg-neutral-800/80 p-3 shadow-2xl backdrop-blur-sm opacity-90">
+          <div className="w-72 flex-shrink-0 rounded-xl border border-white/[0.10] bg-neutral-900/95 p-3 shadow-2xl shadow-black/60 opacity-90">
             <div className="flex items-center gap-2">
               {activeColumn.color && (
                 <span

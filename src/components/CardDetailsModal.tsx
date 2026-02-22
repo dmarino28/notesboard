@@ -21,6 +21,7 @@ import {
   upsertEmailThreadForNote,
 } from "@/lib/emailThreads";
 import { getMsalInstance, GRAPH_MAIL_SCOPE } from "@/lib/msalConfig";
+import { LABEL_PALETTE } from "@/lib/palette";
 import { fetchWebLinkForConversation } from "@/lib/graphClient";
 
 // Minimal shape the modal needs from a note — works for both NoteRow and PlacedNoteRow
@@ -560,7 +561,7 @@ export function CardDetailsModal({
         <div className="space-y-5 p-5">
           {/* Description */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500">
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
               Description
             </label>
             <textarea
@@ -574,7 +575,7 @@ export function CardDetailsModal({
 
           {/* Due Date */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500">Due Date</label>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Due Date</label>
             <div className="flex items-center gap-2">
               <input
                 type="datetime-local"
@@ -598,7 +599,7 @@ export function CardDetailsModal({
 
           {/* Event Range */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500">Event</label>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Event</label>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
@@ -645,7 +646,7 @@ export function CardDetailsModal({
 
           {/* Labels */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500">Labels</label>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Labels</label>
             {labelsLoading ? (
               <p className="text-xs text-neutral-600">Loading…</p>
             ) : (
@@ -700,14 +701,23 @@ export function CardDetailsModal({
 
                     <div className="space-y-1.5">
                       <p className="text-xs text-neutral-500">Create new</p>
+                      <div className="mb-1.5 flex flex-wrap gap-1.5">
+                        {LABEL_PALETTE.map(({ hex, label }) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => setNewLabelColor(hex)}
+                            className={`h-5 w-5 rounded-full transition-all duration-100 ${
+                              newLabelColor === hex
+                                ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-900"
+                                : "opacity-60 hover:opacity-100 hover:scale-105"
+                            }`}
+                            style={{ backgroundColor: hex }}
+                            title={label}
+                          />
+                        ))}
+                      </div>
                       <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={newLabelColor}
-                          onChange={(e) => setNewLabelColor(e.target.value)}
-                          className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent p-0"
-                          title="Label color"
-                        />
                         <input
                           className="flex-1 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200 outline-none focus:border-neutral-600 placeholder:text-neutral-600"
                           placeholder="Label name"
@@ -718,7 +728,7 @@ export function CardDetailsModal({
                           }}
                         />
                         <button
-                          className="rounded bg-white px-2 py-1 text-xs font-medium text-black disabled:opacity-50"
+                          className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
                           onClick={handleCreateLabel}
                           disabled={creatingLabel || !newLabelName.trim()}
                         >
@@ -734,7 +744,7 @@ export function CardDetailsModal({
 
           {/* Comments */}
           <section>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500">Comments</label>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Comments</label>
             {commentsLoading ? (
               <p className="text-xs text-neutral-600">Loading…</p>
             ) : (
@@ -775,7 +785,7 @@ export function CardDetailsModal({
                     disabled={addingComment}
                   />
                   <button
-                    className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black disabled:opacity-50"
+                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
                     onClick={handleAddComment}
                     disabled={addingComment || !newComment.trim()}
                   >
@@ -789,7 +799,7 @@ export function CardDetailsModal({
           {/* Email threads */}
           {(emailThreadsLoading || emailThreads.length > 0) && (
             <section>
-              <label className="mb-1.5 block text-xs font-medium text-neutral-500">
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
                 Email threads
               </label>
               {emailThreadsLoading ? (
@@ -930,7 +940,7 @@ export function CardDetailsModal({
                   ) : (
                     <div className="flex gap-2">
                       <button
-                        className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black disabled:opacity-50"
+                        className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
                         onClick={handleLink}
                         disabled={linking || !linkBoardId || !linkColumnId}
                       >

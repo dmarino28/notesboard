@@ -64,7 +64,7 @@ export function ColumnContainer({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className="h-full">
       <Column
         column={column}
         notes={notes}
