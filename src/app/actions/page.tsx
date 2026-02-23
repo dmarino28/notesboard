@@ -7,16 +7,20 @@ import { listBoards, type BoardRow } from "@/lib/boards";
 import {
   fetchMyActions,
   setNoteAction,
-  updateNoteActionTags,
+  patchNoteAction,
+  fetchTagDefs,
+  createTagDef,
   fetchSavedViews,
   createSavedView,
   deleteSavedView,
   type ActionState,
+  type ActionMode,
   type BucketedNote,
   type MyActionsResult,
   type NoteActionMap,
   type ViewFilters,
   type SavedView,
+  type TagDef,
   DEFAULT_FILTERS,
 } from "@/lib/userActions";
 import { getNote, type NoteRow } from "@/lib/notes";
@@ -24,48 +28,39 @@ import { listLabels, type LabelRow } from "@/lib/labels";
 import { ActionContext } from "@/lib/ActionContext";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
 import { ActionsBoard } from "@/components/ActionsBoard";
+import { ManageGroupsModal } from "@/components/ManageGroupsModal";
+import { QuickActionModal } from "@/components/QuickActionModal";
 import { SharedTopBar } from "@/components/SharedTopBar";
 
-// Flatten all time-buckets into a single card list.
-const BUCKET_KEYS: Array<keyof MyActionsResult> = [
+// ── All bucket keys ────────────────────────────────────────────────────────────
+
+const TIMED_BUCKET_KEYS: Array<keyof MyActionsResult> = [
   "overdue", "today", "tomorrow", "this_week", "beyond", "waiting", "done",
 ];
 
-function flattenResult(result: MyActionsResult): BucketedNote[] {
-  const flat: BucketedNote[] = [];
-  for (const key of BUCKET_KEYS) {
-    for (const note of result[key]) flat.push(note);
-  }
-  return flat;
-}
+const ALL_BUCKET_KEYS: Array<keyof MyActionsResult> = [...TIMED_BUCKET_KEYS, "flagged"];
 
-// ── Client-side filter + sort ─────────────────────────────────────────────────
+// ── Client-side filter ─────────────────────────────────────────────────────────
 
-function applyFilters(cards: BucketedNote[], filters: ViewFilters): BucketedNote[] {
-  let result = cards;
+function applyFiltersToResult(result: MyActionsResult, filters: ViewFilters): MyActionsResult {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const thisWeekEnd = new Date(today);
+  thisWeekEnd.setDate(thisWeekEnd.getDate() + 7);
 
-  // Search
   const q = filters.search.trim().toLowerCase();
-  if (q) {
-    result = result.filter((c) => c.content.toLowerCase().includes(q));
+
+  function filterCard(c: BucketedNote): boolean {
+    if (q && !c.content.toLowerCase().includes(q)) return false;
+    return true;
   }
 
-  // Categories — note must have ALL selected categories
-  if (filters.categories.length > 0) {
-    result = result.filter((c) =>
-      filters.categories.every((cat) => c.private_tags.includes(cat)),
-    );
-  }
-
-  // Due filter — only narrows needs_action; waiting/done pass through
-  if (filters.dueFilter !== "all") {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const thisWeekEnd = new Date(today);
-    thisWeekEnd.setDate(thisWeekEnd.getDate() + 7);
-
-    result = result.filter((c) => {
-      if (c.action_state !== "needs_action") return true;
+  function filterTimedCard(c: BucketedNote): boolean {
+    if (!filterCard(c)) return false;
+    if (filters.categories.length > 0) {
+      if (!filters.categories.every((cat) => c.private_tags.includes(cat))) return false;
+    }
+    if (filters.dueFilter !== "all" && c.action_state === "needs_action") {
       if (!c.effective_due_date) return false;
       const [y, m, d] = c.effective_due_date.split("-").map(Number);
       const due = new Date(y, m - 1, d);
@@ -73,26 +68,35 @@ function applyFilters(cards: BucketedNote[], filters: ViewFilters): BucketedNote
         case "overdue":   return due < today;
         case "today":     return due.toDateString() === today.toDateString();
         case "this_week": return due >= today && due <= thisWeekEnd;
-        default:          return true;
       }
-    });
+    }
+    return true;
   }
 
-  return result;
+  return {
+    overdue:    result.overdue.filter(filterTimedCard),
+    today:      result.today.filter(filterTimedCard),
+    tomorrow:   result.tomorrow.filter(filterTimedCard),
+    this_week:  result.this_week.filter(filterTimedCard),
+    beyond:     result.beyond.filter(filterTimedCard),
+    waiting:    result.waiting.filter(filterTimedCard),
+    done:       result.done.filter(filterTimedCard),
+    flagged:    result.flagged.filter(filterCard),
+  };
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ActionsPage() {
   const [boards, setBoards] = useState<BoardRow[]>([]);
-  const [cards, setCards] = useState<BucketedNote[]>([]);
+  const [rawResult, setRawResult] = useState<MyActionsResult | null>(null);
+  const [tagDefs, setTagDefs] = useState<TagDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  // ActionContext map — keeps CardDetailsModal's "My Action" section in sync.
+  // ActionContext map
   const [actionMap, setActionMap] = useState<NoteActionMap>({});
 
-  // Set to true after a successful (authenticated) load so we don't double-fetch.
   const didLoadRef = useRef(false);
 
   // Filters + saved views
@@ -100,7 +104,11 @@ export default function ActionsPage() {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
 
-  // Modal
+  // Modal dialogs
+  const [showQuickAction, setShowQuickAction] = useState(false);
+  const [showManageGroups, setShowManageGroups] = useState(false);
+
+  // Card detail modal
   const [modalNote, setModalNote] = useState<NoteRow | null>(null);
   const [modalNoteId, setModalNoteId] = useState<string | null>(null);
   const [modalBoardId, setModalBoardId] = useState<string>("");
@@ -114,34 +122,38 @@ export default function ActionsPage() {
 
   async function loadActions() {
     setLoading(true);
-    setNotFound(false); // clear stale unauth state before each attempt
-    const [data, views] = await Promise.all([fetchMyActions(), fetchSavedViews()]);
+    setNotFound(false);
+    const [data, views, defs] = await Promise.all([
+      fetchMyActions(),
+      fetchSavedViews(),
+      fetchTagDefs(),
+    ]);
     if (data === null) {
       setNotFound(true);
     } else {
       didLoadRef.current = true;
-      const flat = flattenResult(data);
-      setCards(flat);
-      // Build action map so CardDetailsModal's "My Action" section reflects truth.
+      setRawResult(data);
+      // Build action map
       const map: NoteActionMap = {};
-      for (const card of flat) {
-        map[card.note_id] = {
-          action_state: card.action_state,
-          personal_due_date: card.personal_due_date,
-          private_tags: card.private_tags,
-        };
+      for (const key of ALL_BUCKET_KEYS) {
+        for (const card of data[key] as BucketedNote[]) {
+          map[card.note_id] = {
+            action_state: card.action_state,
+            action_mode: card.action_mode,
+            personal_due_date: card.personal_due_date,
+            private_tags: card.private_tags,
+          };
+        }
       }
       setActionMap(map);
     }
     setSavedViews(views);
+    setTagDefs(defs);
     setLoading(false);
   }
 
   useEffect(() => { void loadActions(); }, []);
 
-  // Re-fetch when auth state becomes available (covers the post-magic-link redirect
-  // timing gap where getSession() returns null on the initial mount but SIGNED_IN
-  // fires shortly after).
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session && !didLoadRef.current) {
@@ -152,49 +164,58 @@ export default function ActionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Filtered cards (client-side) ──────────────────────────────────────────
+  // ── Filtered result (client-side) ──────────────────────────────────────────
 
-  const filteredCards = useMemo(() => applyFilters(cards, filters), [cards, filters]);
+  const filteredResult = useMemo(
+    () => rawResult ? applyFiltersToResult(rawResult, filters) : null,
+    [rawResult, filters],
+  );
 
-  // All unique categories across all cards (for the filter UI)
+  // All unique timed categories (for the filter UI)
   const allCategories = useMemo(() => {
+    if (!rawResult) return [];
     const cats = new Set<string>();
-    for (const c of cards) {
-      for (const tag of c.private_tags) cats.add(tag);
+    for (const key of TIMED_BUCKET_KEYS) {
+      for (const c of rawResult[key] as BucketedNote[]) {
+        for (const tag of c.private_tags) cats.add(tag);
+      }
     }
     return Array.from(cats).sort();
-  }, [cards]);
-
-  // ── Drag-to-column → state change ─────────────────────────────────────────
-
-  async function handleStateChange(noteId: string, newState: ActionState) {
-    setCards((prev) =>
-      prev.map((c) => (c.note_id === noteId ? { ...c, action_state: newState } : c)),
-    );
-    setActionMap((prev) => ({
-      ...prev,
-      [noteId]: { ...prev[noteId], action_state: newState },
-    }));
-    await setNoteAction(noteId, newState);
-  }
+  }, [rawResult]);
 
   // ── ActionContext handlers ─────────────────────────────────────────────────
 
   const handleActionChange = useCallback((noteId: string, next: ActionState | "none") => {
     if (next === "none") {
-      setCards((prev) => prev.filter((c) => c.note_id !== noteId));
+      setRawResult((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        for (const key of ALL_BUCKET_KEYS) {
+          updated[key] = (prev[key] as BucketedNote[]).filter((c) => c.note_id !== noteId) as typeof prev[typeof key];
+        }
+        return updated;
+      });
       setActionMap((prev) => {
         const { [noteId]: _removed, ...rest } = prev;
         return rest;
       });
     } else {
-      setCards((prev) =>
-        prev.map((c) => (c.note_id === noteId ? { ...c, action_state: next } : c)),
-      );
+      setRawResult((prev) => {
+        if (!prev) return prev;
+        // Update action_state in whichever bucket the card is currently in
+        const updated = { ...prev };
+        for (const key of ALL_BUCKET_KEYS) {
+          updated[key] = (prev[key] as BucketedNote[]).map((c) =>
+            c.note_id === noteId ? { ...c, action_state: next } : c,
+          ) as typeof prev[typeof key];
+        }
+        return updated;
+      });
       setActionMap((prev) => ({
         ...prev,
         [noteId]: {
           action_state: next,
+          action_mode: prev[noteId]?.action_mode ?? "timed",
           personal_due_date: prev[noteId]?.personal_due_date ?? null,
           private_tags: prev[noteId]?.private_tags ?? [],
         },
@@ -204,15 +225,54 @@ export default function ActionsPage() {
   }, []);
 
   const handleTagsChange = useCallback((noteId: string, tags: string[]) => {
-    // Optimistic: update actionMap and cards immediately
     setActionMap((prev) => ({
       ...prev,
       [noteId]: { ...prev[noteId], private_tags: tags },
     }));
-    setCards((prev) =>
-      prev.map((c) => (c.note_id === noteId ? { ...c, private_tags: tags } : c)),
-    );
-    void updateNoteActionTags(noteId, tags);
+    setRawResult((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      for (const key of ALL_BUCKET_KEYS) {
+        updated[key] = (prev[key] as BucketedNote[]).map((c) =>
+          c.note_id === noteId ? { ...c, private_tags: tags } : c,
+        ) as typeof prev[typeof key];
+      }
+      return updated;
+    });
+    void patchNoteAction(noteId, { private_tags: tags });
+  }, []);
+
+  const handleModeChange = useCallback((noteId: string, mode: ActionMode) => {
+    setActionMap((prev) => ({
+      ...prev,
+      [noteId]: { ...prev[noteId], action_mode: mode },
+    }));
+    void patchNoteAction(noteId, { action_mode: mode }).then(() => void loadActions());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDueDateChange = useCallback((noteId: string, date: string | null) => {
+    setActionMap((prev) => ({
+      ...prev,
+      [noteId]: { ...prev[noteId], personal_due_date: date },
+    }));
+    setRawResult((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      for (const key of ALL_BUCKET_KEYS) {
+        updated[key] = (prev[key] as BucketedNote[]).map((c) =>
+          c.note_id === noteId ? { ...c, personal_due_date: date } : c,
+        ) as typeof prev[typeof key];
+      }
+      return updated;
+    });
+    void patchNoteAction(noteId, { personal_due_date: date });
+  }, []);
+
+  const handleCreateTagDef = useCallback(async (name: string): Promise<TagDef | null> => {
+    const def = await createTagDef(name);
+    if (def) setTagDefs((prev) => [...prev, def]);
+    return def;
   }, []);
 
   // ── Card click → open modal ────────────────────────────────────────────────
@@ -220,10 +280,11 @@ export default function ActionsPage() {
   async function handleOpenCard(noteId: string) {
     const { data: note } = await getNote(noteId);
     if (!note) return;
-    const { data: labels } = await listLabels(note.board_id);
+    const bId = (note.board_id as string | null) ?? "";
+    const { data: labels } = bId ? await listLabels(bId) : { data: [] };
     setModalNote(note);
     setModalNoteId(noteId);
-    setModalBoardId(note.board_id);
+    setModalBoardId(bId);
     setModalBoardLabels(labels ?? []);
   }
 
@@ -234,11 +295,24 @@ export default function ActionsPage() {
 
   function handleNoteChange(noteId: string, fields: Partial<NoteRow>) {
     if (fields.content !== undefined) {
-      setCards((prev) =>
-        prev.map((c) => (c.note_id === noteId ? { ...c, content: fields.content! } : c)),
-      );
+      setRawResult((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        for (const key of ALL_BUCKET_KEYS) {
+          updated[key] = (prev[key] as BucketedNote[]).map((c) =>
+            c.note_id === noteId ? { ...c, content: fields.content! } : c,
+          ) as typeof prev[typeof key];
+        }
+        return updated;
+      });
     }
     setModalNote((prev) => (prev ? { ...prev, ...fields } : prev));
+  }
+
+  // ── Quick Action created ───────────────────────────────────────────────────
+
+  function handleQuickActionCreated(_noteId: string) {
+    void loadActions();
   }
 
   // ── Saved view handlers ────────────────────────────────────────────────────
@@ -253,7 +327,6 @@ export default function ActionsPage() {
 
   function handleLoadView(view: SavedView) {
     if (!view.id) {
-      // "All" sentinel
       setFilters(DEFAULT_FILTERS);
       setActiveViewId(null);
       return;
@@ -273,14 +346,27 @@ export default function ActionsPage() {
 
   function handleFiltersChange(f: ViewFilters) {
     setFilters(f);
-    // If user changes a filter manually, deactivate the saved view
     setActiveViewId(null);
   }
 
   const boardHref = boards.length > 0 ? `/board/${boards[0].id}` : "/";
 
+  const EMPTY_RESULT: MyActionsResult = {
+    overdue: [], today: [], tomorrow: [], this_week: [], beyond: [], waiting: [], done: [], flagged: [],
+  };
+
   return (
-    <ActionContext.Provider value={{ actionMap, onActionChange: handleActionChange, onTagsChange: handleTagsChange }}>
+    <ActionContext.Provider
+      value={{
+        actionMap,
+        tagDefs,
+        onActionChange: handleActionChange,
+        onTagsChange: handleTagsChange,
+        onModeChange: handleModeChange,
+        onDueDateChange: handleDueDateChange,
+        onCreateTagDef: handleCreateTagDef,
+      }}
+    >
       <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
         <SharedTopBar boardHref={boardHref} />
 
@@ -309,22 +395,25 @@ export default function ActionsPage() {
             </div>
           ) : (
             <ActionsBoard
-              cards={filteredCards}
+              result={filteredResult ?? EMPTY_RESULT}
+              tagDefs={tagDefs}
               allCategories={allCategories}
               filters={filters}
               savedViews={savedViews}
               activeViewId={activeViewId}
-              onStateChange={handleStateChange}
               onOpenCard={handleOpenCard}
               onFiltersChange={handleFiltersChange}
               onSaveView={handleSaveView}
               onLoadView={handleLoadView}
               onDeleteView={handleDeleteView}
+              onQuickAction={() => setShowQuickAction(true)}
+              onManageGroups={() => setShowManageGroups(true)}
             />
           )}
         </div>
       </div>
 
+      {/* Card detail modal */}
       {modalNote && modalNoteId && (
         <CardDetailsModal
           note={modalNote}
@@ -336,6 +425,24 @@ export default function ActionsPage() {
           onLabelCreated={(label) => setModalBoardLabels((prev) => [...prev, label])}
           onNoteLabelsChanged={() => {}}
           onError={() => {}}
+        />
+      )}
+
+      {/* Quick Action modal */}
+      {showQuickAction && (
+        <QuickActionModal
+          tagDefs={tagDefs}
+          onCreated={handleQuickActionCreated}
+          onClose={() => setShowQuickAction(false)}
+        />
+      )}
+
+      {/* Manage Groups modal */}
+      {showManageGroups && (
+        <ManageGroupsModal
+          tagDefs={tagDefs}
+          onTagDefsChange={setTagDefs}
+          onClose={() => setShowManageGroups(false)}
         />
       )}
     </ActionContext.Provider>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useActions } from "@/lib/ActionContext";
-import type { ActionState } from "@/lib/userActions";
+import type { ActionState, ActionMode, TagDef } from "@/lib/userActions";
 import { NoteFieldUpdates, updateNoteFields, deleteNote } from "@/lib/notes";
 import {
   LabelRow,
@@ -83,9 +83,19 @@ export function CardDetailsModal({
   onEmailThreadsChanged,
 }: Props) {
   // --- Personal action (from context) ---
-  const { actionMap, onActionChange, onTagsChange } = useActions();
+  const {
+    actionMap,
+    tagDefs,
+    onActionChange,
+    onTagsChange,
+    onModeChange,
+    onDueDateChange: onPersonalDueDateChange,
+    onCreateTagDef,
+  } = useActions();
   const currAction = (actionMap[noteId]?.action_state ?? null) as ActionState | null;
+  const currMode: ActionMode = actionMap[noteId]?.action_mode ?? "timed";
   const currTags = actionMap[noteId]?.private_tags ?? [];
+  const currPersonalDue = actionMap[noteId]?.personal_due_date ?? null;
 
   // --- Local field state ---
   const [title, setTitle] = useState(note.content);
@@ -458,6 +468,17 @@ export function CardDetailsModal({
     onTagsChange(noteId, updated);
   }
 
+  function handlePersonalDueDateChange(date: string | null) {
+    onPersonalDueDateChange(noteId, date);
+  }
+
+  function handleToggleGroup(groupName: string) {
+    const updated = currTags.includes(groupName)
+      ? currTags.filter((t) => t !== groupName)
+      : [...currTags, groupName];
+    onTagsChange(noteId, updated);
+  }
+
   // ------------------------------------------------------------------ labels
 
   async function handleAttachLabel(labelId: string) {
@@ -766,7 +787,7 @@ export function CardDetailsModal({
               <span className="text-[11px] text-neutral-700">Visible only to you</span>
             </div>
             <div className="space-y-2">
-              {/* Opt-in toggle — clicking creates or removes the note_user_actions row */}
+              {/* Opt-in toggle */}
               <button
                 type="button"
                 onClick={() => onActionChange(noteId, currAction ? "none" : "needs_action")}
@@ -784,65 +805,136 @@ export function CardDetailsModal({
                 {currAction ? "In My Actions" : "Add to My Actions"}
               </button>
 
-              {/* State buttons — only visible when the note is in My Actions */}
               {currAction && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(["needs_action", "waiting", "done"] as const).map((s) => {
-                    const isActive = currAction === s;
-                    const labels = {
-                      needs_action: "Needs Action",
-                      waiting: "Waiting",
-                      done: "Done",
-                    };
-                    const activeClass = {
-                      needs_action: "bg-orange-950/60 text-orange-400 border-orange-900/30",
-                      waiting: "bg-sky-950/60 text-sky-400 border-sky-900/30",
-                      done: "bg-emerald-950/60 text-emerald-400 border-emerald-900/30",
-                    };
-                    return (
+                <>
+                  {/* State buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(["needs_action", "waiting", "done"] as const).map((s) => {
+                      const isActive = currAction === s;
+                      const labels = { needs_action: "Needs Action", waiting: "Waiting", done: "Done" };
+                      const activeClass = {
+                        needs_action: "bg-orange-950/60 text-orange-400 border-orange-900/30",
+                        waiting: "bg-sky-950/60 text-sky-400 border-sky-900/30",
+                        done: "bg-emerald-950/60 text-emerald-400 border-emerald-900/30",
+                      };
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => onActionChange(noteId, s)}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                            isActive
+                              ? activeClass[s]
+                              : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
+                          }`}
+                        >
+                          {labels[s]}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Mode toggle */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-neutral-600">Mode:</span>
+                    {(["timed", "flagged"] as const).map((m) => (
                       <button
-                        key={s}
+                        key={m}
                         type="button"
-                        onClick={() => onActionChange(noteId, s)}
+                        onClick={() => onModeChange(noteId, m)}
                         className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                          isActive
-                            ? activeClass[s]
+                          currMode === m
+                            ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
                             : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
                         }`}
                       >
-                        {labels[s]}
+                        {m === "timed" ? "Timed" : "Flagged"}
                       </button>
-                    );
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
 
-              {/* Private categories — only when in My Actions */}
-              {currAction && (
-                <div className="mt-2 space-y-1.5">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-                    Categories
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {currTags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300"
-                      >
-                        {tag}
+                  {/* Timed: personal due date */}
+                  {currMode === "timed" && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-neutral-600">Personal due:</span>
+                      <input
+                        type="date"
+                        value={currPersonalDue ?? ""}
+                        onChange={(e) => handlePersonalDueDateChange(e.target.value || null)}
+                        className="rounded-md border border-neutral-800 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-300 outline-none focus:border-indigo-500/50"
+                      />
+                      {currPersonalDue && (
                         <button
                           type="button"
-                          className="text-neutral-500 transition-colors hover:text-red-400"
-                          onClick={() => handleRemoveTag(tag)}
-                          aria-label={`Remove ${tag}`}
+                          onClick={() => handlePersonalDueDateChange(null)}
+                          className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
                         >
-                          ×
+                          Clear
                         </button>
-                      </span>
-                    ))}
-                    <TagInput onAdd={handleAddTag} />
-                  </div>
-                </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Timed: private categories */}
+                  {currMode === "timed" && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+                        Categories
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {currTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300"
+                          >
+                            {tag}
+                            <button
+                              type="button"
+                              className="text-neutral-500 transition-colors hover:text-red-400"
+                              onClick={() => handleRemoveTag(tag)}
+                              aria-label={`Remove ${tag}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                        <TagInput onAdd={handleAddTag} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Flagged: group picker */}
+                  {currMode === "flagged" && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+                        Groups
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[...tagDefs]
+                          .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+                          .map((def) => (
+                            <button
+                              key={def.id}
+                              type="button"
+                              onClick={() => handleToggleGroup(def.name)}
+                              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                                currTags.includes(def.name)
+                                  ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
+                                  : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
+                              }`}
+                            >
+                              {def.name}
+                            </button>
+                          ))}
+                        <NewGroupInline
+                          tagDefs={tagDefs}
+                          onCreateTagDef={onCreateTagDef}
+                          onToggle={handleToggleGroup}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
@@ -1338,6 +1430,51 @@ export function CardDetailsModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Inline new-group creator (Flagged mode group picker) ──────────────────────
+
+function NewGroupInline({
+  tagDefs,
+  onCreateTagDef,
+  onToggle,
+}: {
+  tagDefs: TagDef[];
+  onCreateTagDef: (name: string) => Promise<TagDef | null>;
+  onToggle: (name: string) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  async function submit() {
+    const name = value.trim();
+    if (!name) return;
+    setValue("");
+    const existing = tagDefs.find((d) => d.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      onToggle(existing.name);
+      return;
+    }
+    const created = await onCreateTagDef(name);
+    if (created) onToggle(created.name);
+  }
+
+  return (
+    <input
+      className="w-24 rounded border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-600"
+      placeholder="+ new group"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void submit();
+        }
+      }}
+      onBlur={() => {
+        if (value.trim()) void submit();
+      }}
+    />
   );
 }
 

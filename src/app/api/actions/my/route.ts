@@ -5,6 +5,7 @@ import type { BucketedNote, MyActionsResult } from "@/lib/userActions";
 type RawActionRow = {
   note_id: string;
   action_state: string;
+  action_mode: string;
   personal_due_date: string | null;
   private_tags: string[];
   notes:
@@ -36,14 +37,29 @@ export async function GET(req: NextRequest) {
   }
   const { client } = auth;
 
-  // Filter explicitly to the three valid states — guards against any future nullable rows.
   const { data, error } = await client
     .from("note_user_actions")
-    .select("note_id, action_state, personal_due_date, private_tags, notes(id, content, due_date)")
+    .select(
+      "note_id, action_state, action_mode, personal_due_date, private_tags, notes(id, content, due_date)",
+    )
     .in("action_state", ["needs_action", "waiting", "done"])
     .order("created_at", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const rows = (data ?? []) as RawActionRow[];
+
+  // Detect inbox notes: those with no placement rows
+  const noteIds = rows.map((r) => r.note_id).filter(Boolean);
+  let inboxSet = new Set<string>();
+  if (noteIds.length > 0) {
+    const { data: placements } = await client
+      .from("note_placements")
+      .select("note_id")
+      .in("note_id", noteIds);
+    const placedIds = new Set((placements ?? []).map((p) => p.note_id as string));
+    inboxSet = new Set(noteIds.filter((id) => !placedIds.has(id)));
+  }
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -60,23 +76,34 @@ export async function GET(req: NextRequest) {
     beyond: [],
     waiting: [],
     done: [],
+    flagged: [],
   };
 
-  for (const row of (data ?? []) as RawActionRow[]) {
+  for (const row of rows) {
     const note = resolveNote(row.notes);
     if (!note) continue;
 
     const effectiveDue = row.personal_due_date ?? note.due_date;
+    const action_mode = (row.action_mode === "flagged" ? "flagged" : "timed") as BucketedNote["action_mode"];
 
     const card: BucketedNote = {
       note_id: row.note_id,
       content: note.content,
       action_state: row.action_state as BucketedNote["action_state"],
+      action_mode,
       personal_due_date: row.personal_due_date,
       effective_due_date: effectiveDue,
       private_tags: row.private_tags ?? [],
+      is_inbox: inboxSet.has(row.note_id),
     };
 
+    // Flagged items go to their own bucket regardless of action_state
+    if (action_mode === "flagged") {
+      result.flagged.push(card);
+      continue;
+    }
+
+    // Timed items: bucket by action_state then effective_due_date
     if (row.action_state === "done") {
       result.done.push(card);
     } else if (row.action_state === "waiting") {
