@@ -6,6 +6,7 @@ type RawActionRow = {
   note_id: string;
   action_state: string;
   personal_due_date: string | null;
+  private_tags: string[];
   notes:
     | { id: string; content: string; due_date: string | null }
     | { id: string; content: string; due_date: string | null }[]
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   // Filter explicitly to the three valid states — guards against any future nullable rows.
   const { data, error } = await client
     .from("note_user_actions")
-    .select("note_id, action_state, personal_due_date, notes(id, content, due_date)")
+    .select("note_id, action_state, personal_due_date, private_tags, notes(id, content, due_date)")
     .in("action_state", ["needs_action", "waiting", "done"])
     .order("created_at", { ascending: true });
 
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest) {
       action_state: row.action_state as BucketedNote["action_state"],
       personal_due_date: row.personal_due_date,
       effective_due_date: effectiveDue,
+      private_tags: row.private_tags ?? [],
     };
 
     if (row.action_state === "done") {

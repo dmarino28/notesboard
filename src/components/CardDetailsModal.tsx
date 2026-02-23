@@ -83,8 +83,9 @@ export function CardDetailsModal({
   onEmailThreadsChanged,
 }: Props) {
   // --- Personal action (from context) ---
-  const { actionMap, onActionChange } = useActions();
+  const { actionMap, onActionChange, onTagsChange } = useActions();
   const currAction = (actionMap[noteId]?.action_state ?? null) as ActionState | null;
+  const currTags = actionMap[noteId]?.private_tags ?? [];
 
   // --- Local field state ---
   const [title, setTitle] = useState(note.content);
@@ -443,6 +444,20 @@ export function CardDetailsModal({
     }
   }
 
+  // ------------------------------------------------------------------ categories (private_tags)
+
+  function handleAddTag(tag: string) {
+    const trimmed = tag.trim();
+    if (!trimmed || currTags.includes(trimmed)) return;
+    const updated = [...currTags, trimmed];
+    onTagsChange(noteId, updated);
+  }
+
+  function handleRemoveTag(tag: string) {
+    const updated = currTags.filter((t) => t !== tag);
+    onTagsChange(noteId, updated);
+  }
+
   // ------------------------------------------------------------------ labels
 
   async function handleAttachLabel(labelId: string) {
@@ -799,6 +814,34 @@ export function CardDetailsModal({
                       </button>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Private categories — only when in My Actions */}
+              {currAction && (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+                    Categories
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {currTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          className="text-neutral-500 transition-colors hover:text-red-400"
+                          onClick={() => handleRemoveTag(tag)}
+                          aria-label={`Remove ${tag}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    <TagInput onAdd={handleAddTag} />
+                  </div>
                 </div>
               )}
             </div>
@@ -1295,6 +1338,35 @@ export function CardDetailsModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Tag input — inline quick-add for private categories ───────────────────────
+
+function TagInput({ onAdd }: { onAdd: (tag: string) => void }) {
+  const [value, setValue] = useState("");
+
+  function submit() {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setValue("");
+  }
+
+  return (
+    <input
+      className="w-24 rounded border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-600"
+      placeholder="+ category"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      }}
+      onBlur={submit}
+    />
   );
 }
 

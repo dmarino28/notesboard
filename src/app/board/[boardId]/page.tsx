@@ -43,6 +43,7 @@ import { ActionContext } from "@/lib/ActionContext";
 import {
   fetchActionsForNotes,
   setNoteAction,
+  updateNoteActionTags,
   type ActionState,
   type NoteActionMap,
 } from "@/lib/userActions";
@@ -150,10 +151,23 @@ export default function BoardPage() {
       }
       return {
         ...prev,
-        [noteId]: { action_state: next, personal_due_date: prev[noteId]?.personal_due_date ?? null },
+        [noteId]: {
+          action_state: next,
+          personal_due_date: prev[noteId]?.personal_due_date ?? null,
+          private_tags: prev[noteId]?.private_tags ?? [],
+        },
       };
     });
     await setNoteAction(noteId, next);
+  }
+
+  // Update private categories for a note's action row (optimistic + async persist).
+  function handleTagsChange(noteId: string, tags: string[]) {
+    setNoteActionMap((prev) => ({
+      ...prev,
+      [noteId]: { ...prev[noteId], private_tags: tags },
+    }));
+    void updateNoteActionTags(noteId, tags);
   }
 
   // Refresh email thread indicators after a thread is linked/unlinked in the modal.
@@ -466,7 +480,7 @@ export default function BoardPage() {
   const currentBoard = boards.find((b) => b.id === boardId);
 
   return (
-    <ActionContext.Provider value={{ actionMap: noteActionMap, onActionChange: handleActionChange }}>
+    <ActionContext.Provider value={{ actionMap: noteActionMap, onActionChange: handleActionChange, onTagsChange: handleTagsChange }}>
     <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
       <BoardTopBar
         boards={boards}
