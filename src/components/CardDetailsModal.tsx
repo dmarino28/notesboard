@@ -134,6 +134,8 @@ export function CardDetailsModal({
   const [emailSignInRedirecting, setEmailSignInRedirecting] = useState<string | null>(null);
   // Inline error shown under a specific thread row (cleared on next attempt)
   const [emailOpenError, setEmailOpenError] = useState<{ threadId: string; msg: string } | null>(null);
+  // Per-thread open mode: "conversation" (default) or "message"
+  const [threadOpenMode, setThreadOpenMode] = useState<Record<string, "conversation" | "message">>({});
 
   // --- Status ---
   const [status, setStatus] = useState<NoteStatus | null>(
@@ -533,18 +535,56 @@ export function CardDetailsModal({
 
   // ------------------------------------------------------------------ email threads
 
+  /** Encodes a conversation_id for use in an Outlook readconv deeplink URL. */
+  function encodeConversationId(id: string): string {
+    return encodeURIComponent(id).replace(/_/g, "%2B");
+  }
+
+  /**
+   * Builds the Outlook conversation deeplink URL.
+   * Base domain is derived from thread.web_link if available (preserves the
+   * correct Outlook endpoint for the user's account type), otherwise defaults
+   * to outlook.live.com.
+   */
+  function buildConversationUrl(thread: EmailThreadRow): string {
+    let baseOrigin = "https://outlook.live.com";
+    if (thread.web_link) {
+      try {
+        baseOrigin = new URL(thread.web_link).origin;
+      } catch {
+        // fall through to default
+      }
+    }
+    return `${baseOrigin}/mail/0/deeplink/readconv/${encodeConversationId(thread.conversation_id)}`;
+  }
+
   /**
    * Opens the thread in Outlook.
-   * - If web_link is stored: opens it directly.
-   * - Otherwise: acquires a Mail.Read token (silent → popup, with in-flight
-   *   guard), calls /api/outlook/message-link, persists + opens the webLink.
+   *
+   * "conversation" mode (default): builds a readconv deeplink from conversation_id
+   *   — no auth required, always opens in a new tab immediately.
+   *
+   * "message" mode: opens the specific message web_link.
+   *   - If web_link is stored: opens directly.
+   *   - Otherwise: acquires a Mail.Read token (silent → redirect), calls
+   *     /api/outlook/message-link, persists + opens the webLink.
    */
   async function handleOpenThread(thread: EmailThreadRow) {
-    console.log("[openThread] start", { threadId: thread.id, hasWebLink: !!thread.web_link });
     setEmailOpenError(null);
+    const mode = threadOpenMode[thread.id] ?? "conversation";
+
+    if (mode === "conversation") {
+      const url = buildConversationUrl(thread);
+      console.log("[openThread] conversation mode", { conversationId: thread.conversation_id, url });
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // ---- message mode ----
+    console.log("[openThread] message mode start", { threadId: thread.id, hasWebLink: !!thread.web_link });
 
     if (thread.web_link) {
-      console.log("[openThread] opening stored webLink");
+      console.log("[openThread] message mode: opening stored webLink");
       window.open(thread.web_link, "_blank", "noopener,noreferrer");
       return;
     }
@@ -592,7 +632,7 @@ export function CardDetailsModal({
       setEmailThreads((prev) =>
         prev.map((t) => (t.id === thread.id ? { ...t, web_link: json.webLink! } : t)),
       );
-      console.log("[openThread] opening", json.webLink);
+      console.log("[openThread] message mode: opening", json.webLink);
       window.open(json.webLink, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.error("[openThread] OPEN THREAD ERROR", err);
@@ -1276,11 +1316,32 @@ export function CardDetailsModal({
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
+                            {/* Conversation / Message toggle */}
+                            <div className="flex items-center rounded border border-white/[0.08] overflow-hidden">
+                              {(["conversation", "message"] as const).map((m) => {
+                                const active = (threadOpenMode[thread.id] ?? "conversation") === m;
+                                return (
+                                  <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() =>
+                                      setThreadOpenMode((prev) => ({ ...prev, [thread.id]: m }))
+                                    }
+                                    className={`px-1.5 py-0.5 text-[10px] capitalize transition-colors cursor-pointer ${
+                                      active
+                                        ? "bg-white/[0.10] text-neutral-300"
+                                        : "text-neutral-600 hover:text-neutral-400"
+                                    }`}
+                                  >
+                                    {m}
+                                  </button>
+                                );
+                              })}
+                            </div>
                             <button
                               type="button"
                               disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
                               onClick={() => {
-                                console.log("CLICK BUTTON INLINE", thread.id);
                                 void handleOpenThread(thread);
                               }}
                               className="text-xs text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
@@ -1289,7 +1350,7 @@ export function CardDetailsModal({
                                 ? "Signing in…"
                                 : connectingThreadId === thread.id
                                 ? "Connecting…"
-                                : "Open in Outlook →"}
+                                : "Open →"}
                             </button>
                             <button
                               type="button"
