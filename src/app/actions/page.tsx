@@ -13,6 +13,7 @@ import {
   fetchSavedViews,
   createSavedView,
   deleteSavedView,
+  pollWaiting,
   type ActionState,
   type ActionMode,
   type BucketedNote,
@@ -23,6 +24,7 @@ import {
   type TagDef,
   DEFAULT_FILTERS,
 } from "@/lib/userActions";
+import { getMsalInstance, GRAPH_MAIL_SCOPE } from "@/lib/msalConfig";
 import { getNote, type NoteRow } from "@/lib/notes";
 import { listLabels, type LabelRow } from "@/lib/labels";
 import { ActionContext } from "@/lib/ActionContext";
@@ -107,6 +109,7 @@ export default function ActionsPage() {
   // Modal dialogs
   const [showQuickAction, setShowQuickAction] = useState(false);
   const [showManageGroups, setShowManageGroups] = useState(false);
+  const [checkWaitingBusy, setCheckWaitingBusy] = useState(false);
 
   // Card detail modal
   const [modalNote, setModalNote] = useState<NoteRow | null>(null);
@@ -315,6 +318,36 @@ export default function ActionsPage() {
     void loadActions();
   }
 
+  // ── Check Waiting ──────────────────────────────────────────────────────────
+
+  async function handlePollWaiting() {
+    setCheckWaitingBusy(true);
+    try {
+      const msal = await getMsalInstance();
+      if (!msal) return;
+
+      let accessToken: string;
+      try {
+        const accounts = msal.getAllAccounts();
+        if (accounts.length === 0) throw new Error("no accounts");
+        const result = await msal.acquireTokenSilent({ scopes: [GRAPH_MAIL_SCOPE], account: accounts[0] });
+        accessToken = result.accessToken;
+      } catch {
+        const result = await msal.acquireTokenPopup({ scopes: [GRAPH_MAIL_SCOPE] });
+        accessToken = result.accessToken;
+      }
+
+      const result = await pollWaiting(accessToken);
+      if (result && result.updated > 0) {
+        void loadActions();
+      }
+    } catch {
+      // User cancelled or popup blocked — silently ignore
+    } finally {
+      setCheckWaitingBusy(false);
+    }
+  }
+
   // ── Saved view handlers ────────────────────────────────────────────────────
 
   async function handleSaveView(name: string) {
@@ -408,6 +441,8 @@ export default function ActionsPage() {
               onDeleteView={handleDeleteView}
               onQuickAction={() => setShowQuickAction(true)}
               onManageGroups={() => setShowManageGroups(true)}
+              onCheckWaiting={handlePollWaiting}
+              checkWaitingBusy={checkWaitingBusy}
             />
           )}
         </div>

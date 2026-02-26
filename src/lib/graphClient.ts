@@ -36,3 +36,62 @@ export async function fetchWebLinkForConversation(
     return null;
   }
 }
+
+/**
+ * Fetches the webLink for a specific message by its message ID.
+ * Faster than the conversationId-based lookup when message_id is known.
+ */
+export async function fetchWebLinkByMessageId(
+  accessToken: string,
+  messageId: string,
+): Promise<string | null> {
+  const url =
+    `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(messageId)}` +
+    `?$select=webLink`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json() as { webLink?: string };
+    return json.webLink ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches the most recent message in a conversation.
+ * Returns receivedDateTime and webLink, or null if none found.
+ * Used by poll-waiting to check if a reply arrived after waiting_since_at.
+ */
+export async function fetchLatestConversationMessage(
+  accessToken: string,
+  conversationId: string,
+): Promise<{ receivedDateTime: string; webLink: string } | null> {
+  const filter = `conversationId eq '${conversationId}'`;
+  const url =
+    `https://graph.microsoft.com/v1.0/me/messages` +
+    `?$filter=${encodeURIComponent(filter)}` +
+    `&$top=1` +
+    `&$orderby=receivedDateTime+desc` +
+    `&$select=receivedDateTime,webLink` +
+    `&$count=true`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ConsistencyLevel: "eventual",
+      },
+    });
+    if (!res.ok) return null;
+    const json = await res.json() as { value?: Array<{ receivedDateTime?: string; webLink?: string }> };
+    const msg = json.value?.[0];
+    if (!msg?.receivedDateTime) return null;
+    return { receivedDateTime: msg.receivedDateTime, webLink: msg.webLink ?? "" };
+  } catch {
+    return null;
+  }
+}

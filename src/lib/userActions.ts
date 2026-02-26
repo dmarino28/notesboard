@@ -273,6 +273,26 @@ export async function createQuickAction(input: QuickActionInput): Promise<string
   }
 }
 
+// ── Waiting automation ────────────────────────────────────────────────────────
+
+/**
+ * Polls Graph for replies on all waiting actions.
+ * Returns the number of cards promoted back to needs_action, or null on error.
+ */
+export async function pollWaiting(msToken: string): Promise<{ updated: number } | null> {
+  const headers = await getAuthHeaders();
+  try {
+    const res = await fetch("/api/outlook/poll-waiting", {
+      method: "POST",
+      headers: { ...headers, "X-Ms-Token": msToken },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as { updated: number };
+  } catch {
+    return null;
+  }
+}
+
 // ── Saved views ───────────────────────────────────────────────────────────────
 
 export async function fetchSavedViews(): Promise<SavedView[]> {

@@ -21,11 +21,9 @@ import {
   listEmailThreadsForNote,
   deleteEmailThread,
   listAttachmentsForThread,
-  upsertEmailThreadForNote,
 } from "@/lib/emailThreads";
-import { getMsalInstance, GRAPH_MAIL_SCOPE } from "@/lib/msalConfig";
+import { acquireMailToken } from "@/lib/msalConfig";
 import { LABEL_PALETTE } from "@/lib/palette";
-import { fetchWebLinkForConversation } from "@/lib/graphClient";
 import {
   CollabData,
   NoteActivity,
@@ -132,6 +130,10 @@ export function CardDetailsModal({
   const [attachmentMap, setAttachmentMap] = useState<Record<string, AttachmentRow[]>>({});
   // Thread being connected via MSAL (shows "Connecting…" on its button)
   const [connectingThreadId, setConnectingThreadId] = useState<string | null>(null);
+  // Thread for which a redirect-based sign-in was started (page will navigate away)
+  const [emailSignInRedirecting, setEmailSignInRedirecting] = useState<string | null>(null);
+  // Inline error shown under a specific thread row (cleared on next attempt)
+  const [emailOpenError, setEmailOpenError] = useState<{ threadId: string; msg: string } | null>(null);
 
   // --- Status ---
   const [status, setStatus] = useState<NoteStatus | null>(
@@ -531,78 +533,84 @@ export function CardDetailsModal({
 
   // ------------------------------------------------------------------ email threads
 
-  /** Opens a thread by falling back to an OWA subject-search URL. */
-  function openThreadFallback(thread: EmailThreadRow) {
-    const subject = thread.subject?.trim() ?? "";
-    if (!subject) return;
-    const domain = (thread.mailbox ?? "").split("@")[1]?.toLowerCase() ?? "";
-    const isConsumer = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain);
-    const base = isConsumer ? "https://outlook.live.com" : "https://outlook.office.com";
-    window.open(
-      `${base}/mail/search?q=${encodeURIComponent(`"${subject}"`)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-  }
-
   /**
    * Opens the thread in Outlook.
    * - If web_link is stored: opens it directly.
-   * - Otherwise: authenticates via MSAL, fetches the webLink from Graph,
-   *   persists it to the DB, then opens it. Falls back to OWA subject-search
-   *   if MSAL is not configured or Graph returns nothing.
+   * - Otherwise: acquires a Mail.Read token (silent → popup, with in-flight
+   *   guard), calls /api/outlook/message-link, persists + opens the webLink.
    */
   async function handleOpenThread(thread: EmailThreadRow) {
+    console.log("[openThread] start", { threadId: thread.id, hasWebLink: !!thread.web_link });
+    setEmailOpenError(null);
+
     if (thread.web_link) {
+      console.log("[openThread] opening stored webLink");
       window.open(thread.web_link, "_blank", "noopener,noreferrer");
       return;
     }
 
+    // Store context so /auth/msal-callback can resume this action after a redirect-based login.
+    localStorage.setItem(
+      "nb_pending_open_thread",
+      JSON.stringify({
+        threadId: thread.id,
+        noteId,
+        returnPath: window.location.pathname + window.location.search,
+      }),
+    );
+
     setConnectingThreadId(thread.id);
     try {
-      const msal = await getMsalInstance();
-      if (!msal) {
-        openThreadFallback(thread);
+      console.log("[openThread] acquiring token…");
+      const accessToken = await acquireMailToken();
+      console.log("[openThread] token ok", accessToken.slice(0, 12) + "…");
+
+      const fetchUrl = `/api/outlook/message-link?thread_id=${encodeURIComponent(thread.id)}`;
+      console.log("[openThread] fetching", fetchUrl);
+      const res = await fetch(fetchUrl, { headers: { "X-Ms-Token": accessToken } });
+      console.log("[openThread] fetch status", res.status);
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error("[openThread] fetch error", res.status, body);
+        const msg = "Could not fetch email link. The message may have been moved or deleted.";
+        setEmailOpenError({ threadId: thread.id, msg });
+        onError(msg);
         return;
       }
 
-      // Try silent token first; fall back to popup login.
-      let accessToken: string;
-      try {
-        const accounts = msal.getAllAccounts();
-        if (accounts.length === 0) throw new Error("no accounts");
-        const result = await msal.acquireTokenSilent({ scopes: [GRAPH_MAIL_SCOPE], account: accounts[0] });
-        accessToken = result.accessToken;
-      } catch {
-        const result = await msal.acquireTokenPopup({ scopes: [GRAPH_MAIL_SCOPE] });
-        accessToken = result.accessToken;
+      const json = (await res.json()) as { webLink?: string; error?: string };
+      console.log("[openThread] response json", json);
+
+      if (!json.webLink) {
+        const msg = "Could not fetch email link from Outlook.";
+        setEmailOpenError({ threadId: thread.id, msg });
+        onError(msg);
+        return;
       }
 
-      const webLink = await fetchWebLinkForConversation(accessToken, thread.conversation_id);
-
-      if (webLink) {
-        // Persist so future clicks skip the auth round-trip.
-        await upsertEmailThreadForNote({
-          noteId,
-          provider: thread.provider,
-          conversationId: thread.conversation_id,
-          messageId: thread.message_id,
-          webLink,
-          subject: thread.subject,
-          mailbox: thread.mailbox,
-          lastActivityAt: thread.last_activity_at,
-          unreadCount: thread.unread_count,
-        });
-        setEmailThreads((prev) =>
-          prev.map((t) => (t.id === thread.id ? { ...t, web_link: webLink } : t)),
-        );
-        window.open(webLink, "_blank", "noopener,noreferrer");
+      setEmailThreads((prev) =>
+        prev.map((t) => (t.id === thread.id ? { ...t, web_link: json.webLink! } : t)),
+      );
+      console.log("[openThread] opening", json.webLink);
+      window.open(json.webLink, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error("[openThread] OPEN THREAD ERROR", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg === "msal_redirect_started") {
+        // Page is navigating to Microsoft sign-in. Show a status message and
+        // stop — no error to report; /auth/msal-callback will resume the action.
+        setEmailSignInRedirecting(thread.id);
+        return;
+      }
+      let msg: string;
+      if (errMsg === "msal_not_configured") {
+        msg = "Outlook sign-in is not configured. Cannot open email.";
       } else {
-        openThreadFallback(thread);
+        msg = "Couldn't open Outlook email. See console for details.";
       }
-    } catch {
-      // User cancelled login or popup was blocked — fall back gracefully.
-      openThreadFallback(thread);
+      setEmailOpenError({ threadId: thread.id, msg });
+      onError(msg);
     } finally {
       setConnectingThreadId(null);
     }
@@ -1270,11 +1278,16 @@ export function CardDetailsModal({
                           <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
-                              disabled={connectingThreadId === thread.id}
-                              onClick={() => handleOpenThread(thread)}
+                              disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
+                              onClick={() => {
+                                console.log("CLICK BUTTON INLINE", thread.id);
+                                void handleOpenThread(thread);
+                              }}
                               className="text-xs text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
                             >
-                              {connectingThreadId === thread.id
+                              {emailSignInRedirecting === thread.id
+                                ? "Signing in…"
+                                : connectingThreadId === thread.id
                                 ? "Connecting…"
                                 : "Open in Outlook →"}
                             </button>
@@ -1287,6 +1300,20 @@ export function CardDetailsModal({
                             </button>
                           </div>
                         </div>
+
+                        {/* Redirect sign-in in progress */}
+                        {emailSignInRedirecting === thread.id && (
+                          <p className="mt-1.5 text-xs text-blue-400">
+                            Completing Microsoft sign-in — you&apos;ll be returned here automatically.
+                          </p>
+                        )}
+
+                        {/* Inline error for this thread */}
+                        {emailOpenError?.threadId === thread.id && (
+                          <p className="mt-1.5 text-xs text-red-400">
+                            {emailOpenError.msg}
+                          </p>
+                        )}
 
                         {/* Attachment section */}
                         {threadAttachments === undefined ? (

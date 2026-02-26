@@ -31,6 +31,8 @@ type Props = {
   onDeleteView: (viewId: string) => void;
   onQuickAction: () => void;
   onManageGroups: () => void;
+  onCheckWaiting?: () => void;
+  checkWaitingBusy?: boolean;
 };
 
 // ── Timed bucket metadata ──────────────────────────────────────────────────────
@@ -68,6 +70,8 @@ export function ActionsBoard({
   onDeleteView,
   onQuickAction,
   onManageGroups,
+  onCheckWaiting,
+  checkWaitingBusy = false,
 }: Props) {
   const defaultCollapsed = new Set(
     TIMED_BUCKETS.filter((b) => b.defaultCollapsed).map((b) => b.key as string),
@@ -134,6 +138,8 @@ export function ActionsBoard({
         onLoadView={onLoadView}
         onDeleteView={onDeleteView}
         onQuickAction={onQuickAction}
+        onCheckWaiting={onCheckWaiting}
+        checkWaitingBusy={checkWaitingBusy}
       />
 
       {/* Content */}
@@ -234,6 +240,8 @@ function ActionsBoardToolbar({
   onLoadView,
   onDeleteView,
   onQuickAction,
+  onCheckWaiting,
+  checkWaitingBusy,
 }: {
   filters: ViewFilters;
   savedViews: SavedView[];
@@ -244,6 +252,8 @@ function ActionsBoardToolbar({
   onLoadView: (view: SavedView) => void;
   onDeleteView: (viewId: string) => void;
   onQuickAction: () => void;
+  onCheckWaiting?: () => void;
+  checkWaitingBusy?: boolean;
 }) {
   const [catOpen, setCatOpen] = useState(false);
   const [viewDropOpen, setViewDropOpen] = useState(false);
@@ -284,6 +294,18 @@ function ActionsBoardToolbar({
       >
         + Quick Action
       </button>
+
+      {/* ── Check Waiting ── */}
+      {onCheckWaiting && (
+        <button
+          type="button"
+          onClick={onCheckWaiting}
+          disabled={checkWaitingBusy}
+          className="flex items-center gap-1 rounded-md border border-white/[0.07] bg-white/[0.03] px-2.5 py-1 text-[11px] text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-neutral-200 disabled:opacity-50"
+        >
+          {checkWaitingBusy ? "Checking…" : "Check Waiting"}
+        </button>
+      )}
 
       <span className="h-4 w-px bg-white/[0.06]" />
 

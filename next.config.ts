@@ -4,6 +4,19 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Allow MSAL popup to retain window.opener after returning from
+        // Microsoft's login page. Without this header (or with the stricter
+        // "same-origin"), the browser clears window.opener on cross-origin
+        // navigation, breaking acquireTokenPopup.
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin-allow-popups",
+          },
+        ],
+      },
+      {
         // Allow Outlook on the web to render /outlook/addin in an iframe.
         // Without this, Next.js's default X-Frame-Options: SAMEORIGIN blocks the task pane.
         source: "/outlook/addin/:path*",

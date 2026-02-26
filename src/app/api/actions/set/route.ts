@@ -73,6 +73,29 @@ export async function POST(req: NextRequest) {
     if (action_mode !== undefined) upsertData.action_mode = action_mode;
     if (private_tags !== undefined) upsertData.private_tags = private_tags;
 
+    // Auto-populate waiting fields when transitioning to 'waiting'
+    if (action_state === "waiting") {
+      const { data: thread } = await client
+        .from("note_email_threads")
+        .select("conversation_id, mailbox")
+        .eq("note_id", note_id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (thread) {
+        const t = thread as { conversation_id: string; mailbox: string | null };
+        upsertData.waiting_conversation_id = t.conversation_id;
+        upsertData.waiting_since_at = new Date().toISOString();
+        upsertData.waiting_mailbox = t.mailbox;
+      }
+    } else {
+      // Clear waiting fields when transitioning away from 'waiting'
+      upsertData.waiting_conversation_id = null;
+      upsertData.waiting_since_at = null;
+      upsertData.waiting_mailbox = null;
+    }
+
     const { data, error } = await client
       .from("note_user_actions")
       .upsert(upsertData, { onConflict: "user_id,note_id" })
