@@ -82,16 +82,18 @@ export function Board({
   // --- Mobile tab state ---
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [movingPlacementId, setMovingPlacementId] = useState<string | null>(null);
+  const swipeRef = useRef<HTMLDivElement>(null);
 
   // Sorted columns for stable render order
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
 
-  // Sync activeColumnId: keep current selection if still valid; else pick first column.
+  // Sync activeColumnId: keep current if still valid; else reset to first + scroll to start.
   useEffect(() => {
-    setActiveColumnId((prev) => {
-      if (prev && sortedColumns.some((c) => c.id === prev)) return prev;
-      return sortedColumns[0]?.id ?? null;
-    });
+    const valid = activeColumnId && sortedColumns.some((c) => c.id === activeColumnId);
+    if (!valid) {
+      setActiveColumnId(sortedColumns[0]?.id ?? null);
+      if (swipeRef.current) swipeRef.current.scrollLeft = 0;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns]);
 
@@ -294,6 +296,27 @@ export function Board({
     await onReorderNotes([{ id: placementId, column_id: targetColumnId, position }]);
   }
 
+  // ─── Mobile: scroll to a column tab ─────────────────────────────────────
+
+  function scrollToColumn(colId: string) {
+    const container = swipeRef.current;
+    if (!container) return;
+    const idx = displayColumns.findIndex((c) => c.id === colId);
+    if (idx === -1) return;
+    container.scrollTo({ left: idx * container.clientWidth, behavior: "smooth" });
+    setActiveColumnId(colId);
+  }
+
+  function handleSwipeScroll() {
+    const container = swipeRef.current;
+    if (!container) return;
+    const idx = Math.round(container.scrollLeft / container.clientWidth);
+    const col = displayColumns[idx];
+    if (col && col.id !== activeColumnId) {
+      setActiveColumnId(col.id);
+    }
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -314,11 +337,8 @@ export function Board({
 
   const columnIds = displayColumns.map((c) => c.id);
 
-  // Mobile derived state
+  // Mobile: active column id for tab highlighting
   const activeColId = activeColumnId ?? (displayColumns[0]?.id ?? null);
-  const activeColNotes = activeColId ? getNotesForColumn(activeColId) : [];
-  const activeColNoteIds = activeColNotes.map((n) => n.id);
-  const activeCol = displayColumns.find((c) => c.id === activeColId) ?? null;
 
   return (
     <DndContext
@@ -361,10 +381,10 @@ export function Board({
         </SortableContext>
       </div>
 
-      {/* ── Mobile: column tab picker + single-column list (hidden on sm+) ──── */}
+      {/* ── Mobile: column tabs + snap-scroll swipe view (hidden on sm+) ──── */}
       <div className="flex h-full flex-col overflow-hidden sm:hidden">
         {/* Tab bar — horizontally scrollable */}
-        <div className="flex-shrink-0 overflow-x-auto border-b border-white/[0.05] px-3 pt-3">
+        <div className="flex-shrink-0 overflow-x-auto border-b border-white/[0.05] px-3 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max gap-1.5 pb-3">
             {displayColumns.map((col) => {
               const isActive = col.id === activeColId;
@@ -372,7 +392,7 @@ export function Board({
                 <button
                   key={col.id}
                   type="button"
-                  onClick={() => setActiveColumnId(col.id)}
+                  onClick={() => scrollToColumn(col.id)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                     isActive
                       ? "bg-neutral-700/80 text-white shadow-sm"
@@ -395,34 +415,44 @@ export function Board({
           </div>
         </div>
 
-        {/* Active column content */}
-        {activeCol && (
-          <SortableContext items={activeColNoteIds} strategy={verticalListSortingStrategy}>
-            <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">
-              <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pt-3 pb-2">
-                {activeColNotes.length === 0 ? (
-                  <li className="py-8 text-center text-xs text-neutral-600">No cards</li>
-                ) : (
-                  activeColNotes.map((note) => (
-                    <NoteItem
-                      key={note.id}
-                      note={note}
-                      noteLabels={noteLabelMap[note.note_id] ?? []}
-                      hasEmailThread={emailThreadNoteIds.has(note.note_id)}
-                      onRemove={onRemoveNote}
-                      onUpdate={onUpdateNote}
-                      onOpen={() => onOpenNote(note.note_id)}
-                      onMoveRequest={(placementId) => setMovingPlacementId(placementId)}
-                    />
-                  ))
-                )}
-              </ul>
-              <div className="flex-shrink-0 pt-1">
-                <NoteComposer onAdd={(content) => onAddNote(content, activeCol.id)} />
+        {/* Swipe columns — one per full viewport width, snap-scroll */}
+        <div
+          ref={swipeRef}
+          onScroll={handleSwipeScroll}
+          className="flex min-h-0 flex-1 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {displayColumns.map((col) => {
+            const colNotes = getNotesForColumn(col.id);
+            const colNoteIds = colNotes.map((n) => n.id);
+            return (
+              <div key={col.id} className="flex h-full w-full shrink-0 snap-start flex-col px-3 pt-3">
+                <SortableContext items={colNoteIds} strategy={verticalListSortingStrategy}>
+                  <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pb-2">
+                    {colNotes.length === 0 ? (
+                      <li className="py-8 text-center text-xs text-neutral-600">No cards</li>
+                    ) : (
+                      colNotes.map((note) => (
+                        <NoteItem
+                          key={note.id}
+                          note={note}
+                          noteLabels={noteLabelMap[note.note_id] ?? []}
+                          hasEmailThread={emailThreadNoteIds.has(note.note_id)}
+                          onRemove={onRemoveNote}
+                          onUpdate={onUpdateNote}
+                          onOpen={() => onOpenNote(note.note_id)}
+                          onMoveRequest={(placementId) => setMovingPlacementId(placementId)}
+                        />
+                      ))
+                    )}
+                  </ul>
+                  <div className="flex-shrink-0 pb-[env(safe-area-inset-bottom,0px)] pt-1">
+                    <NoteComposer onAdd={(content) => onAddNote(content, col.id)} />
+                  </div>
+                </SortableContext>
               </div>
-            </div>
-          </SortableContext>
-        )}
+            );
+          })}
+        </div>
       </div>
 
       <DragOverlay>
@@ -497,7 +527,7 @@ function MoveSheet({
             ✕
           </button>
         </div>
-        <ul className="max-h-64 overflow-y-auto py-2 pb-8">
+        <ul className="max-h-64 overflow-y-auto py-2">
           {columns.map((col) => (
             <li key={col.id}>
               <button
@@ -520,6 +550,7 @@ function MoveSheet({
             </li>
           ))}
         </ul>
+        <div className="h-[env(safe-area-inset-bottom,0px)]" />
       </div>
     </>
   );

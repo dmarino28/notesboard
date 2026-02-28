@@ -78,6 +78,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
   const [editContent, setEditContent] = useState(note.content);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const tintColor = noteLabels.length > 0 ? noteLabels[0].color : undefined;
 
@@ -242,55 +243,129 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100">
-              {/* Quick add to My Actions — visible on hover when note is not already tracked */}
+            {/* Mobile: three-dot menu trigger */}
+            <button
+              type="button"
+              className="sm:hidden rounded-md px-1 text-base leading-none text-neutral-500 transition-colors hover:text-neutral-300"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setShowMobileMenu(true); }}
+              aria-label="Card actions"
+            >
+              ···
+            </button>
+
+            {/* Desktop: hover-reveal action row */}
+            <div className="hidden sm:flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
               {!currActionState && (
                 <button
                   type="button"
                   className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onActionChange(note.note_id, "needs_action");
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onActionChange(note.note_id, "needs_action"); }}
                 >
                   + Actions
                 </button>
               )}
               <button
+                type="button"
                 className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(true);
-                }}
+                onClick={(e) => { e.stopPropagation(); setEditing(true); }}
               >
                 Edit
               </button>
               <button
+                type="button"
                 className="text-[11px] text-neutral-600 transition-colors hover:text-red-400"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleRemove();
-                }}
+                onClick={(e) => { e.stopPropagation(); void handleRemove(); }}
               >
                 Remove
               </button>
-              {onMoveRequest && (
-                <button
-                  type="button"
-                  className="sm:hidden text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMoveRequest(note.id);
-                  }}
-                >
-                  Move
-                </button>
-              )}
             </div>
           </div>
+
+          {/* Mobile card actions sheet */}
+          {showMobileMenu && (
+            <MobileCardActionsSheet
+              hasAction={!!currActionState}
+              onAddAction={() => { onActionChange(note.note_id, "needs_action"); setShowMobileMenu(false); }}
+              onEdit={() => { setEditing(true); setShowMobileMenu(false); }}
+              onRemove={() => { void handleRemove(); setShowMobileMenu(false); }}
+              onMove={onMoveRequest ? () => { onMoveRequest!(note.id); setShowMobileMenu(false); } : undefined}
+              onClose={() => setShowMobileMenu(false)}
+            />
+          )}
         </>
       )}
     </li>
+  );
+}
+
+// ─── Mobile card actions bottom sheet ────────────────────────────────────────
+
+function MobileCardActionsSheet({
+  hasAction,
+  onAddAction,
+  onEdit,
+  onRemove,
+  onMove,
+  onClose,
+}: {
+  hasAction: boolean;
+  onAddAction: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  onMove?: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/60" onMouseDown={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-x border-t border-white/[0.08] bg-neutral-900 shadow-2xl">
+        <ul className="py-2">
+          {!hasAction && (
+            <li>
+              <button
+                type="button"
+                onClick={onAddAction}
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.05]"
+              >
+                <span className="h-2 w-2 rounded-full bg-orange-400" />
+                Add to My Actions
+              </button>
+            </li>
+          )}
+          <li>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.05]"
+            >
+              Edit card
+            </button>
+          </li>
+          {onMove && (
+            <li>
+              <button
+                type="button"
+                onClick={onMove}
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.05]"
+              >
+                Move to list…
+              </button>
+            </li>
+          )}
+          <li>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-400 transition-colors hover:bg-white/[0.05]"
+            >
+              Remove from board
+            </button>
+          </li>
+        </ul>
+        <div className="h-[env(safe-area-inset-bottom,0px)]" />
+      </div>
+    </>
   );
 }
 
