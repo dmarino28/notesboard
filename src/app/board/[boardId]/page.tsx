@@ -6,6 +6,7 @@ import {
   createNote,
   deleteNote,
   updateNote,
+  getNote,
   type NoteRow,
 } from "@/lib/notes";
 import {
@@ -47,6 +48,9 @@ import {
   type ActionState,
   type NoteActionMap,
 } from "@/lib/userActions";
+import { listAwarenessForNotes, markNoteViewed, type AwarenessMap } from "@/lib/awareness";
+import { SearchResultsView } from "@/components/SearchResultsView";
+import type { SearchResponse, SearchFilters } from "@/lib/search";
 
 export default function BoardPage() {
   const params = useParams();
@@ -72,6 +76,20 @@ export default function BoardPage() {
 
   // Per-user action states (keyed by note_id, invisible to other users)
   const [noteActionMap, setNoteActionMap] = useState<NoteActionMap>({});
+
+  // Per-user awareness (last_viewed_at per note, keyed by note_id)
+  const [awarenessMap, setAwarenessMap] = useState<AwarenessMap>({});
+
+  // ── Search state ─────────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
+  const [searchResults, setSearchResults] = useState<SearchResponse | null>(null);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Modal for notes opened from search results (may not be on current board)
+  const [searchModalNote, setSearchModalNote] = useState<NoteRow | null>(null);
+  const [searchModalNoteId, setSearchModalNoteId] = useState<string | null>(null);
 
   const { toast, showToast } = useToast();
 
@@ -108,15 +126,17 @@ export default function BoardPage() {
         setColumns(colResult.data);
         setPlacements(placementResult.data);
 
-        // Load email thread indicators + per-user action states in parallel
+        // Load email thread indicators, per-user action states, and awareness in parallel
         const noteIds = placementResult.data.map((p) => p.note_id);
         Promise.all([
           listEmailThreadNoteIds(noteIds),
           fetchActionsForNotes(noteIds),
-        ]).then(([ids, actionMap]) => {
+          listAwarenessForNotes(noteIds),
+        ]).then(([ids, actionMap, awareness]) => {
           if (!cancelled) {
             setEmailThreadNoteIds(ids);
             setNoteActionMap(actionMap);
+            setAwarenessMap(awareness);
           }
         });
       }
@@ -141,6 +161,58 @@ export default function BoardPage() {
     : null;
 
   const handleCloseModal = useCallback(() => setModalNoteId(null), []);
+
+  // ── Search: debounced effect ─────────────────────────────────────────────────
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setIsSearchMode(false);
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearchMode(true);
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q, filters: searchFilters }),
+        });
+        if (res.ok) setSearchResults(await res.json());
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchFilters]);
+
+  async function handleOpenSearchCard(noteId: string) {
+    const { data: note } = await getNote(noteId);
+    if (!note) return;
+    setSearchModalNote(note);
+    setSearchModalNoteId(noteId);
+    // Optimistic awareness: mark as viewed so unseen dot disappears
+    setAwarenessMap((prev) => ({ ...prev, [noteId]: { last_viewed_at: new Date().toISOString() } }));
+    void markNoteViewed(noteId);
+  }
+
+  function handleCloseSearchModal() {
+    setSearchModalNote(null);
+    setSearchModalNoteId(null);
+  }
+
+  // Open a card modal and mark it as viewed (clears unseen dot optimistically).
+  const openModal = useCallback((noteId: string) => {
+    setModalNoteId(noteId);
+    // Optimistic: mark viewed immediately so the dot disappears without a round-trip
+    setAwarenessMap((prev) => ({
+      ...prev,
+      [noteId]: { last_viewed_at: new Date().toISOString() },
+    }));
+    void markNoteViewed(noteId);
+  }, []);
 
   // Cycle a note's personal action state (optimistic + async persist).
   async function handleActionChange(noteId: string, next: ActionState | "none") {
@@ -459,6 +531,7 @@ export default function BoardPage() {
       last_public_activity_at: p.last_public_activity_at,
       last_public_activity_type: p.last_public_activity_type,
       last_public_activity_preview: p.last_public_activity_preview,
+      updated_at: p.updated_at,
     }));
 
     const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);
@@ -484,6 +557,7 @@ export default function BoardPage() {
     <ActionContext.Provider value={{
       actionMap: noteActionMap,
       tagDefs: [],
+      awarenessMap,
       onActionChange: handleActionChange,
       onTagsChange: handleTagsChange,
       onModeChange: () => {},
@@ -500,35 +574,50 @@ export default function BoardPage() {
         onRenameBoard={handleRenameBoard}
         onCreateBoard={handleCreateBoard}
         onDeleteBoard={handleDeleteBoard}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
       />
 
       <div
         className="min-h-0 flex-1"
         style={{ background: "linear-gradient(150deg, #1b1e2e 0%, #13151f 60%, #101218 100%)" }}
       >
-        <Board
-          key={boardId}
-          columns={columns}
-          notes={visiblePlacements}
-          loading={loading}
-          error={fetchError}
-          noteLabelMap={noteLabelMap}
-          emailThreadNoteIds={emailThreadNoteIds}
-          boards={boards}
-          currentBoardId={boardId}
-          onAddNote={handleAddNote}
-          onRemoveNote={handleRemoveFromBoard}
-          onUpdateNote={handleUpdateNote}
-          onReorderNotes={handleReorderPlacements}
-          onReorderColumns={handleReorderColumns}
-          onAddColumn={handleAddColumn}
-          onOpenNote={setModalNoteId}
-          onRenameColumn={handleRenameColumn}
-          onDeleteColumn={handleDeleteColumn}
-          onUpdateColumnColor={handleUpdateColumnColor}
-          onMoveColumnToBoard={handleMoveColumnToBoard}
-          onCopyColumnToBoard={handleCopyColumnToBoard}
-        />
+        {isSearchMode ? (
+          <SearchResultsView
+            query={searchQuery}
+            results={searchResults}
+            isSearching={isSearching}
+            filters={searchFilters}
+            boards={boards}
+            awarenessMap={awarenessMap}
+            onFilterChange={setSearchFilters}
+            onOpenCard={handleOpenSearchCard}
+          />
+        ) : (
+          <Board
+            key={boardId}
+            columns={columns}
+            notes={visiblePlacements}
+            loading={loading}
+            error={fetchError}
+            noteLabelMap={noteLabelMap}
+            emailThreadNoteIds={emailThreadNoteIds}
+            boards={boards}
+            currentBoardId={boardId}
+            onAddNote={handleAddNote}
+            onRemoveNote={handleRemoveFromBoard}
+            onUpdateNote={handleUpdateNote}
+            onReorderNotes={handleReorderPlacements}
+            onReorderColumns={handleReorderColumns}
+            onAddColumn={handleAddColumn}
+            onOpenNote={openModal}
+            onRenameColumn={handleRenameColumn}
+            onDeleteColumn={handleDeleteColumn}
+            onUpdateColumnColor={handleUpdateColumnColor}
+            onMoveColumnToBoard={handleMoveColumnToBoard}
+            onCopyColumnToBoard={handleCopyColumnToBoard}
+          />
+        )}
       </div>
 
       {/* Toast */}
@@ -540,6 +629,7 @@ export default function BoardPage() {
         </div>
       )}
 
+      {/* Board-note modal (current board placements) */}
       {modalPlacement && (
         <CardDetailsModal
           note={modalPlacement}
@@ -549,6 +639,28 @@ export default function BoardPage() {
           boards={boards}
           onClose={handleCloseModal}
           onNoteChange={handleNoteChange}
+          onLabelCreated={handleLabelCreated}
+          onNoteLabelsChanged={handleNoteLabelsChanged}
+          onError={showToast}
+          onDeleteEverywhere={handleDeleteNoteEverywhere}
+          onLinkToBoard={handleLinkToBoard}
+          onEmailThreadsChanged={handleEmailThreadsChanged}
+        />
+      )}
+
+      {/* Search-result modal (cross-board notes fetched on demand) */}
+      {searchModalNote && searchModalNoteId && (
+        <CardDetailsModal
+          note={searchModalNote}
+          noteId={searchModalNoteId}
+          boardId={(searchModalNote.board_id as string) || boardId}
+          boardLabels={boardLabels}
+          boards={boards}
+          onClose={handleCloseSearchModal}
+          onNoteChange={(nid, fields) => {
+            handleNoteChange(nid, fields);
+            setSearchModalNote((prev) => prev ? { ...prev, ...fields } : prev);
+          }}
           onLabelCreated={handleLabelCreated}
           onNoteLabelsChanged={handleNoteLabelsChanged}
           onError={showToast}

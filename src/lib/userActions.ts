@@ -28,6 +28,8 @@ export type BucketedNote = {
   due_date: string | null;
   private_tags: string[];
   is_inbox: boolean;
+  /** Last time the note row was modified. Null for rows predating migration 000007. */
+  updated_at: string | null;
 };
 
 export type MyActionsResult = {

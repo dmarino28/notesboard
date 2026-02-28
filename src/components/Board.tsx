@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -12,12 +12,14 @@ import {
   type DragOverEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext, arrayMove, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, arrayMove, horizontalListSortingStrategy, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ColumnRow } from "@/lib/columns";
 import { PlacedNoteRow, PlacementReorderUpdate } from "@/lib/placements";
 import { LabelRow } from "@/lib/labels";
 import { BoardRow } from "@/lib/boards";
 import { ColumnContainer } from "./ColumnContainer";
+import { NoteItem } from "./NoteItem";
+import { NoteComposer } from "./NoteComposer";
 
 type Props = {
   columns: ColumnRow[];
@@ -77,8 +79,21 @@ export function Board({
   // --- Collapse state (UI-only; resets on board remount) ---
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
 
+  // --- Mobile tab state ---
+  const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+  const [movingPlacementId, setMovingPlacementId] = useState<string | null>(null);
+
   // Sorted columns for stable render order
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+
+  // Sync activeColumnId: keep current selection if still valid; else pick first column.
+  useEffect(() => {
+    setActiveColumnId((prev) => {
+      if (prev && sortedColumns.some((c) => c.id === prev)) return prev;
+      return sortedColumns[0]?.id ?? null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns]);
 
   const displayNotes = isDraggingNote ? localNotes : notes;
   const displayColumns = isDraggingColumn ? localColumns : sortedColumns;
@@ -271,6 +286,14 @@ export function Board({
     setIsDraggingNote(false);
   }
 
+  // ─── Mobile: move note to a different column ─────────────────────────────────
+
+  async function handleMoveNote(placementId: string, targetColumnId: string) {
+    const targetNotes = displayNotes.filter((n) => n.column_id === targetColumnId);
+    const position = targetNotes.length;
+    await onReorderNotes([{ id: placementId, column_id: targetColumnId, position }]);
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -291,6 +314,12 @@ export function Board({
 
   const columnIds = displayColumns.map((c) => c.id);
 
+  // Mobile derived state
+  const activeColId = activeColumnId ?? (displayColumns[0]?.id ?? null);
+  const activeColNotes = activeColId ? getNotesForColumn(activeColId) : [];
+  const activeColNoteIds = activeColNotes.map((n) => n.id);
+  const activeCol = displayColumns.find((c) => c.id === activeColId) ?? null;
+
   return (
     <DndContext
       sensors={sensors}
@@ -299,35 +328,102 @@ export function Board({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
-        <div className="nb-board-scroll h-full overflow-x-auto overflow-y-hidden">
-          <div className="flex h-full items-stretch gap-5 px-6 py-6 pb-8">
-            {displayColumns.map((col) => (
-              <ColumnContainer
-                key={col.id}
-                column={col}
-                notes={getNotesForColumn(col.id)}
-                noteLabelMap={noteLabelMap}
-                emailThreadNoteIds={emailThreadNoteIds}
-                boards={boards}
-                currentBoardId={currentBoardId}
-                isCollapsed={collapsedColumns.has(col.id)}
-                onAddNote={(content) => onAddNote(content, col.id)}
-                onRemoveNote={onRemoveNote}
-                onUpdateNote={onUpdateNote}
-                onOpenNote={onOpenNote}
-                onRename={(name) => onRenameColumn(col.id, name)}
-                onDelete={() => onDeleteColumn(col.id)}
-                onUpdateColor={(color) => onUpdateColumnColor(col.id, color)}
-                onMoveToBoard={(targetBoardId) => onMoveColumnToBoard(col.id, targetBoardId)}
-                onCopyToBoard={(targetBoardId) => onCopyColumnToBoard(col.id, targetBoardId)}
-                onToggleCollapse={() => toggleCollapse(col.id)}
-              />
-            ))}
-            <AddListStub onAdd={onAddColumn} />
+      {/* ── Desktop: full DnD kanban (hidden on mobile) ─────────────────────── */}
+      <div className="hidden h-full sm:block">
+        <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
+          <div className="nb-board-scroll h-full overflow-x-auto overflow-y-hidden">
+            <div className="flex h-full items-stretch gap-5 px-6 py-6 pb-8">
+              {displayColumns.map((col) => (
+                <ColumnContainer
+                  key={col.id}
+                  column={col}
+                  notes={getNotesForColumn(col.id)}
+                  noteLabelMap={noteLabelMap}
+                  emailThreadNoteIds={emailThreadNoteIds}
+                  boards={boards}
+                  currentBoardId={currentBoardId}
+                  isCollapsed={collapsedColumns.has(col.id)}
+                  onAddNote={(content) => onAddNote(content, col.id)}
+                  onRemoveNote={onRemoveNote}
+                  onUpdateNote={onUpdateNote}
+                  onOpenNote={onOpenNote}
+                  onRename={(name) => onRenameColumn(col.id, name)}
+                  onDelete={() => onDeleteColumn(col.id)}
+                  onUpdateColor={(color) => onUpdateColumnColor(col.id, color)}
+                  onMoveToBoard={(targetBoardId) => onMoveColumnToBoard(col.id, targetBoardId)}
+                  onCopyToBoard={(targetBoardId) => onCopyColumnToBoard(col.id, targetBoardId)}
+                  onToggleCollapse={() => toggleCollapse(col.id)}
+                />
+              ))}
+              <AddListStub onAdd={onAddColumn} />
+            </div>
+          </div>
+        </SortableContext>
+      </div>
+
+      {/* ── Mobile: column tab picker + single-column list (hidden on sm+) ──── */}
+      <div className="flex h-full flex-col overflow-hidden sm:hidden">
+        {/* Tab bar — horizontally scrollable */}
+        <div className="flex-shrink-0 overflow-x-auto border-b border-white/[0.05] px-3 pt-3">
+          <div className="flex min-w-max gap-1.5 pb-3">
+            {displayColumns.map((col) => {
+              const isActive = col.id === activeColId;
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  onClick={() => setActiveColumnId(col.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
+                    isActive
+                      ? "bg-neutral-700/80 text-white shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  {col.color && (
+                    <span
+                      className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: col.color }}
+                    />
+                  )}
+                  {col.name}
+                  <span className="tabular-nums text-[10px] opacity-50">
+                    {getNotesForColumn(col.id).length}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
-      </SortableContext>
+
+        {/* Active column content */}
+        {activeCol && (
+          <SortableContext items={activeColNoteIds} strategy={verticalListSortingStrategy}>
+            <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">
+              <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pt-3 pb-2">
+                {activeColNotes.length === 0 ? (
+                  <li className="py-8 text-center text-xs text-neutral-600">No cards</li>
+                ) : (
+                  activeColNotes.map((note) => (
+                    <NoteItem
+                      key={note.id}
+                      note={note}
+                      noteLabels={noteLabelMap[note.note_id] ?? []}
+                      hasEmailThread={emailThreadNoteIds.has(note.note_id)}
+                      onRemove={onRemoveNote}
+                      onUpdate={onUpdateNote}
+                      onOpen={() => onOpenNote(note.note_id)}
+                      onMoveRequest={(placementId) => setMovingPlacementId(placementId)}
+                    />
+                  ))
+                )}
+              </ul>
+              <div className="flex-shrink-0 pt-1">
+                <NoteComposer onAdd={(content) => onAddNote(content, activeCol.id)} />
+              </div>
+            </div>
+          </SortableContext>
+        )}
+      </div>
 
       <DragOverlay>
         {activeNote && (
@@ -351,7 +447,81 @@ export function Board({
           </div>
         )}
       </DragOverlay>
+
+      {/* Move-to-column sheet (mobile only) */}
+      {movingPlacementId && (
+        <MoveSheet
+          columns={displayColumns}
+          currentColumnId={displayNotes.find((n) => n.id === movingPlacementId)?.column_id ?? null}
+          onMove={(targetColId) => {
+            void handleMoveNote(movingPlacementId, targetColId);
+            setMovingPlacementId(null);
+          }}
+          onClose={() => setMovingPlacementId(null)}
+        />
+      )}
     </DndContext>
+  );
+}
+
+// ─── Move Sheet (mobile: pick a column to move a note into) ──────────────────
+
+function MoveSheet({
+  columns,
+  currentColumnId,
+  onMove,
+  onClose,
+}: {
+  columns: ColumnRow[];
+  currentColumnId: string | null;
+  onMove: (columnId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/60"
+        onMouseDown={onClose}
+      />
+      {/* Sheet */}
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-x border-t border-white/[0.08] bg-neutral-900 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+          <span className="text-sm font-medium text-neutral-300">Move to list</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-neutral-500 transition-colors hover:text-neutral-300"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <ul className="max-h-64 overflow-y-auto py-2 pb-8">
+          {columns.map((col) => (
+            <li key={col.id}>
+              <button
+                type="button"
+                disabled={col.id === currentColumnId}
+                onClick={() => onMove(col.id)}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {col.color && (
+                  <span
+                    className="h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: col.color }}
+                  />
+                )}
+                <span className="text-neutral-200">{col.name}</span>
+                {col.id === currentColumnId && (
+                  <span className="ml-auto text-[10px] text-neutral-600">Current</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
   );
 }
 

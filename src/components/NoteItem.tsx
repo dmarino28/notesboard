@@ -10,6 +10,7 @@ import { cycleActionState } from "@/lib/userActions";
 import type { ActionState } from "@/lib/userActions";
 import { STATUS_META } from "@/lib/collab";
 import type { NoteStatus } from "@/lib/collab";
+import { timedLabelForDueDate, relativeTimeShort, isWithin24h } from "@/lib/dateUtils";
 
 const ACTION_DOT: Record<ActionState, string> = {
   needs_action: "bg-orange-400",
@@ -24,7 +25,7 @@ const ACTION_BADGE: Record<ActionState, string> = {
 };
 
 const ACTION_TEXT: Record<ActionState, string> = {
-  needs_action: "Needs Action",
+  needs_action: "Action",
   waiting: "Waiting",
   done: "Done",
 };
@@ -36,16 +37,38 @@ type Props = {
   onRemove: (placementId: string) => Promise<void>;
   onUpdate: (noteId: string, content: string) => Promise<void>;
   onOpen: () => void;
+  onMoveRequest?: (placementId: string) => void;
 };
 
-export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate, onOpen }: Props) {
-  const { actionMap, onActionChange } = useActions();
+export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate, onOpen, onMoveRequest }: Props) {
+  const { actionMap, awarenessMap, onActionChange } = useActions();
   const currActionState = (actionMap[note.note_id]?.action_state ?? null) as ActionState | null;
+
+  // ── Unseen dot ──────────────────────────────────────────────────────────────
+  // Show if the note has been updated and the user has never viewed it (or viewed before the update).
+  const awareness = awarenessMap[note.note_id];
+  const isUnseen = Boolean(
+    note.updated_at &&
+    (
+      !awareness ||
+      awareness.last_viewed_at === null ||
+      note.updated_at > awareness.last_viewed_at
+    ),
+  );
+
+  // ── Timed label ─────────────────────────────────────────────────────────────
+  const timedLabel = timedLabelForDueDate(note.due_date);
+
+  // ── "Last updated" display ──────────────────────────────────────────────────
+  // Prefer notes.updated_at (any edit); fall back to last_public_activity_at (collab updates).
+  const displayTime = note.updated_at ?? note.last_public_activity_at;
+  const displayIsRecent = displayTime ? isWithin24h(displayTime) : false;
 
   function handleCycleAction(e: React.MouseEvent) {
     e.stopPropagation();
     onActionChange(note.note_id, cycleActionState(currActionState));
   }
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: note.id, // placement_id
     data: { type: "NOTE" },
@@ -106,8 +129,16 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className={`group cursor-grab active:cursor-grabbing rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-200 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45${tintColor ? " nb-card-glow" : ""}`}
+      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-200 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45${tintColor ? " nb-card-glow" : ""}`}
     >
+      {/* Per-user unseen dot — indigo, top-right */}
+      {isUnseen && (
+        <span
+          className="pointer-events-none absolute right-2 top-2 h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"
+          aria-label="Updated since last view"
+        />
+      )}
+
       {editing ? (
         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
           <textarea
@@ -154,15 +185,12 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   {STATUS_META[note.status as NoteStatus]?.label ?? note.status}
                 </span>
               )}
-              {note.due_date && (
+              {/* Timed label replaces raw due-date text — bucket colors match ActionsBoard columns */}
+              {timedLabel && (
                 <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    isPast(note.due_date)
-                      ? "bg-red-950/60 text-red-400"
-                      : "bg-neutral-800/60 text-neutral-500"
-                  }`}
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${timedLabel.badgeClass}`}
                 >
-                  Due {formatDateOnly(note.due_date)}
+                  {timedLabel.label}
                 </span>
               )}
               {note.event_start && (
@@ -177,8 +205,8 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
 
           <div className="mt-2 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              {/* Action pill — only shown when the note is in My Actions (row exists) */}
-              {currActionState && (
+              {/* Action pill — shown for needs_action and waiting; Done is hidden on board cards */}
+              {currActionState && currActionState !== "done" && (
                 <button
                   type="button"
                   onClick={handleCycleAction}
@@ -200,16 +228,21 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   ⬡
                 </span>
               )}
-              {note.last_public_activity_at && (
+              {/* Last updated — green + semi-bold if within 24h */}
+              {displayTime && (
                 <span
-                  className="text-[10px] text-neutral-700"
+                  className={`text-[10px] ${
+                    displayIsRecent
+                      ? "font-medium text-emerald-600"
+                      : "text-neutral-700"
+                  }`}
                   title={note.last_public_activity_preview ?? ""}
                 >
-                  {relativeTimeShort(note.last_public_activity_at)}
+                  {relativeTimeShort(displayTime)}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            <div className="flex items-center gap-2 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100">
               {/* Quick add to My Actions — visible on hover when note is not already tracked */}
               {!currActionState && (
                 <button
@@ -241,6 +274,18 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
               >
                 Remove
               </button>
+              {onMoveRequest && (
+                <button
+                  type="button"
+                  className="sm:hidden text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveRequest(note.id);
+                  }}
+                >
+                  Move
+                </button>
+              )}
             </div>
           </div>
         </>
@@ -274,17 +319,4 @@ function formatDateRange(start: string, end: string): string {
     return `${sMonth} ${sDay} – ${eMonth} ${eDay}, ${eYear}`;
   }
   return `${sMonth} ${sDay}, ${s.getFullYear()} – ${eMonth} ${eDay}, ${eYear}`;
-}
-
-function isPast(iso: string): boolean {
-  return new Date(iso) < new Date();
-}
-
-function relativeTimeShort(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
 }

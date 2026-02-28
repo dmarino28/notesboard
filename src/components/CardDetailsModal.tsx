@@ -744,7 +744,7 @@ export function CardDetailsModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 py-10 transition-opacity duration-200 ${
+      className={`fixed inset-0 z-50 transition-opacity duration-200 sm:flex sm:items-start sm:justify-center sm:overflow-y-auto sm:p-4 sm:py-10 ${
         visible ? "opacity-100" : "opacity-0"
       }`}
       style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
@@ -752,15 +752,16 @@ export function CardDetailsModal({
         if (e.target === e.currentTarget) triggerClose();
       }}
     >
+      {/* Panel — full-screen on mobile, constrained card on sm+ */}
       <div
-        className={`relative w-full max-w-2xl rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl transition-all duration-200 ${
-          visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
+        className={`fixed inset-0 flex flex-col bg-neutral-950 transition-all duration-200 sm:relative sm:inset-auto sm:w-full sm:max-w-2xl sm:rounded-xl sm:border sm:border-neutral-800 sm:shadow-2xl ${
+          visible ? "opacity-100 sm:scale-100" : "opacity-0 sm:scale-95"
         }`}
         role="dialog"
         aria-modal="true"
       >
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-neutral-800 bg-neutral-950 px-5 py-3">
+        {/* Header — flex-shrink-0 keeps it pinned on mobile; sticky inside outer scroll on sm+ */}
+        <div className="flex flex-shrink-0 items-center gap-3 border-b border-neutral-800 bg-neutral-950 px-5 py-3 sm:sticky sm:top-0 sm:z-10">
           <input
             className="flex-1 bg-transparent text-base font-semibold text-neutral-100 outline-none placeholder:text-neutral-600"
             value={title}
@@ -788,6 +789,8 @@ export function CardDetailsModal({
           </button>
         </div>
 
+        {/* Body — scrolls on mobile (flex-1); sm+ parent div handles scroll */}
+        <div className="flex-1 overflow-y-auto sm:overflow-visible">
         <div className="space-y-5 p-5">
           {/* Status */}
           <section>
@@ -1519,6 +1522,7 @@ export function CardDetailsModal({
             </button>
           </section>
         </div>
+        </div>{/* end body scroll wrapper */}
       </div>
     </div>
   );

@@ -8,14 +8,14 @@ type RawActionRow = {
   action_mode: string;
   private_tags: string[];
   notes:
-    | { id: string; content: string; due_date: string | null }
-    | { id: string; content: string; due_date: string | null }[]
+    | { id: string; content: string; due_date: string | null; updated_at: string | null }
+    | { id: string; content: string; due_date: string | null; updated_at: string | null }[]
     | null;
 };
 
 function resolveNote(
   n: RawActionRow["notes"],
-): { id: string; content: string; due_date: string | null } | null {
+): { id: string; content: string; due_date: string | null; updated_at: string | null } | null {
   if (!n) return null;
   if (Array.isArray(n)) return n[0] ?? null;
   return n;
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await client
     .from("note_user_actions")
     .select(
-      "note_id, action_state, action_mode, private_tags, notes(id, content, due_date)",
+      "note_id, action_state, action_mode, private_tags, notes(id, content, due_date, updated_at)",
     )
     .in("action_state", ["needs_action", "waiting", "done"])
     .eq("is_in_actions", true)
@@ -110,6 +110,7 @@ export async function GET(req: NextRequest) {
       due_date: dueDate,
       private_tags: row.private_tags ?? [],
       is_inbox: inboxSet.has(row.note_id),
+      updated_at: note.updated_at,
     };
 
     // Flagged items go to their own bucket regardless of action_state

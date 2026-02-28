@@ -25,6 +25,8 @@ import type {
   TagDef,
 } from "@/lib/userActions";
 import { DEFAULT_FILTERS } from "@/lib/userActions";
+import { useActions } from "@/lib/ActionContext";
+import { timedLabelForDueDate, relativeTimeShort, isWithin24h } from "@/lib/dateUtils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -950,22 +952,50 @@ function ActionCardItem({
   onOpen: (noteId: string) => void;
   showState?: ActionState;
 }) {
-  const STATE_LABELS: Record<ActionState, string> = {
-    needs_action: "Needs Action",
-    waiting: "Waiting",
-    done: "Done",
-  };
+  const { awarenessMap } = useActions();
+
   const STATE_CLASS: Record<ActionState, string> = {
     needs_action: "bg-orange-950/60 text-orange-400",
     waiting: "bg-sky-950/60 text-sky-400",
     done: "bg-emerald-950/60 text-emerald-400",
   };
+  const STATE_LABELS: Record<ActionState, string> = {
+    needs_action: "Action",
+    waiting: "Waiting",
+    done: "Done",
+  };
+
+  // Unseen dot
+  const awareness = awarenessMap[card.note_id];
+  const isUnseen = Boolean(
+    card.updated_at &&
+    (
+      !awareness ||
+      awareness.last_viewed_at === null ||
+      card.updated_at > awareness.last_viewed_at
+    ),
+  );
+
+  // Timed label: only for active (needs_action) cards; done cards keep "Was due {date}"
+  const timedLabel =
+    card.action_state === "needs_action" ? timedLabelForDueDate(card.due_date) : null;
+
+  // Last updated display
+  const displayIsRecent = card.updated_at ? isWithin24h(card.updated_at) : false;
 
   return (
     <li
       onClick={() => onOpen(card.note_id)}
-      className="cursor-pointer rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-150 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/40"
+      className="relative cursor-pointer rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-150 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/40"
     >
+      {/* Per-user unseen dot */}
+      {isUnseen && (
+        <span
+          className="pointer-events-none absolute right-2 top-2 h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"
+          aria-label="Updated since last view"
+        />
+      )}
+
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 line-clamp-3 whitespace-pre-wrap text-sm leading-tight text-neutral-100">
           {card.content}
@@ -984,16 +1014,15 @@ function ActionCardItem({
           </span>
         )}
 
-        {card.due_date && (
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              isOverdue(card.due_date) && card.action_state !== "done"
-                ? "bg-red-950/60 text-red-400"
-                : "bg-neutral-800/60 text-neutral-500"
-            }`}
-          >
-            {card.action_state === "done" ? "Was due" : "Due"}{" "}
-            {formatActionDate(card.due_date)}
+        {/* Active cards: timed label pill. Done cards: "Was due {date}". */}
+        {timedLabel && (
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${timedLabel.badgeClass}`}>
+            {timedLabel.label}
+          </span>
+        )}
+        {card.action_state === "done" && card.due_date && (
+          <span className="rounded-full bg-neutral-800/60 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+            Was due {formatActionDate(card.due_date)}
           </span>
         )}
 
@@ -1014,6 +1043,15 @@ function ActionCardItem({
             )}
           </>
         )}
+
+        {/* Last updated — green + semi-bold if within 24h */}
+        {card.updated_at && (
+          <span
+            className={`text-[10px] ${displayIsRecent ? "font-medium text-emerald-600" : "text-neutral-700"}`}
+          >
+            {relativeTimeShort(card.updated_at)}
+          </span>
+        )}
       </div>
     </li>
   );
@@ -1025,9 +1063,4 @@ function formatActionDate(dateStr: string): string | null {
   const d = new Date(dateStr + "T00:00:00");
   if (isNaN(d.getTime())) return null;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function isOverdue(dateStr: string): boolean {
-  const d = new Date(dateStr + "T00:00:00");
-  return !isNaN(d.getTime()) && d < new Date(new Date().toDateString());
 }

@@ -2,10 +2,12 @@
 
 import { createContext, useContext } from "react";
 import type { ActionState, ActionMode, NoteActionMap, TagDef } from "./userActions";
+import type { AwarenessMap } from "./awareness";
 
 type ActionContextValue = {
   actionMap: NoteActionMap;
   tagDefs: TagDef[];
+  awarenessMap: AwarenessMap;
   onActionChange: (noteId: string, next: ActionState | "none") => void;
   onTagsChange: (noteId: string, tags: string[]) => void;
   onModeChange: (noteId: string, mode: ActionMode) => void;
@@ -17,6 +19,7 @@ type ActionContextValue = {
 const DEFAULT: ActionContextValue = {
   actionMap: {},
   tagDefs: [],
+  awarenessMap: {},
   onActionChange: () => {},
   onTagsChange: () => {},
   onModeChange: () => {},

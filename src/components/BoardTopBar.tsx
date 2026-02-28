@@ -15,6 +15,8 @@ type Props = {
   onRenameBoard: (id: string, name: string) => Promise<void>;
   onCreateBoard: (name: string) => Promise<void>;
   onDeleteBoard: (id: string) => Promise<void>;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
 };
 
 export function BoardTopBar({
@@ -25,6 +27,8 @@ export function BoardTopBar({
   onRenameBoard,
   onCreateBoard,
   onDeleteBoard,
+  searchQuery,
+  onSearchChange,
 }: Props) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -80,8 +84,37 @@ export function BoardTopBar({
         })}
       </nav>
 
-      {/* Right: archived toggle + auth */}
+      {/* Right: search + archived toggle + auth */}
       <div className="ml-auto flex items-center gap-3">
+        {/* Global search input — shown when onSearchChange is wired */}
+        {onSearchChange && (
+          <div className="relative flex items-center">
+            <svg
+              className="pointer-events-none absolute left-2 h-3 w-3 text-neutral-600"
+              viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"
+            >
+              <circle cx="6.5" cy="6.5" r="4" />
+              <path d="M10 10l3 3" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchQuery ?? ""}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="w-36 rounded-lg border border-white/[0.07] bg-neutral-900/60 py-1 pl-6 pr-2 text-xs text-neutral-300 placeholder-neutral-600 transition-all duration-150 focus:w-48 focus:border-white/[0.14] focus:bg-neutral-900 focus:text-neutral-100 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                className="absolute right-1.5 text-neutral-600 transition-colors hover:text-neutral-400"
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
         <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-neutral-500 transition-colors hover:text-neutral-300">
           <input
             type="checkbox"

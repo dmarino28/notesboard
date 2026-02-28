@@ -30,6 +30,7 @@ import {
 } from "@/lib/userActions";
 import { getMsalInstance, GRAPH_MAIL_SCOPE } from "@/lib/msalConfig";
 import { getNote, type NoteRow } from "@/lib/notes";
+import { listAwarenessForNotes, markNoteViewed, type AwarenessMap } from "@/lib/awareness";
 import { listLabels, type LabelRow } from "@/lib/labels";
 import { ActionContext } from "@/lib/ActionContext";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
@@ -107,6 +108,9 @@ export default function ActionsPage() {
   // ActionContext map
   const [actionMap, setActionMap] = useState<NoteActionMap>({});
 
+  // Per-user awareness (last_viewed_at per note)
+  const [awarenessMap, setAwarenessMap] = useState<AwarenessMap>({});
+
   const didLoadRef = useRef(false);
 
   // Filters + saved views
@@ -146,6 +150,7 @@ export default function ActionsPage() {
       setRawResult(data);
       // Build action map
       const map: NoteActionMap = {};
+      const noteIds: string[] = [];
       for (const key of ALL_BUCKET_KEYS) {
         for (const card of data[key] as BucketedNote[]) {
           map[card.note_id] = {
@@ -154,9 +159,14 @@ export default function ActionsPage() {
             is_in_actions: true,
             private_tags: card.private_tags,
           };
+          noteIds.push(card.note_id);
         }
       }
       setActionMap(map);
+      // Fetch awareness for all action note ids in one pass
+      if (noteIds.length > 0) {
+        listAwarenessForNotes(noteIds).then(setAwarenessMap);
+      }
     }
     setSavedViews(views);
     setTagDefs(defs);
@@ -387,6 +397,12 @@ export default function ActionsPage() {
     setModalNoteId(noteId);
     setModalBoardId(bId);
     setModalBoardLabels(labels ?? []);
+    // Optimistic: mark viewed immediately so unseen dot disappears
+    setAwarenessMap((prev) => ({
+      ...prev,
+      [noteId]: { last_viewed_at: new Date().toISOString() },
+    }));
+    void markNoteViewed(noteId);
   }
 
   function handleCloseModal() {
@@ -491,6 +507,7 @@ export default function ActionsPage() {
       value={{
         actionMap,
         tagDefs,
+        awarenessMap,
         onActionChange: handleActionChange,
         onTagsChange: handleTagsChange,
         onModeChange: handleModeChange,
