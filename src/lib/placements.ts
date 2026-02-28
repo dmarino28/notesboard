@@ -16,6 +16,7 @@ export type PlacedNoteRow = {
   placement_count: number; // total note_placements rows for this note_id
   status: string | null;
   last_public_activity_at: string | null;
+  last_public_activity_user_id: string | null;
   last_public_activity_type: string | null;
   last_public_activity_preview: string | null;
   /** Set on any INSERT or UPDATE via DB trigger. Null for rows predating migration 000007. */
@@ -31,7 +32,7 @@ export async function listPlacements(
   const { data, error } = await supabase
     .from("note_placements")
     .select(
-      "id, note_id, board_id, column_id, position, notes(id, content, description, due_date, event_start, event_end, archived, created_at, status, last_public_activity_at, last_public_activity_type, last_public_activity_preview, updated_at)",
+      "id, note_id, board_id, column_id, position, notes(id, content, description, due_date, event_start, event_end, archived, created_at, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at)",
     )
     .eq("board_id", boardId)
     .order("column_id", { ascending: true })
@@ -50,6 +51,7 @@ export async function listPlacements(
     created_at: string;
     status: string | null;
     last_public_activity_at: string | null;
+    last_public_activity_user_id: string | null;
     last_public_activity_type: string | null;
     last_public_activity_preview: string | null;
     updated_at: string | null;
@@ -110,6 +112,7 @@ export async function listPlacements(
       placement_count: countMap[p.note_id] ?? 1,
       status: note.status,
       last_public_activity_at: note.last_public_activity_at,
+      last_public_activity_user_id: note.last_public_activity_user_id,
       last_public_activity_type: note.last_public_activity_type,
       last_public_activity_preview: note.last_public_activity_preview,
       updated_at: note.updated_at,

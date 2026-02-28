@@ -46,6 +46,11 @@ type NoteInput = {
   archived: boolean;
   board_id: string;
   status: string | null;
+  last_public_activity_at: string | null;
+  last_public_activity_user_id: string | null;
+  last_public_activity_type: string | null;
+  last_public_activity_preview: string | null;
+  updated_at?: string | null;
 };
 
 type Props = {
@@ -149,6 +154,7 @@ export function CardDetailsModal({
   const [activity, setActivity] = useState<NoteActivity[]>([]);
   const [collabLoading, setCollabLoading] = useState(true);
   const [collabAuthed, setCollabAuthed] = useState<boolean | null>(null); // null=loading, false=unauthed
+  const [collabUserId, setCollabUserId] = useState<string | null>(null);
   const [newUpdate, setNewUpdate] = useState("");
   const [updateStatusChange, setUpdateStatusChange] = useState<NoteStatus | null>(null);
   const [postingUpdate, setPostingUpdate] = useState(false);
@@ -196,6 +202,7 @@ export function CardDetailsModal({
         setCollabAuthed(true);
         setUpdates(data.updates);
         setActivity(data.activity);
+        setCollabUserId(data.currentUserId ?? null);
       }
       setCollabLoading(false);
     });
@@ -232,6 +239,7 @@ export function CardDetailsModal({
     setActivity([]);
     setCollabLoading(true);
     setCollabAuthed(null);
+    setCollabUserId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
@@ -365,17 +373,29 @@ export function CardDetailsModal({
       return;
     }
 
-    // Optimistic add
+    // Optimistic add — prepend so newest appears first
+    const now = new Date().toISOString();
     const optimistic: NoteUpdate = {
       id: `temp-${Date.now()}`,
       note_id: noteId,
-      user_id: null,
+      user_id: collabUserId,
       content: trimmed,
       status_change: updateStatusChange,
       due_date_change: null,
-      created_at: new Date().toISOString(),
+      created_at: now,
     };
-    setUpdates((prev) => [...prev, optimistic]);
+    setUpdates((prev) => [optimistic, ...prev]);
+
+    // Patch the board card surface immediately — mirrors what the DB trigger does.
+    // Must include updated_at because NoteItem renders (updated_at ?? last_public_activity_at)
+    // and updated_at takes nullish-coalescing priority; omitting it leaves the stale timestamp.
+    onNoteChange(noteId, {
+      updated_at: now,
+      last_public_activity_at: now,
+      last_public_activity_user_id: collabUserId,
+      last_public_activity_type: "update",
+      last_public_activity_preview: trimmed.slice(0, 80),
+    });
 
     // Sync status if changed
     if (updateStatusChange) {
@@ -383,25 +403,19 @@ export function CardDetailsModal({
       onNoteChange(noteId, { status: updateStatusChange });
     }
 
-    // Log optimistic activity
+    // Log optimistic activity — prepend so newest appears first
     const newActivityRows: NoteActivity[] = [];
     if (updateStatusChange) {
       newActivityRows.push({
         id: `temp-act-s-${Date.now()}`,
         note_id: noteId,
+        actor_user_id: collabUserId,
         activity_type: "status_changed",
         payload: { from: status, to: updateStatusChange },
         created_at: new Date().toISOString(),
       });
     }
-    newActivityRows.push({
-      id: `temp-act-u-${Date.now()}`,
-      note_id: noteId,
-      activity_type: "update_posted",
-      payload: { preview: trimmed.slice(0, 80) },
-      created_at: new Date().toISOString(),
-    });
-    setActivity((prev) => [...prev, ...newActivityRows]);
+    setActivity((prev) => [...newActivityRows, ...prev]);
 
     setNewUpdate("");
     setUpdateStatusChange(null);
@@ -1153,41 +1167,23 @@ export function CardDetailsModal({
                 </Link>
               </div>
             ) : (
-              <div className="space-y-2">
-                {updates.length === 0 && (
-                  <p className="text-xs text-neutral-600">No updates yet.</p>
-                )}
-                {updates.map((u) => (
-                  <div
-                    key={u.id}
-                    className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
-                  >
-                    <p className="break-words text-sm text-neutral-200">{u.content}</p>
-                    {u.status_change && (
-                      <p className="mt-0.5 text-xs text-neutral-500">
-                        → Status:{" "}
-                        {STATUS_META[u.status_change as NoteStatus]?.label ?? u.status_change}
-                      </p>
-                    )}
-                    {u.due_date_change && (
-                      <p className="mt-0.5 text-xs text-neutral-500">
-                        → Due:{" "}
-                        {u.due_date_change === "cleared" ? "cleared" : u.due_date_change}
-                      </p>
-                    )}
-                    <p className="mt-0.5 text-xs text-neutral-600">{relativeTime(u.created_at)}</p>
-                  </div>
-                ))}
-
-                {/* Composer */}
+              <div className="space-y-3">
+                {/* Composer — at top for fast entry */}
                 <div className="space-y-1.5">
                   <textarea
                     className="w-full resize-none rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-700"
-                    placeholder="Post an update…"
+                    placeholder="Post an update… (Enter to send)"
                     value={newUpdate}
                     onChange={(e) => setNewUpdate(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void handlePostUpdate();
+                      }
+                    }}
                     rows={2}
                     disabled={postingUpdate}
+                    maxLength={500}
                   />
                   <div className="flex items-center gap-2">
                     <select
@@ -1197,7 +1193,7 @@ export function CardDetailsModal({
                         setUpdateStatusChange((e.target.value as NoteStatus) || null)
                       }
                     >
-                      <option value="">No status change</option>
+                      <option value="">Status unchanged</option>
                       {STATUS_VALUES.map((s) => (
                         <option key={s} value={s}>
                           {STATUS_META[s].label}
@@ -1205,14 +1201,54 @@ export function CardDetailsModal({
                       ))}
                     </select>
                     <button
+                      type="button"
                       className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
                       onClick={handlePostUpdate}
                       disabled={postingUpdate || !newUpdate.trim()}
                     >
                       {postingUpdate ? "…" : "Post"}
                     </button>
+                    {newUpdate.length > 400 && (
+                      <span className={`ml-auto text-[10px] ${newUpdate.length >= 500 ? "text-red-400" : "text-neutral-600"}`}>
+                        {newUpdate.length}/500
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {/* Feed — newest first */}
+                {updates.length === 0 ? (
+                  <p className="text-xs text-neutral-600">No updates yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {updates.map((u) => (
+                      <div
+                        key={u.id}
+                        className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
+                      >
+                        <p className="break-words text-sm text-neutral-200">{u.content}</p>
+                        {u.status_change && (
+                          <p className="mt-0.5 text-xs text-neutral-500">
+                            → Status:{" "}
+                            {STATUS_META[u.status_change as NoteStatus]?.label ?? u.status_change}
+                          </p>
+                        )}
+                        {u.due_date_change && (
+                          <p className="mt-0.5 text-xs text-neutral-500">
+                            → Due:{" "}
+                            {u.due_date_change === "cleared" ? "cleared" : u.due_date_change}
+                          </p>
+                        )}
+                        <div className="mt-1 flex items-center gap-1.5">
+                          {u.user_id === collabUserId && u.user_id !== null && (
+                            <span className="text-[10px] font-medium text-indigo-400">You</span>
+                          )}
+                          <span className="text-[10px] text-neutral-600">{relativeTime(u.created_at)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </section>

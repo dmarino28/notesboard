@@ -60,8 +60,8 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
   const timedLabel = timedLabelForDueDate(note.due_date);
 
   // ── "Last updated" display ──────────────────────────────────────────────────
-  // Prefer notes.updated_at (any edit); fall back to last_public_activity_at (collab updates).
-  const displayTime = note.updated_at ?? note.last_public_activity_at;
+  // Prefer last_public_activity_at (collab updates); fall back to updated_at (any edit).
+  const displayTime = note.last_public_activity_at ?? note.updated_at;
   const displayIsRecent = displayTime ? isWithin24h(displayTime) : false;
 
   function handleCycleAction(e: React.MouseEvent) {

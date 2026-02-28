@@ -30,6 +30,9 @@ export async function POST(
   if (!content?.trim()) {
     return NextResponse.json({ error: "content required" }, { status: 400 });
   }
+  if (content.trim().length > 500) {
+    return NextResponse.json({ error: "Update too long (max 500 chars)" }, { status: 400 });
+  }
 
   // Fetch current status for activity "from" value
   let prevStatus: string | null = null;
@@ -42,7 +45,7 @@ export async function POST(
     prevStatus = (noteData as { status: string | null } | null)?.status ?? null;
   }
 
-  // 1. Insert update row
+  // 1. Insert update row — trigger fires and syncs notes.last_public_activity_* automatically
   const { error: updateErr } = await client.from("note_updates").insert({
     note_id: noteId,
     user_id: user.id,
@@ -54,28 +57,36 @@ export async function POST(
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  // 2. Apply field changes + activity fields to notes table
-  const noteUpdates: Record<string, unknown> = {
-    last_public_activity_at: new Date().toISOString(),
-    last_public_activity_type: "update_posted",
-    last_public_activity_preview: content.trim().slice(0, 120),
-  };
-  if (status_change) noteUpdates.status = status_change;
+  // 2. Apply field changes to notes (status / due_date only — last_public_activity_* is
+  //    handled by the note_updates_sync_activity_tg trigger above)
+  const noteFieldUpdates: Record<string, unknown> = {};
+  if (status_change) noteFieldUpdates.status = status_change;
   if (due_date_change !== undefined) {
-    noteUpdates.due_date = due_date_change === "cleared" ? null : due_date_change;
+    noteFieldUpdates.due_date = due_date_change === "cleared" ? null : due_date_change;
   }
 
-  const { error: noteErr } = await client.from("notes").update(noteUpdates).eq("id", noteId);
-  if (noteErr) {
-    return NextResponse.json({ error: noteErr.message }, { status: 500 });
+  if (Object.keys(noteFieldUpdates).length > 0) {
+    const { error: noteErr } = await client
+      .from("notes")
+      .update(noteFieldUpdates)
+      .eq("id", noteId);
+    if (noteErr) {
+      return NextResponse.json({ error: noteErr.message }, { status: 500 });
+    }
   }
 
-  // 3. Log activity events
-  const activityRows: { note_id: string; activity_type: string; payload: object }[] = [];
+  // 3. Log activity events (status change + optional due_date change)
+  const activityRows: {
+    note_id: string;
+    actor_user_id: string;
+    activity_type: string;
+    payload: object;
+  }[] = [];
 
   if (status_change) {
     activityRows.push({
       note_id: noteId,
+      actor_user_id: user.id,
       activity_type: "status_changed",
       payload: { from: prevStatus, to: status_change },
     });
@@ -83,17 +94,15 @@ export async function POST(
   if (due_date_change !== undefined) {
     activityRows.push({
       note_id: noteId,
+      actor_user_id: user.id,
       activity_type: "due_date_changed",
       payload: { value: due_date_change },
     });
   }
-  activityRows.push({
-    note_id: noteId,
-    activity_type: "update_posted",
-    payload: { preview: content.trim().slice(0, 80) },
-  });
 
-  await client.from("note_activity").insert(activityRows);
+  if (activityRows.length > 0) {
+    await client.from("note_activity").insert(activityRows);
+  }
 
   return NextResponse.json({ ok: true });
 }

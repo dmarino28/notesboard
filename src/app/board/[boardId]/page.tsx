@@ -529,6 +529,7 @@ export default function BoardPage() {
       created_at: p.created_at,
       status: p.status,
       last_public_activity_at: p.last_public_activity_at,
+      last_public_activity_user_id: p.last_public_activity_user_id,
       last_public_activity_type: p.last_public_activity_type,
       last_public_activity_preview: p.last_public_activity_preview,
       updated_at: p.updated_at,

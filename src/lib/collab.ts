@@ -41,6 +41,7 @@ export type NoteUpdate = {
 export type NoteActivity = {
   id: string;
   note_id: string;
+  actor_user_id: string | null;
   activity_type: string;
   payload: Record<string, unknown>;
   created_at: string;
@@ -49,6 +50,8 @@ export type NoteActivity = {
 export type CollabData = {
   updates: NoteUpdate[];
   activity: NoteActivity[];
+  /** The authenticated user's id — used to show "You" attribution in the UI. */
+  currentUserId?: string;
 };
 
 type CollabOpts = {

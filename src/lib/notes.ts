@@ -14,6 +14,7 @@ export type NoteRow = {
   archived: boolean;
   status: string | null;
   last_public_activity_at: string | null;
+  last_public_activity_user_id: string | null;
   last_public_activity_type: string | null;
   last_public_activity_preview: string | null;
   /** Set on any INSERT or UPDATE via DB trigger. Null for rows predating migration 000007. */
@@ -27,7 +28,7 @@ export type NoteFieldUpdates = Partial<
 >;
 
 const NOTE_SELECT =
-  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_type, last_public_activity_preview, updated_at";
+  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at";
 
 export async function listNotes(
   boardId: string,
