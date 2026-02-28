@@ -154,7 +154,7 @@ export default function BoardPage() {
         [noteId]: {
           action_state: next,
           action_mode: prev[noteId]?.action_mode ?? "timed",
-          personal_due_date: prev[noteId]?.personal_due_date ?? null,
+          is_in_actions: prev[noteId]?.is_in_actions ?? true,
           private_tags: prev[noteId]?.private_tags ?? [],
         },
       };
@@ -488,6 +488,7 @@ export default function BoardPage() {
       onTagsChange: handleTagsChange,
       onModeChange: () => {},
       onDueDateChange: () => {},
+      onToggleInActions: () => {},
       onCreateTagDef: async () => null,
     }}>
     <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">

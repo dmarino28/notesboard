@@ -1,10 +1,21 @@
 "use client";
 
-// ActionsBoard — two-section list view for personal action items.
-// Timed section: cards bucketed by urgency (overdue / today / tomorrow / this week / later / waiting / done).
-// Flagged section: cards grouped by tag-def groups + General (untagged).
+// ActionsBoard — personal action items.
+// Timed section: 5-column kanban (Overdue/Today/Tomorrow/This Week/Later) + Waiting/Done trays.
+// Flagged section: accordion groups by tag-def + General.
 
 import { useRef, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import type {
   BucketedNote,
   ActionState,
@@ -33,26 +44,121 @@ type Props = {
   onManageGroups: () => void;
   onCheckWaiting?: () => void;
   checkWaitingBusy?: boolean;
+  onCardDrop: (noteId: string, targetBucket: string, newDate: string | null) => void;
+  onCardDropToTray: (noteId: string, tray: "waiting" | "done") => void;
 };
 
-// ── Timed bucket metadata ──────────────────────────────────────────────────────
+// ── Timed bucket column metadata ───────────────────────────────────────────────
 
-type TimedBucket = {
-  key: keyof MyActionsResult;
-  label: string;
-  dotClass: string;
-  defaultCollapsed: boolean;
-};
+const TIMED_COLUMN_BUCKETS = [
+  { key: "overdue",   label: "Overdue",   dotClass: "bg-red-400",     glow: "#ef4444" },
+  { key: "today",     label: "Today",     dotClass: "bg-amber-400",   glow: "#f59e0b" },
+  { key: "tomorrow",  label: "Tomorrow",  dotClass: "bg-orange-400",  glow: "#f97316" },
+  { key: "this_week", label: "This Week", dotClass: "bg-sky-400",     glow: "#38bdf8" },
+  { key: "beyond",    label: "Later",     dotClass: "bg-neutral-500", glow: "#64748b" },
+] as const;
 
-const TIMED_BUCKETS: TimedBucket[] = [
-  { key: "overdue",   label: "Overdue",    dotClass: "bg-red-400",     defaultCollapsed: false },
-  { key: "today",     label: "Today",      dotClass: "bg-orange-400",  defaultCollapsed: false },
-  { key: "tomorrow",  label: "Tomorrow",   dotClass: "bg-amber-400",   defaultCollapsed: false },
-  { key: "this_week", label: "This Week",  dotClass: "bg-sky-400",     defaultCollapsed: false },
-  { key: "beyond",    label: "Later",      dotClass: "bg-neutral-500", defaultCollapsed: false },
-  { key: "waiting",   label: "Waiting",    dotClass: "bg-purple-400",  defaultCollapsed: false },
-  { key: "done",      label: "Done",       dotClass: "bg-emerald-400", defaultCollapsed: true  },
-];
+// ── Drop resolution ────────────────────────────────────────────────────────────
+
+function fmtDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+/**
+ * Returns the upcoming Friday, or today if today is already Friday.
+ * Used as the anchor date for "This Week" drops.
+ */
+function upcomingFriday(from: Date): string {
+  const d = new Date(from);
+  const day = d.getDay(); // 0=Sun … 5=Fri … 6=Sat
+  if (day === 5) return fmtDate(d); // today is Friday → same day
+  const daysUntil = (5 - day + 7) % 7;
+  d.setDate(d.getDate() + daysUntil);
+  return fmtDate(d);
+}
+
+/**
+ * Returns the personal_due_date to set when a card is dropped on a timed column.
+ * Overdue is not a valid drop target — callers must guard before calling this.
+ * Returns `undefined` for non-timed targets (caller should ignore).
+ */
+function resolveDropDate(bucketKey: string): string | null | undefined {
+  const today = new Date();
+  switch (bucketKey) {
+    case "today":    return fmtDate(today);
+    case "tomorrow": {
+      const d = new Date(today);
+      d.setDate(d.getDate() + 1);
+      return fmtDate(d);
+    }
+    case "this_week": return upcomingFriday(today);
+    case "beyond":    return null; // clear personal due date
+    default:          return undefined;
+  }
+}
+
+/**
+ * Derives the display bucket key from a card's effective due date.
+ * This is the single source of truth for column membership — used to re-bucket
+ * cards after optimistic updates without moving between server-returned arrays.
+ *
+ * Bucket rules (all calendar-day comparisons, no time component):
+ *   overdue   — dueAt < startOfToday
+ *   today     — same calendar day as today
+ *   tomorrow  — today + 1
+ *   this_week — tomorrow < dueAt <= upcoming Friday (inclusive)
+ *   later     — dueAt is null OR dueAt > upcoming Friday
+ */
+function bucketKeyForDueDate(
+  dueAt: string | null,
+  today: Date,
+): "overdue" | "today" | "tomorrow" | "this_week" | "later" {
+  if (!dueAt) return "later";
+  // Strip any time / timezone component so we always work with a local calendar day,
+  // regardless of whether notes.due_date is a Postgres date, timestamp, or timestamptz.
+  const datePart = dueAt.split("T")[0]; // "2026-02-27"
+  const parts = datePart.split("-").map(Number);
+  if (parts.length !== 3) return "later";
+  const due = new Date(parts[0], parts[1] - 1, parts[2]); // local midnight
+  if (isNaN(due.getTime())) return "later";
+
+  const startOfToday = new Date(today);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  if (due < startOfToday) return "overdue";
+
+  const dueStr = fmtDate(due);
+  const todayStr = fmtDate(startOfToday);
+  const tomorrowDate = new Date(startOfToday);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = fmtDate(tomorrowDate);
+
+  if (dueStr === todayStr) return "today";
+  if (dueStr === tomorrowStr) return "tomorrow";
+
+  const fridayStr = upcomingFriday(startOfToday);
+  if (dueStr <= fridayStr) return "this_week";
+
+  return "later";
+}
+
+// ── Sort helper ────────────────────────────────────────────────────────────────
+
+function sortCards(cards: BucketedNote[], sort: ViewFilters["sort"]): BucketedNote[] {
+  if (sort === "due_asc") {
+    return [...cards].sort((a, b) => {
+      if (a.due_date && b.due_date)
+        return a.due_date.localeCompare(b.due_date);
+      if (a.due_date) return -1;
+      if (b.due_date) return 1;
+      return a.note_id.localeCompare(b.note_id);
+    });
+  }
+  return [...cards].sort((a, b) => a.note_id.localeCompare(b.note_id));
+}
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -72,10 +178,10 @@ export function ActionsBoard({
   onManageGroups,
   onCheckWaiting,
   checkWaitingBusy = false,
+  onCardDrop,
+  onCardDropToTray,
 }: Props) {
-  const defaultCollapsed = new Set(
-    TIMED_BUCKETS.filter((b) => b.defaultCollapsed).map((b) => b.key as string),
-  );
+  const defaultCollapsed = new Set<string>();
   const [collapsed, setCollapsed] = useState<Set<string>>(defaultCollapsed);
 
   function toggle(id: string) {
@@ -87,26 +193,10 @@ export function ActionsBoard({
     });
   }
 
-  // Sort cards within a timed bucket
-  function sortCards(cards: BucketedNote[]): BucketedNote[] {
-    if (filters.sort === "due_asc") {
-      return [...cards].sort((a, b) => {
-        if (a.effective_due_date && b.effective_due_date)
-          return a.effective_due_date.localeCompare(b.effective_due_date);
-        if (a.effective_due_date) return -1;
-        if (b.effective_due_date) return 1;
-        return a.note_id.localeCompare(b.note_id);
-      });
-    }
-    return [...cards].sort((a, b) => a.note_id.localeCompare(b.note_id));
-  }
-
-  // Compute flagged groups from tagDefs + result.flagged
+  // Flagged groups
   const sortedDefs = [...tagDefs].sort(
     (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name),
   );
-
-  // Group flagged cards: each card can appear in multiple groups
   const flaggedGroups: Array<{ id: string; label: string; cards: BucketedNote[] }> = [];
   for (const def of sortedDefs) {
     flaggedGroups.push({
@@ -115,14 +205,15 @@ export function ActionsBoard({
       cards: result.flagged.filter((c) => c.private_tags.includes(def.name)),
     });
   }
-  // General = flagged cards with no private_tag matching any tagDef name
   const defNames = new Set(sortedDefs.map((d) => d.name));
   const generalCards = result.flagged.filter(
     (c) => c.private_tags.length === 0 || !c.private_tags.some((t) => defNames.has(t)),
   );
   flaggedGroups.push({ id: "general", label: "General", cards: generalCards });
 
-  const timedTotal = TIMED_BUCKETS.reduce((n, b) => n + result[b.key].length, 0);
+  const timedTotal =
+    result.overdue.length + result.today.length + result.tomorrow.length +
+    result.this_week.length + result.beyond.length + result.waiting.length + result.done.length;
   const flaggedTotal = result.flagged.length;
 
   return (
@@ -143,45 +234,28 @@ export function ActionsBoard({
       />
 
       {/* Content */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 nb-scroll">
-        <div className="mx-auto max-w-2xl space-y-6">
+      <div className="min-h-0 flex-1 overflow-y-auto nb-scroll">
 
-          {/* ── Timed section ── */}
-          <section>
-            <div className="mb-3 flex items-center gap-2">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                Timed
-              </h2>
-              <span className="text-[11px] text-neutral-700">{timedTotal}</span>
-            </div>
+        {/* ── Timed section ── */}
+        <div>
+          <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+              Timed
+            </h2>
+            <span className="text-[11px] text-neutral-700">{timedTotal}</span>
+          </div>
+          <TimedKanban
+            result={result}
+            filters={filters}
+            onOpen={onOpenCard}
+            onCardDrop={onCardDrop}
+            onCardDropToTray={onCardDropToTray}
+          />
+        </div>
 
-            <div className="space-y-2">
-              {TIMED_BUCKETS.map((bucket) => {
-                const cards = sortCards(result[bucket.key] as BucketedNote[]);
-                if (cards.length === 0) return null;
-                const isCollapsed = collapsed.has(bucket.key as string);
-                return (
-                  <TimedGroup
-                    key={bucket.key}
-                    bucket={bucket}
-                    cards={cards}
-                    collapsed={isCollapsed}
-                    onToggle={() => toggle(bucket.key as string)}
-                    onOpen={onOpenCard}
-                  />
-                );
-              })}
-
-              {timedTotal === 0 && (
-                <p className="py-4 text-center text-sm text-neutral-700">
-                  No timed actions.
-                </p>
-              )}
-            </div>
-          </section>
-
-          {/* ── Flagged section ── */}
-          <section>
+        {/* ── Flagged section ── */}
+        <section className="px-4 pb-6">
+          <div className="mx-auto max-w-2xl">
             <div className="mb-3 flex items-center gap-2">
               <h2 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
                 Flagged
@@ -214,16 +288,304 @@ export function ActionsBoard({
                   />
                 );
               })}
-
               {flaggedTotal === 0 && (
                 <p className="py-4 text-center text-sm text-neutral-700">
                   No flagged actions.
                 </p>
               )}
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
+    </div>
+  );
+}
+
+// ── Timed kanban (DnD owner) ───────────────────────────────────────────────────
+
+function TimedKanban({
+  result,
+  filters,
+  onOpen,
+  onCardDrop,
+  onCardDropToTray,
+}: {
+  result: MyActionsResult;
+  filters: ViewFilters;
+  onOpen: (noteId: string) => void;
+  onCardDrop: (noteId: string, targetBucket: string, newDate: string | null) => void;
+  onCardDropToTray: (noteId: string, tray: "waiting" | "done") => void;
+}) {
+  const [activeCard, setActiveCard] = useState<BucketedNote | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  function handleDragStart(event: DragStartEvent) {
+    const card = event.active.data.current?.card as BucketedNote | undefined;
+    setActiveCard(card ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveCard(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const noteId = active.id as string;
+    const targetBucket = over.id as string;
+
+    // Overdue is derived-only — not a valid drop target.
+    if (targetBucket === "overdue") return;
+
+    if (targetBucket === "waiting" || targetBucket === "done") {
+      onCardDropToTray(noteId, targetBucket);
+      return;
+    }
+
+    const newDate = resolveDropDate(targetBucket);
+    if (newDate !== undefined) {
+      onCardDrop(noteId, targetBucket, newDate);
+    }
+  }
+
+  // Flatten all timed cards and re-bucket from effective_due_date.
+  // Column membership is always derived — never dependent on the server's original array.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const allTimedCards = [
+    ...result.overdue,
+    ...result.today,
+    ...result.tomorrow,
+    ...result.this_week,
+    ...result.beyond,
+  ];
+  const derivedBuckets: Record<string, BucketedNote[]> = {
+    overdue: [], today: [], tomorrow: [], this_week: [], beyond: [],
+  };
+
+  // ── DEBUG (remove after verification) ──────────────────────────────────────
+  if (allTimedCards.length > 0) {
+    const sample = allTimedCards[0];
+    const tomorrowDbg = new Date(today); tomorrowDbg.setDate(today.getDate() + 1);
+    const todayKey   = fmtDate(today);
+    const tomorrowKey = fmtDate(tomorrowDbg);
+    const fridayKey  = upcomingFriday(today);
+    const dueKey     = sample.due_date ? sample.due_date.split("T")[0] : null;
+    const bucket     = bucketKeyForDueDate(sample.due_date, today);
+    console.debug("[ActionsBoard] sample note:", { note_id: sample.note_id, due_date: sample.due_date });
+    console.debug("[ActionsBoard] keys:", { todayKey, tomorrowKey, fridayKey, dueKey });
+    console.debug("[ActionsBoard] chosen bucket:", bucket);
+  }
+  // ── end DEBUG ───────────────────────────────────────────────────────────────
+
+  for (const card of allTimedCards) {
+    const key = bucketKeyForDueDate(card.due_date, today);
+    derivedBuckets[key === "later" ? "beyond" : key].push(card);
+  }
+
+  return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      {/* 5 timed columns */}
+      <div className="flex gap-2.5 overflow-x-auto px-4 pb-3 nb-board-scroll">
+        {TIMED_COLUMN_BUCKETS.map((b) => (
+          <KanbanColumn
+            key={b.key}
+            bucketKey={b.key}
+            label={b.label}
+            dotClass={b.dotClass}
+            glow={b.glow}
+            cards={sortCards(derivedBuckets[b.key] ?? [], filters.sort)}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
+
+      {/* 2 state trays */}
+      <div className="flex gap-2.5 px-4 pb-4">
+        <StateTray
+          trayKey="waiting"
+          label="Waiting"
+          dotClass="bg-purple-400"
+          glow="#a78bfa"
+          cards={result.waiting}
+          onOpen={onOpen}
+        />
+        <StateTray
+          trayKey="done"
+          label="Done"
+          dotClass="bg-emerald-400"
+          glow="#34d399"
+          cards={result.done}
+          onOpen={onOpen}
+        />
+      </div>
+
+      {/* Drag overlay — lifted ghost card */}
+      <DragOverlay dropAnimation={null}>
+        {activeCard && (
+          <div className="w-48 rotate-1 rounded-xl border border-indigo-400/25 bg-neutral-800/95 px-3 py-2.5 shadow-2xl shadow-black/70 ring-1 ring-white/[0.06] backdrop-blur-sm">
+            <p className="line-clamp-3 text-[13px] leading-snug text-neutral-100">
+              {activeCard.content}
+            </p>
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+// ── Kanban column (droppable) ─────────────────────────────────────────────────
+
+function KanbanColumn({
+  bucketKey,
+  label,
+  dotClass,
+  glow,
+  cards,
+  onOpen,
+}: {
+  bucketKey: string;
+  label: string;
+  dotClass: string;
+  glow: string;
+  cards: BucketedNote[];
+  onOpen: (noteId: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: bucketKey });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex min-w-[180px] flex-1 flex-col rounded-xl border transition-all duration-300 ${
+        isOver
+          ? "border-white/[0.13] scale-[1.01]"
+          : "border-white/[0.05]"
+      }`}
+      style={{
+        background: isOver
+          ? `radial-gradient(ellipse at 50% 105%, ${glow}20 0%, transparent 62%), rgb(19 20 22)`
+          : `radial-gradient(ellipse at 50% 105%, ${glow}0e 0%, transparent 62%), rgb(19 20 22)`,
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-1.5 px-3 py-2.5">
+        <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotClass}`} />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+          {label}
+        </span>
+        <span className="ml-auto text-[11px] tabular-nums text-neutral-700">
+          {cards.length || ""}
+        </span>
+      </div>
+
+      {/* Card stack — min height keeps column droppable when empty */}
+      <div className="flex min-h-[180px] flex-1 flex-col gap-1.5 px-2 pb-2">
+        {cards.map((card) => (
+          <DraggableCard key={card.note_id} card={card} onOpen={onOpen} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── State tray (droppable, cards not draggable) ────────────────────────────────
+
+function StateTray({
+  trayKey,
+  label,
+  dotClass,
+  glow,
+  cards,
+  onOpen,
+}: {
+  trayKey: string;
+  label: string;
+  dotClass: string;
+  glow: string;
+  cards: BucketedNote[];
+  onOpen: (noteId: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: trayKey });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-1 rounded-xl border transition-all duration-300 ${
+        isOver
+          ? "border-white/[0.13] scale-[1.005]"
+          : "border-white/[0.05]"
+      }`}
+      style={{
+        background: isOver
+          ? `radial-gradient(ellipse at 50% 110%, ${glow}1c 0%, transparent 55%), rgb(19 20 22)`
+          : `radial-gradient(ellipse at 50% 110%, ${glow}0a 0%, transparent 55%), rgb(19 20 22)`,
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-1.5 px-3 py-2">
+        <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotClass}`} />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+          {label}
+        </span>
+        <span className="ml-auto text-[11px] tabular-nums text-neutral-700">
+          {cards.length || ""}
+        </span>
+      </div>
+
+      {/* Cards (horizontal scroll for compactness) */}
+      {cards.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-2 pb-2">
+          {cards.map((card) => (
+            <button
+              key={card.note_id}
+              type="button"
+              onClick={() => onOpen(card.note_id)}
+              className="w-full rounded-lg border border-white/[0.05] bg-neutral-800/30 px-2.5 py-1.5 text-left transition-colors hover:bg-neutral-800/60"
+            >
+              <p className="line-clamp-2 text-[12px] leading-snug text-neutral-400">
+                {card.content}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Drop hint when empty */}
+      {cards.length === 0 && (
+        <p className={`px-3 pb-2.5 text-[11px] transition-colors ${
+          isOver ? "text-neutral-500" : "text-neutral-800"
+        }`}>
+          Drop here
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Draggable card wrapper ────────────────────────────────────────────────────
+
+function DraggableCard({
+  card,
+  onOpen,
+}: {
+  card: BucketedNote;
+  onOpen: (noteId: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: card.note_id,
+    data: { card },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
+      className={`touch-none transition-opacity duration-150 ${isDragging ? "opacity-20 scale-95" : ""}`}
+      {...listeners}
+      {...attributes}
+    >
+      <ActionCardItem card={card} onOpen={onOpen} />
     </div>
   );
 }
@@ -527,58 +889,6 @@ function ActionsBoardToolbar({
   );
 }
 
-// ── Timed group ───────────────────────────────────────────────────────────────
-
-function TimedGroup({
-  bucket,
-  cards,
-  collapsed,
-  onToggle,
-  onOpen,
-}: {
-  bucket: TimedBucket;
-  cards: BucketedNote[];
-  collapsed: boolean;
-  onToggle: () => void;
-  onOpen: (noteId: string) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-white/[0.05] bg-neutral-900/60">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
-      >
-        <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${bucket.dotClass}`} />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-          {bucket.label}
-        </span>
-        <span className="text-[11px] text-neutral-600">{cards.length}</span>
-        <span className="ml-auto text-[10px] text-neutral-700">
-          {collapsed ? "▸" : "▾"}
-        </span>
-      </button>
-
-      {!collapsed && (
-        <ul className="space-y-1.5 px-2 pb-2">
-          {cards.map((card) => (
-            <ActionCardItem
-              key={card.note_id}
-              card={card}
-              onOpen={onOpen}
-              showState={
-                bucket.key === "waiting" || bucket.key === "done"
-                  ? (bucket.key as ActionState)
-                  : undefined
-              }
-            />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 // ── Flagged group ─────────────────────────────────────────────────────────────
 
 function FlaggedGroup({
@@ -654,7 +964,7 @@ function ActionCardItem({
   return (
     <li
       onClick={() => onOpen(card.note_id)}
-      className="cursor-pointer rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-200 ease-out hover:scale-[1.005] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45"
+      className="cursor-pointer rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-150 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/40"
     >
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 line-clamp-3 whitespace-pre-wrap text-sm leading-tight text-neutral-100">
@@ -668,29 +978,25 @@ function ActionCardItem({
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {/* State badge (shown in waiting/done buckets for clarity) */}
         {showState && (
           <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATE_CLASS[showState]}`}>
             {STATE_LABELS[showState]}
           </span>
         )}
 
-        {/* Due date badge */}
-        {card.effective_due_date && (
+        {card.due_date && (
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              isOverdue(card.effective_due_date) && card.action_state !== "done"
+              isOverdue(card.due_date) && card.action_state !== "done"
                 ? "bg-red-950/60 text-red-400"
                 : "bg-neutral-800/60 text-neutral-500"
             }`}
           >
             {card.action_state === "done" ? "Was due" : "Due"}{" "}
-            {formatActionDate(card.effective_due_date)}
-            {card.personal_due_date ? " (personal)" : ""}
+            {formatActionDate(card.due_date)}
           </span>
         )}
 
-        {/* Private tags (timed mode) — up to 2 shown */}
         {card.action_mode !== "flagged" && card.private_tags.length > 0 && (
           <>
             {card.private_tags.slice(0, 2).map((tag) => (
@@ -713,7 +1019,7 @@ function ActionCardItem({
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Date helpers ──────────────────────────────────────────────────────────────
 
 function formatActionDate(dateStr: string): string | null {
   const d = new Date(dateStr + "T00:00:00");

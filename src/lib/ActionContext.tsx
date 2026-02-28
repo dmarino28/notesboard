@@ -10,6 +10,7 @@ type ActionContextValue = {
   onTagsChange: (noteId: string, tags: string[]) => void;
   onModeChange: (noteId: string, mode: ActionMode) => void;
   onDueDateChange: (noteId: string, date: string | null) => void;
+  onToggleInActions: (noteId: string, inActions: boolean) => void;
   onCreateTagDef: (name: string) => Promise<TagDef | null>;
 };
 
@@ -20,6 +21,7 @@ const DEFAULT: ActionContextValue = {
   onTagsChange: () => {},
   onModeChange: () => {},
   onDueDateChange: () => {},
+  onToggleInActions: () => {},
   onCreateTagDef: async () => null,
 };
 

@@ -6,7 +6,6 @@ type RawActionRow = {
   note_id: string;
   action_state: string;
   action_mode: string;
-  personal_due_date: string | null;
   private_tags: string[];
   notes:
     | { id: string; content: string; due_date: string | null }
@@ -30,6 +29,16 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
+/** Upcoming Friday — returns today if today is Friday. */
+function upcomingFriday(from: Date): Date {
+  const d = new Date(from);
+  const day = d.getDay(); // 0=Sun … 5=Fri
+  if (day === 5) return d;
+  const daysUntil = (5 - day + 7) % 7;
+  d.setDate(d.getDate() + daysUntil);
+  return d;
+}
+
 export async function GET(req: NextRequest) {
   const auth = await getAuthedSupabase(req);
   if (!auth) {
@@ -40,12 +49,19 @@ export async function GET(req: NextRequest) {
   const { data, error } = await client
     .from("note_user_actions")
     .select(
-      "note_id, action_state, action_mode, personal_due_date, private_tags, notes(id, content, due_date)",
+      "note_id, action_state, action_mode, private_tags, notes(id, content, due_date)",
     )
     .in("action_state", ["needs_action", "waiting", "done"])
+    .eq("is_in_actions", true)
     .order("created_at", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[/api/actions/my] Supabase query error:", error);
+    return NextResponse.json(
+      { error: error.message, code: error.code, details: error.details },
+      { status: 500 },
+    );
+  }
 
   const rows = (data ?? []) as RawActionRow[];
 
@@ -65,8 +81,7 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  const thisWeekEnd = new Date(todayStart);
-  thisWeekEnd.setDate(thisWeekEnd.getDate() + 7);
+  const thisFriday = upcomingFriday(todayStart);
 
   const result: MyActionsResult = {
     overdue: [],
@@ -83,7 +98,8 @@ export async function GET(req: NextRequest) {
     const note = resolveNote(row.notes);
     if (!note) continue;
 
-    const effectiveDue = row.personal_due_date ?? note.due_date;
+    // Canonical due date: notes.due_date only.
+    const dueDate = note.due_date;
     const action_mode = (row.action_mode === "flagged" ? "flagged" : "timed") as BucketedNote["action_mode"];
 
     const card: BucketedNote = {
@@ -91,8 +107,7 @@ export async function GET(req: NextRequest) {
       content: note.content,
       action_state: row.action_state as BucketedNote["action_state"],
       action_mode,
-      personal_due_date: row.personal_due_date,
-      effective_due_date: effectiveDue,
+      due_date: dueDate,
       private_tags: row.private_tags ?? [],
       is_inbox: inboxSet.has(row.note_id),
     };
@@ -103,17 +118,18 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    // Timed items: bucket by action_state then effective_due_date
+    // Waiting / Done — bucketed by action_state; due_date is informational only
     if (row.action_state === "done") {
       result.done.push(card);
     } else if (row.action_state === "waiting") {
       result.waiting.push(card);
     } else {
-      if (!effectiveDue) {
+      // needs_action: bucket by notes.due_date
+      if (!dueDate) {
         result.beyond.push(card);
         continue;
       }
-      const [y, m, d] = effectiveDue.split("-").map(Number);
+      const [y, m, d] = dueDate.split("T")[0].split("-").map(Number);
       const due = new Date(y, m - 1, d);
 
       if (due < todayStart) {
@@ -122,7 +138,7 @@ export async function GET(req: NextRequest) {
         result.today.push(card);
       } else if (sameDay(due, tomorrowStart)) {
         result.tomorrow.push(card);
-      } else if (due <= thisWeekEnd) {
+      } else if (due <= thisFriday) {
         result.this_week.push(card);
       } else {
         result.beyond.push(card);

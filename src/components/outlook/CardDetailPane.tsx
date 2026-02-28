@@ -19,13 +19,6 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function openBrowserUrl(url: string) {
-  if (typeof Office !== "undefined") {
-    try { Office.context.ui.openBrowserWindow(url); return; } catch {}
-  }
-  window.open(url, "_blank");
-}
-
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -34,12 +27,6 @@ function relativeTime(iso: string | null): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
-}
-
-function owaBase(mailbox: string | null): string {
-  const domain = (mailbox ?? "").split("@")[1]?.toLowerCase() ?? "";
-  const isConsumer = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(domain);
-  return isConsumer ? "https://outlook.live.com" : "https://outlook.office.com";
 }
 
 // Save status dot colours
@@ -89,6 +76,7 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
   const [threads, setThreads]             = useState<EmailThreadRow[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [openError, setOpenError]         = useState<string | null>(null);
+  const [threadOpenMode, setThreadOpenMode] = useState<Record<string, "conversation" | "message">>({});
 
   // ── Link-current state ────────────────────────────────────────────────────────
   const [linkCurrentState, setLinkCurrentState] = useState<"idle" | "linking" | "done" | "error">("idle");
@@ -116,7 +104,7 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
       // Restore action state (null = no action set)
       const action = actionResult[noteId];
       setAddinActionState(action?.action_state ?? null);
-      setAddinPersonalDue(action?.personal_due_date ?? "");
+      setAddinPersonalDue("");
 
       const c = noteResult.data?.content ?? "";
       setContent(c);
@@ -212,16 +200,36 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
   }
 
   // ── Open thread ───────────────────────────────────────────────────────────────
-  function openThreadInOutlook(thread: EmailThreadRow) {
+  function openThreadInOutlook(thread: EmailThreadRow, mode: "conversation" | "message") {
     setOpenError(null);
-    if (thread.web_link) { openBrowserUrl(thread.web_link); return; }
-    const subject = thread.subject?.trim() ?? "";
-    if (!subject) {
-      setOpenError("No subject — find this thread manually in Outlook.");
+
+    if (mode === "conversation") {
+      if (!thread.conversation_id) {
+        setOpenError("No conversation ID — cannot open this thread.");
+        return;
+      }
+      console.log("[addin:openThread] conversation", thread.conversation_id);
+      // displayConversationAsync is available in Mailbox requirement set 1.9+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Office.context.mailbox as any).displayConversationAsync(
+        thread.conversation_id,
+        (result: Office.AsyncResult<void>) => {
+          if (result.status === Office.AsyncResultStatus.Failed) {
+            console.error("[addin:openThread] displayConversationAsync failed", result.error);
+            setOpenError(`Could not open conversation: ${result.error.message}`);
+          }
+        },
+      );
       return;
     }
-    const url = `${owaBase(thread.mailbox)}/mail/search?q=${encodeURIComponent(`"${subject}"`)}`;
-    openBrowserUrl(url);
+
+    // message mode
+    if (!thread.message_id) {
+      setOpenError("No message ID — cannot open this message.");
+      return;
+    }
+    console.log("[addin:openThread] message", thread.message_id);
+    Office.context.mailbox.displayMessageForm(thread.message_id);
   }
 
   // ── Link current email ────────────────────────────────────────────────────────
@@ -260,7 +268,7 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
     const next = cycleActionState(addinActionState);
     setAddinActionState(next === "none" ? null : next);
     setAddinActionSaving(true);
-    await setNoteAction(noteId, next, addinPersonalDue || null);
+    await setNoteAction(noteId, next);
     setAddinActionSaving(false);
   }
 
@@ -268,7 +276,7 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
     setAddinPersonalDue(value);
     if (!addinActionState) return; // only persist if there's an active state
     setAddinActionSaving(true);
-    await setNoteAction(noteId, addinActionState, value || null);
+    await setNoteAction(noteId, addinActionState);
     setAddinActionSaving(false);
   }
 
@@ -422,9 +430,29 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
                         </>
                       )}
                     </div>
+                    {/* Conversation / Message toggle */}
+                    <div className="flex items-center rounded border border-white/[0.07] overflow-hidden w-fit">
+                      {(["conversation", "message"] as const).map((m) => {
+                        const active = (threadOpenMode[t.id] ?? "conversation") === m;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setThreadOpenMode((prev) => ({ ...prev, [t.id]: m }))}
+                            className={`px-2 py-0.5 text-[10px] capitalize transition-colors cursor-pointer ${
+                              active
+                                ? "bg-white/[0.10] text-neutral-300"
+                                : "text-neutral-600 hover:text-neutral-400"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => openThreadInOutlook(t)}
+                      onClick={() => openThreadInOutlook(t, threadOpenMode[t.id] ?? "conversation")}
                       className="w-full cursor-pointer rounded-lg bg-neutral-800 px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 transition-colors duration-150 hover:bg-neutral-700 hover:text-neutral-200 active:bg-neutral-600"
                     >
                       Open in Outlook →

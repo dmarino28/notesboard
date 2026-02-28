@@ -3,20 +3,13 @@ import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 
 type RequestBody = {
   note_id: string;
-  // Explicit remove
+  // Toggle timed-board visibility
   in_my_actions?: boolean;
   // Settable fields
   action_state?: string;
   action_mode?: string;
-  personal_due_date?: string | null;
+  is_in_actions?: boolean;
   private_tags?: string[];
-};
-
-type RowShape = {
-  action_state: string;
-  action_mode: string;
-  personal_due_date: string | null;
-  private_tags: string[];
 };
 
 const VALID_STATES = ["needs_action", "waiting", "done"];
@@ -36,14 +29,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { note_id, in_my_actions, action_state, action_mode, personal_due_date, private_tags } = body;
+  const { note_id, in_my_actions, action_state, action_mode, is_in_actions, private_tags } = body;
   if (!note_id) {
     return NextResponse.json({ error: "note_id required" }, { status: 400 });
   }
 
-  // Explicit remove: in_my_actions: false OR action_state: "none"
-  const shouldRemove = in_my_actions === false || action_state === "none";
-  if (shouldRemove) {
+  // in_my_actions: false → set is_in_actions = false (keeps the row + action_state intact)
+  if (in_my_actions === false) {
+    const { error } = await client
+      .from("note_user_actions")
+      .update({ is_in_actions: false, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("note_id", note_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ removed: true });
+  }
+
+  // action_state: "none" → remove entirely (legacy hard-remove, e.g. "Remove from My Actions" opt-out)
+  if (action_state === "none") {
     const { error } = await client
       .from("note_user_actions")
       .delete()
@@ -67,7 +70,7 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       note_id,
       action_state,
-      personal_due_date: personal_due_date ?? null,
+      is_in_actions: true,
       updated_at: new Date().toISOString(),
     };
     if (action_mode !== undefined) upsertData.action_mode = action_mode;
@@ -90,7 +93,6 @@ export async function POST(req: NextRequest) {
         upsertData.waiting_mailbox = t.mailbox;
       }
     } else {
-      // Clear waiting fields when transitioning away from 'waiting'
       upsertData.waiting_conversation_id = null;
       upsertData.waiting_since_at = null;
       upsertData.waiting_mailbox = null;
@@ -99,22 +101,22 @@ export async function POST(req: NextRequest) {
     const { data, error } = await client
       .from("note_user_actions")
       .upsert(upsertData, { onConflict: "user_id,note_id" })
-      .select("action_state, action_mode, personal_due_date, private_tags")
+      .select("action_state, action_mode, is_in_actions, private_tags")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    const row = data as RowShape;
+    const row = data as { action_state: string; action_mode: string; is_in_actions: boolean; private_tags: string[] };
     return NextResponse.json({
       action_state: row.action_state,
       action_mode: row.action_mode,
-      personal_due_date: row.personal_due_date,
+      is_in_actions: row.is_in_actions,
       private_tags: row.private_tags,
     });
   }
 
   // Path B: Partial update — only updates the provided subset of fields
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (personal_due_date !== undefined) patch.personal_due_date = personal_due_date;
+  if (is_in_actions !== undefined) patch.is_in_actions = is_in_actions;
   if (private_tags !== undefined) patch.private_tags = private_tags;
   if (action_mode !== undefined) patch.action_mode = action_mode;
 
@@ -127,15 +129,15 @@ export async function POST(req: NextRequest) {
     .update(patch)
     .eq("user_id", user.id)
     .eq("note_id", note_id)
-    .select("action_state, action_mode, personal_due_date, private_tags")
+    .select("action_state, action_mode, is_in_actions, private_tags")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const row = data as RowShape;
+  const row = data as { action_state: string; action_mode: string; is_in_actions: boolean; private_tags: string[] };
   return NextResponse.json({
     action_state: row.action_state,
     action_mode: row.action_mode,
-    personal_due_date: row.personal_due_date,
+    is_in_actions: row.is_in_actions,
     private_tags: row.private_tags,
   });
 }

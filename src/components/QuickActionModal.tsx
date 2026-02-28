@@ -36,7 +36,7 @@ export function QuickActionModal({ tagDefs, onCreated, onClose }: Props) {
       description: description.trim() || undefined,
       action_mode: mode,
       action_state: "needs_action",
-      personal_due_date: mode === "timed" && dueDate ? dueDate : null,
+      due_date: mode === "timed" && dueDate ? dueDate : null,
       private_tags: mode === "flagged" ? selectedTags : [],
     });
     setSaving(false);

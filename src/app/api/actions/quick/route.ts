@@ -22,35 +22,32 @@ export async function POST(req: NextRequest) {
   const action_mode: ActionMode = VALID_MODES.includes(body?.action_mode)
     ? body.action_mode
     : "timed";
-  const personal_due_date =
-    typeof body?.personal_due_date === "string" && body.personal_due_date
-      ? body.personal_due_date
-      : null;
+  // due_date for the note (YYYY-MM-DD or null) — canonical, goes on notes.due_date
+  const due_date: string | null =
+    typeof body?.due_date === "string" && body.due_date ? body.due_date : null;
   const private_tags = Array.isArray(body?.private_tags)
     ? (body.private_tags as unknown[]).filter((t) => typeof t === "string")
     : [];
 
-  // 1. Create the note (board_id is nullable for inbox notes)
+  // 1. Create the note with due_date on the notes row
   const { data: note, error: noteError } = await client
     .from("notes")
-    .insert({ content: title, description })
+    .insert({ content: title, description, due_date })
     .select("id")
     .single();
 
   if (noteError) return NextResponse.json({ error: noteError.message }, { status: 500 });
 
-  // 2. Create the user action row
+  // 2. Create the user action row (is_in_actions defaults to true)
   const { error: actionError } = await client.from("note_user_actions").insert({
     user_id: user.id,
     note_id: note.id,
     action_state,
     action_mode,
-    personal_due_date,
     private_tags,
   });
 
   if (actionError) {
-    // Roll back the note on failure
     await client.from("notes").delete().eq("id", note.id);
     return NextResponse.json({ error: actionError.message }, { status: 500 });
   }

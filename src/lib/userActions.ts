@@ -6,7 +6,7 @@ export type ActionMode = "timed" | "flagged";
 export type UserActionRow = {
   action_state: ActionState;
   action_mode: ActionMode;
-  personal_due_date: string | null;
+  is_in_actions: boolean;
   private_tags: string[];
 };
 
@@ -24,8 +24,8 @@ export type BucketedNote = {
   content: string;
   action_state: ActionState;
   action_mode: ActionMode;
-  personal_due_date: string | null;
-  effective_due_date: string | null;
+  /** Canonical due date from notes.due_date — drives timed bucket placement. */
+  due_date: string | null;
   private_tags: string[];
   is_inbox: boolean;
 };
@@ -99,7 +99,6 @@ export async function fetchActionsForNotes(noteIds: string[]): Promise<NoteActio
 export async function setNoteAction(
   noteId: string,
   state: ActionState | "none",
-  personalDueDate?: string | null,
 ): Promise<UserActionRow | null> {
   const headers = await getAuthHeaders();
   try {
@@ -109,7 +108,6 @@ export async function setNoteAction(
       body: JSON.stringify({
         note_id: noteId,
         action_state: state,
-        personal_due_date: personalDueDate ?? null,
       }),
     });
     if (!res.ok) return null;
@@ -117,7 +115,7 @@ export async function setNoteAction(
       deleted?: boolean;
       action_state?: ActionState;
       action_mode?: ActionMode;
-      personal_due_date?: string | null;
+      is_in_actions?: boolean;
       private_tags?: string[];
     };
     if (json.deleted) return null;
@@ -125,7 +123,7 @@ export async function setNoteAction(
       return {
         action_state: json.action_state,
         action_mode: json.action_mode ?? "timed",
-        personal_due_date: json.personal_due_date ?? null,
+        is_in_actions: json.is_in_actions ?? true,
         private_tags: json.private_tags ?? [],
       };
     }
@@ -143,7 +141,7 @@ export async function patchNoteAction(
   noteId: string,
   patch: {
     action_mode?: ActionMode;
-    personal_due_date?: string | null;
+    is_in_actions?: boolean;
     private_tags?: string[];
   },
 ): Promise<void> {
@@ -163,6 +161,10 @@ export async function updateNoteActionTags(noteId: string, tags: string[]): Prom
   return patchNoteAction(noteId, { private_tags: tags });
 }
 
+/**
+ * Sets is_in_actions = false on the user's action row for this note.
+ * Keeps the row and action_state intact — the note can be re-added later.
+ */
 export async function removeNoteAction(noteId: string): Promise<void> {
   const headers = await getAuthHeaders();
   try {
@@ -170,6 +172,43 @@ export async function removeNoteAction(noteId: string): Promise<void> {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ note_id: noteId, in_my_actions: false }),
+    });
+  } catch {
+    // Best-effort
+  }
+}
+
+/**
+ * Upserts a note_user_actions row with is_in_actions=true.
+ * Used when user explicitly adds a note back to the timed board.
+ */
+export async function addNoteToActions(noteId: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  try {
+    await fetch("/api/actions/set", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ note_id: noteId, action_state: "needs_action", is_in_actions: true }),
+    });
+  } catch {
+    // Best-effort
+  }
+}
+
+/**
+ * Updates notes.due_date via /api/notes/[noteId]/due.
+ * Also auto-adds a note_user_actions row if none exists yet (first-time due_date set).
+ */
+export async function updateNoteDueDate(
+  noteId: string,
+  date: string | null,
+): Promise<void> {
+  const headers = await getAuthHeaders();
+  try {
+    await fetch(`/api/notes/${noteId}/due`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ due_date: date }),
     });
   } catch {
     // Best-effort
@@ -253,7 +292,8 @@ export type QuickActionInput = {
   description?: string;
   action_mode: ActionMode;
   action_state?: ActionState;
-  personal_due_date?: string | null;
+  /** YYYY-MM-DD — stored on notes.due_date, drives timed bucketing. */
+  due_date?: string | null;
   private_tags?: string[];
 };
 

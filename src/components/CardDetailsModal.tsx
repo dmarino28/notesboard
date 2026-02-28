@@ -34,6 +34,7 @@ import {
   listCollab,
   postNoteUpdate,
 } from "@/lib/collab";
+import { updateNoteDueDate } from "@/lib/userActions";
 
 // Minimal shape the modal needs from a note — works for both NoteRow and PlacedNoteRow
 type NoteInput = {
@@ -87,13 +88,14 @@ export function CardDetailsModal({
     onActionChange,
     onTagsChange,
     onModeChange,
-    onDueDateChange: onPersonalDueDateChange,
+    onDueDateChange,
+    onToggleInActions,
     onCreateTagDef,
   } = useActions();
   const currAction = (actionMap[noteId]?.action_state ?? null) as ActionState | null;
   const currMode: ActionMode = actionMap[noteId]?.action_mode ?? "timed";
   const currTags = actionMap[noteId]?.private_tags ?? [];
-  const currPersonalDue = actionMap[noteId]?.personal_due_date ?? null;
+  const isInActions = actionMap[noteId]?.is_in_actions ?? false;
 
   // --- Local field state ---
   const [title, setTitle] = useState(note.content);
@@ -284,9 +286,14 @@ export function CardDetailsModal({
 
   function handleDueDateChange(v: string) {
     setDueDate(v);
+    // YYYY-MM-DD for the canonical actions date; full ISO for the note display
+    const dateStr = v ? v.slice(0, 10) : null;
     const iso = v ? new Date(v).toISOString() : null;
     onNoteChange(noteId, { due_date: iso });
-    scheduleFieldSave({ due_date: iso });
+    // Route through /api/notes/[noteId]/due — updates notes.due_date + auto-adds to actions
+    void updateNoteDueDate(noteId, dateStr);
+    // Also update via ActionContext so the actions page rawResult stays in sync
+    onDueDateChange(noteId, dateStr);
   }
 
   function handleEventStartChange(v: string) {
@@ -472,10 +479,6 @@ export function CardDetailsModal({
     onTagsChange(noteId, updated);
   }
 
-  function handlePersonalDueDateChange(date: string | null) {
-    onPersonalDueDateChange(noteId, date);
-  }
-
   function handleToggleGroup(groupName: string) {
     const updated = currTags.includes(groupName)
       ? currTags.filter((t) => t !== groupName)
@@ -535,27 +538,43 @@ export function CardDetailsModal({
 
   // ------------------------------------------------------------------ email threads
 
-  /** Encodes a conversation_id for use in an Outlook readconv deeplink URL. */
-  function encodeConversationId(id: string): string {
-    return encodeURIComponent(id).replace(/_/g, "%2B");
-  }
-
   /**
-   * Builds the Outlook conversation deeplink URL.
-   * Base domain is derived from thread.web_link if available (preserves the
-   * correct Outlook endpoint for the user's account type), otherwise defaults
-   * to outlook.live.com.
+   * Builds the Outlook conversation URL.
+   * Base origin is derived from thread.web_link if available, else outlook.live.com.
+   *
+   * Outlook Live personal: /mail/0/id/<conversationId>[?q="<subject>"]
+   * Outlook Live fallback:  /mail/0/?q="<subject>"  (no conversation_id)
+   * Enterprise (M365/OWA):  /mail/0/deeplink/readconv/<encodedId>
+   *
+   * Returns null if there is not enough data to build any useful URL.
    */
-  function buildConversationUrl(thread: EmailThreadRow): string {
-    let baseOrigin = "https://outlook.live.com";
+  function buildConversationUrl(thread: EmailThreadRow): string | null {
+    let origin = "https://outlook.live.com";
     if (thread.web_link) {
       try {
-        baseOrigin = new URL(thread.web_link).origin;
+        origin = new URL(thread.web_link).origin;
       } catch {
         // fall through to default
       }
     }
-    return `${baseOrigin}/mail/0/deeplink/readconv/${encodeConversationId(thread.conversation_id)}`;
+    const host = new URL(origin).hostname;
+    if (host.includes("outlook.live.com")) {
+      const q = thread.subject
+        ? `?q=${encodeURIComponent(`"${thread.subject}"`)}`
+        : "";
+      if (thread.conversation_id) {
+        const encodedId = encodeURIComponent(thread.conversation_id);
+        return `${origin}/mail/0/id/${encodedId}${q}`;
+      }
+      if (thread.subject) {
+        return `${origin}/mail/0/${q}`;
+      }
+      return null;
+    }
+    // Enterprise OWA / M365 deeplink
+    if (!thread.conversation_id) return null;
+    const encodedId = encodeURIComponent(thread.conversation_id).replace(/_/g, "%2B");
+    return `${origin}/mail/0/deeplink/readconv/${encodedId}`;
   }
 
   /**
@@ -576,6 +595,12 @@ export function CardDetailsModal({
     if (mode === "conversation") {
       const url = buildConversationUrl(thread);
       console.log("[openThread] conversation mode", { conversationId: thread.conversation_id, url });
+      if (!url) {
+        const msg = "Not enough data to build a conversation URL for this thread.";
+        setEmailOpenError({ threadId: thread.id, msg });
+        onError(msg);
+        return;
+      }
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
@@ -835,25 +860,25 @@ export function CardDetailsModal({
               <span className="text-[11px] text-neutral-700">Visible only to you</span>
             </div>
             <div className="space-y-2">
-              {/* Opt-in toggle */}
+              {/* Opt-in toggle — controls is_in_actions on the timed board */}
               <button
                 type="button"
-                onClick={() => onActionChange(noteId, currAction ? "none" : "needs_action")}
+                onClick={() => onToggleInActions(noteId, !isInActions)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  currAction
+                  isInActions
                     ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
                     : "border-neutral-800 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
                 }`}
               >
                 <span
                   className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                    currAction ? "bg-indigo-400" : "bg-neutral-600"
+                    isInActions ? "bg-indigo-400" : "bg-neutral-600"
                   }`}
                 />
-                {currAction ? "In My Actions" : "Add to My Actions"}
+                {isInActions ? "In My Actions" : "Add to My Actions"}
               </button>
 
-              {currAction && (
+              {isInActions && (
                 <>
                   {/* State buttons */}
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -900,28 +925,6 @@ export function CardDetailsModal({
                       </button>
                     ))}
                   </div>
-
-                  {/* Timed: personal due date */}
-                  {currMode === "timed" && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-neutral-600">Personal due:</span>
-                      <input
-                        type="date"
-                        value={currPersonalDue ?? ""}
-                        onChange={(e) => handlePersonalDueDateChange(e.target.value || null)}
-                        className="rounded-md border border-neutral-800 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-300 outline-none focus:border-indigo-500/50"
-                      />
-                      {currPersonalDue && (
-                        <button
-                          type="button"
-                          onClick={() => handlePersonalDueDateChange(null)}
-                          className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  )}
 
                   {/* Timed: private categories */}
                   {currMode === "timed" && (

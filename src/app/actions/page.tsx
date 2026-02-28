@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { listBoards, type BoardRow } from "@/lib/boards";
 import {
   fetchMyActions,
   setNoteAction,
   patchNoteAction,
+  removeNoteAction,
+  addNoteToActions,
+  updateNoteDueDate,
   fetchTagDefs,
   createTagDef,
   fetchSavedViews,
@@ -63,8 +67,8 @@ function applyFiltersToResult(result: MyActionsResult, filters: ViewFilters): My
       if (!filters.categories.every((cat) => c.private_tags.includes(cat))) return false;
     }
     if (filters.dueFilter !== "all" && c.action_state === "needs_action") {
-      if (!c.effective_due_date) return false;
-      const [y, m, d] = c.effective_due_date.split("-").map(Number);
+      if (!c.due_date) return false;
+      const [y, m, d] = c.due_date.split("T")[0].split("-").map(Number);
       const due = new Date(y, m - 1, d);
       switch (filters.dueFilter) {
         case "overdue":   return due < today;
@@ -90,11 +94,15 @@ function applyFiltersToResult(result: MyActionsResult, filters: ViewFilters): My
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ActionsPage() {
+  // ── Auth state (resolved before any data fetch) ────────────────────────────
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+
   const [boards, setBoards] = useState<BoardRow[]>([]);
   const [rawResult, setRawResult] = useState<MyActionsResult | null>(null);
   const [tagDefs, setTagDefs] = useState<TagDef[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // ActionContext map
   const [actionMap, setActionMap] = useState<NoteActionMap>({});
@@ -125,14 +133,14 @@ export default function ActionsPage() {
 
   async function loadActions() {
     setLoading(true);
-    setNotFound(false);
+    setFetchError(null);
     const [data, views, defs] = await Promise.all([
       fetchMyActions(),
       fetchSavedViews(),
       fetchTagDefs(),
     ]);
     if (data === null) {
-      setNotFound(true);
+      setFetchError("Failed to load actions. Please try again.");
     } else {
       didLoadRef.current = true;
       setRawResult(data);
@@ -143,7 +151,7 @@ export default function ActionsPage() {
           map[card.note_id] = {
             action_state: card.action_state,
             action_mode: card.action_mode,
-            personal_due_date: card.personal_due_date,
+            is_in_actions: true,
             private_tags: card.private_tags,
           };
         }
@@ -155,12 +163,26 @@ export default function ActionsPage() {
     setLoading(false);
   }
 
-  useEffect(() => { void loadActions(); }, []);
-
+  // Resolve auth first; only then fetch actions.
   useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const resolved = data.user ?? null;
+      setUser(resolved);
+      setAuthLoading(false);
+      if (resolved) void loadActions();
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && !didLoadRef.current) {
+      const resolved = session?.user ?? null;
+      setUser(resolved);
+      if (resolved && !didLoadRef.current) {
         void loadActions();
+      }
+      if (!resolved) {
+        // Signed out — clear data
+        setRawResult(null);
+        setActionMap({});
+        didLoadRef.current = false;
       }
     });
     return () => subscription.unsubscribe();
@@ -190,6 +212,7 @@ export default function ActionsPage() {
 
   const handleActionChange = useCallback((noteId: string, next: ActionState | "none") => {
     if (next === "none") {
+      // Remove = set is_in_actions=false (row stays, action_state preserved)
       setRawResult((prev) => {
         if (!prev) return prev;
         const updated = { ...prev };
@@ -199,13 +222,14 @@ export default function ActionsPage() {
         return updated;
       });
       setActionMap((prev) => {
-        const { [noteId]: _removed, ...rest } = prev;
-        return rest;
+        const existing = prev[noteId];
+        if (!existing) return prev;
+        return { ...prev, [noteId]: { ...existing, is_in_actions: false } };
       });
+      void removeNoteAction(noteId);
     } else {
       setRawResult((prev) => {
         if (!prev) return prev;
-        // Update action_state in whichever bucket the card is currently in
         const updated = { ...prev };
         for (const key of ALL_BUCKET_KEYS) {
           updated[key] = (prev[key] as BucketedNote[]).map((c) =>
@@ -219,12 +243,12 @@ export default function ActionsPage() {
         [noteId]: {
           action_state: next,
           action_mode: prev[noteId]?.action_mode ?? "timed",
-          personal_due_date: prev[noteId]?.personal_due_date ?? null,
+          is_in_actions: prev[noteId]?.is_in_actions ?? true,
           private_tags: prev[noteId]?.private_tags ?? [],
         },
       }));
+      void setNoteAction(noteId, next);
     }
-    void setNoteAction(noteId, next);
   }, []);
 
   const handleTagsChange = useCallback((noteId: string, tags: string[]) => {
@@ -254,22 +278,96 @@ export default function ActionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Updates notes.due_date (canonical). ActionsBoard derives column from this. */
   const handleDueDateChange = useCallback((noteId: string, date: string | null) => {
-    setActionMap((prev) => ({
-      ...prev,
-      [noteId]: { ...prev[noteId], personal_due_date: date },
-    }));
     setRawResult((prev) => {
       if (!prev) return prev;
       const updated = { ...prev };
       for (const key of ALL_BUCKET_KEYS) {
         updated[key] = (prev[key] as BucketedNote[]).map((c) =>
-          c.note_id === noteId ? { ...c, personal_due_date: date } : c,
+          c.note_id === noteId ? { ...c, due_date: date } : c,
         ) as typeof prev[typeof key];
       }
       return updated;
     });
-    void patchNoteAction(noteId, { personal_due_date: date });
+    void updateNoteDueDate(noteId, date);
+  }, []);
+
+  // ── Kanban DnD drop handlers ───────────────────────────────────────────────
+
+  /** Drop onto a timed column: update notes.due_date in-place.
+   *  ActionsBoard derives column membership from due_date — no array movement needed. */
+  const handleCardDrop = useCallback((noteId: string, _targetBucket: string, newDate: string | null) => {
+    setRawResult((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      for (const key of ALL_BUCKET_KEYS) {
+        updated[key] = (prev[key] as BucketedNote[]).map((c) =>
+          c.note_id === noteId ? { ...c, due_date: newDate } : c,
+        ) as typeof prev[typeof key];
+      }
+      return updated;
+    });
+    void updateNoteDueDate(noteId, newDate);
+  }, []);
+
+  /** Drop onto a state tray (waiting/done): change action_state only, no due date change. */
+  const handleCardDropToTray = useCallback((noteId: string, tray: "waiting" | "done") => {
+    setActionMap((prev) => ({
+      ...prev,
+      [noteId]: { ...prev[noteId], action_state: tray },
+    }));
+    setRawResult((prev) => {
+      if (!prev) return prev;
+      let card: BucketedNote | null = null;
+      for (const key of ALL_BUCKET_KEYS) {
+        const found = (prev[key] as BucketedNote[]).find((c) => c.note_id === noteId);
+        if (found) { card = found; break; }
+      }
+      if (!card) return prev;
+      const updatedCard: BucketedNote = { ...card, action_state: tray };
+      const updated = { ...prev };
+      for (const key of ALL_BUCKET_KEYS) {
+        updated[key] = (prev[key] as BucketedNote[]).filter((c) => c.note_id !== noteId) as typeof prev[typeof key];
+      }
+      (updated[tray] as BucketedNote[]) = [...(updated[tray] as BucketedNote[]), updatedCard];
+      return updated;
+    });
+    void setNoteAction(noteId, tray);
+  }, []);
+
+  /** Toggle is_in_actions for a note (add/remove from timed board). */
+  const handleToggleInActions = useCallback((noteId: string, inActions: boolean) => {
+    setActionMap((prev) => {
+      const existing = prev[noteId];
+      if (!existing) return prev;
+      return { ...prev, [noteId]: { ...existing, is_in_actions: inActions } };
+    });
+    if (inActions) {
+      // Re-add: show it in timed board again
+      setRawResult((prev) => {
+        if (!prev) return prev;
+        // The card is still in its bucket (we kept the row); just update the flag
+        const updated = { ...prev };
+        for (const key of ALL_BUCKET_KEYS) {
+          // The card might have been filtered out of the current rawResult since
+          // is_in_actions=false. On re-add, trigger a full reload to restore it.
+        }
+        return updated;
+      });
+      void addNoteToActions(noteId).then(() => void loadActions());
+    } else {
+      setRawResult((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev };
+        for (const key of ALL_BUCKET_KEYS) {
+          updated[key] = (prev[key] as BucketedNote[]).filter((c) => c.note_id !== noteId) as typeof prev[typeof key];
+        }
+        return updated;
+      });
+      void removeNoteAction(noteId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateTagDef = useCallback(async (name: string): Promise<TagDef | null> => {
@@ -397,6 +495,7 @@ export default function ActionsPage() {
         onTagsChange: handleTagsChange,
         onModeChange: handleModeChange,
         onDueDateChange: handleDueDateChange,
+        onToggleInActions: handleToggleInActions,
         onCreateTagDef: handleCreateTagDef,
       }}
     >
@@ -407,11 +506,11 @@ export default function ActionsPage() {
           className="min-h-0 flex-1 overflow-hidden"
           style={{ background: "linear-gradient(150deg, #1b1e2e 0%, #13151f 60%, #101218 100%)" }}
         >
-          {loading ? (
+          {authLoading || loading ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm text-neutral-500">Loading…</p>
             </div>
-          ) : notFound ? (
+          ) : !user ? (
             <div className="flex h-full items-center justify-center">
               <div className="rounded-xl border border-white/[0.07] bg-neutral-900/60 p-6 text-center">
                 <p className="text-sm text-neutral-400">Sign in to use My Actions.</p>
@@ -424,6 +523,19 @@ export default function ActionsPage() {
                 >
                   Sign in
                 </Link>
+              </div>
+            </div>
+          ) : fetchError ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="rounded-xl border border-white/[0.07] bg-neutral-900/60 p-6 text-center">
+                <p className="text-sm text-neutral-400">{fetchError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadActions()}
+                  className="mt-3 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+                >
+                  Retry
+                </button>
               </div>
             </div>
           ) : (
@@ -443,6 +555,8 @@ export default function ActionsPage() {
               onManageGroups={() => setShowManageGroups(true)}
               onCheckWaiting={handlePollWaiting}
               checkWaitingBusy={checkWaitingBusy}
+              onCardDrop={handleCardDrop}
+              onCardDropToTray={handleCardDropToTray}
             />
           )}
         </div>

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await client
     .from("note_user_actions")
-    .select("note_id, action_state, action_mode, personal_due_date, private_tags")
+    .select("note_id, action_state, action_mode, is_in_actions, private_tags")
     .in("note_id", ids);
 
   if (error || !data) return NextResponse.json({} satisfies NoteActionMap);
@@ -25,13 +25,13 @@ export async function GET(req: NextRequest) {
     note_id: string;
     action_state: string;
     action_mode: string;
-    personal_due_date: string | null;
+    is_in_actions: boolean;
     private_tags: string[];
   }[]) {
     map[row.note_id] = {
       action_state: row.action_state as NoteActionMap[string]["action_state"],
       action_mode: (row.action_mode === "flagged" ? "flagged" : "timed") as NoteActionMap[string]["action_mode"],
-      personal_due_date: row.personal_due_date,
+      is_in_actions: row.is_in_actions ?? true,
       private_tags: row.private_tags ?? [],
     };
   }
