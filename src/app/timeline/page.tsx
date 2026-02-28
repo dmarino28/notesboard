@@ -242,10 +242,10 @@ export default function TimelinePage() {
           totalCount={totalCount}
         />
 
-        {/* Range controls — sticky below the page header */}
-        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-3 border-b border-white/[0.07] bg-neutral-950 px-4 py-2">
+        {/* Range controls — sticky; overflow-x-auto on mobile to prevent wrapping */}
+        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-2 overflow-x-auto border-b border-white/[0.07] bg-neutral-950 px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* Range type selector */}
-          <div className="flex items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
             {(["7d", "30d", "month"] as RangeType[]).map((t) => (
               <button
                 key={t}
@@ -262,7 +262,7 @@ export default function TimelinePage() {
           </div>
 
           {/* Prev / Today / Next */}
-          <div className="flex items-center gap-0.5">
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
               onClick={prev}
               className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
@@ -285,7 +285,7 @@ export default function TimelinePage() {
             </button>
           </div>
 
-          <span className="text-sm font-medium text-neutral-200">
+          <span className="shrink-0 text-sm font-medium text-neutral-200">
             {formatRangeLabel(rangeType, rangeStart, rangeEnd)}
           </span>
         </div>

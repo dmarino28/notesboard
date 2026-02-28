@@ -85,7 +85,8 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.22 : undefined,
+    opacity: isDragging ? 0.45 : undefined,
+    filter: isDragging ? "brightness(1.1)" : undefined,
     ...(tintColor
       ? {
           backgroundColor: hexToRgba(tintColor, 0.07),
@@ -130,7 +131,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-200 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45${tintColor ? " nb-card-glow" : ""}`}
+      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-150 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45${tintColor ? " nb-card-glow" : ""}${isDragging ? " scale-[1.02] shadow-2xl ring-1 ring-indigo-400/30" : ""}`}
     >
       {/* Per-user unseen dot — indigo, top-right */}
       {isUnseen && (

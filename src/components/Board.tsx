@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
+  MeasuringStrategy,
+  rectIntersection,
   useSensor,
   useSensors,
-  closestCorners,
   type DragStartEvent,
   type DragOverEvent,
   type DragEndEvent,
@@ -101,7 +103,10 @@ export function Board({
   const displayColumns = isDraggingColumn ? localColumns : sortedColumns;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    // Desktop: instant drag on mouse move ≥ 8px
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    // Mobile: press-and-hold 260ms before drag activates; up to 8px movement tolerated
+    useSensor(TouchSensor, { activationConstraint: { delay: 260, tolerance: 8 } }),
   );
 
   function toggleCollapse(colId: string) {
@@ -296,6 +301,15 @@ export function Board({
     await onReorderNotes([{ id: placementId, column_id: targetColumnId, position }]);
   }
 
+  // ─── Drag Cancel ────────────────────────────────────────────────────────
+
+  function handleDragCancel() {
+    setActiveNote(null);
+    setActiveColumn(null);
+    setIsDraggingNote(false);
+    setIsDraggingColumn(false);
+  }
+
   // ─── Mobile: scroll to a column tab ─────────────────────────────────────
 
   function scrollToColumn(colId: string) {
@@ -343,10 +357,12 @@ export function Board({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={rectIntersection}
+      measuring={{ droppable: { strategy: MeasuringStrategy.WhileDragging } }}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       {/* ── Desktop: full DnD kanban (hidden on mobile) ─────────────────────── */}
       <div className="hidden h-full sm:block">
@@ -415,11 +431,15 @@ export function Board({
           </div>
         </div>
 
-        {/* Swipe columns — one per full viewport width, snap-scroll */}
+        {/* Swipe columns — snap-scroll; snap/pan disabled during drag to avoid conflict */}
         <div
           ref={swipeRef}
-          onScroll={handleSwipeScroll}
-          className="flex min-h-0 flex-1 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={isDraggingNote ? undefined : handleSwipeScroll}
+          className={`flex min-h-0 flex-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+            isDraggingNote
+              ? "touch-none overflow-hidden"
+              : "touch-pan-x overflow-x-auto scroll-smooth snap-x snap-mandatory"
+          }`}
         >
           {displayColumns.map((col) => {
             const colNotes = getNotesForColumn(col.id);
@@ -457,7 +477,7 @@ export function Board({
 
       <DragOverlay>
         {activeNote && (
-          <div className="w-72 rounded-xl border border-white/[0.12] bg-neutral-800/80 p-3 shadow-2xl shadow-black/60">
+          <div className="w-72 scale-[1.03] rounded-xl border border-indigo-400/20 bg-neutral-800/95 p-3 shadow-2xl shadow-black/70 ring-1 ring-indigo-400/20">
             <p className="whitespace-pre-wrap text-sm text-neutral-200">{activeNote.content}</p>
           </div>
         )}

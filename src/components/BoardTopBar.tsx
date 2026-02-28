@@ -77,7 +77,7 @@ export function BoardTopBar({
   );
 
   return (
-    <header className="relative z-10 flex-shrink-0 border-b border-white/[0.05] bg-neutral-950/60 shadow-sm shadow-black/20 backdrop-blur-md">
+    <header className="relative z-10 flex-shrink-0 border-b border-white/[0.05] bg-neutral-950/60 pt-[env(safe-area-inset-top,0px)] shadow-sm shadow-black/20 backdrop-blur-md">
 
       {/* ── Mobile layout: two rows (hidden on sm+) ──────────────────────────── */}
       <div className="sm:hidden">
