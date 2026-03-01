@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { BoardRow, ReleaseScheduleItem } from "@/lib/boards";
 import type { PlacedNoteRow } from "@/lib/placements";
 import { timedLabelForDueDate } from "@/lib/dateUtils";
@@ -206,7 +207,74 @@ function MarketsField({
   );
 }
 
+// ── Blocks paste helpers ──────────────────────────────────────────────────────
+
+type BlocksPreviewRow = { territory: string; dateDisplay: string } & Pick<
+  ReleaseScheduleItem,
+  "date" | "tba" | "no_release"
+>;
+
+const BLOCKS_DATE_RE = /^(\d{1,2}-[A-Za-z]{3}-\d{2,4}|TBA|No\s+Release|N\/R)$/i;
+const BLOCKS_MONTH_MAP: Record<string, string> = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+};
+
+function blockNormalizeDate(
+  raw: string,
+): Pick<ReleaseScheduleItem, "date" | "tba" | "no_release"> & { display: string } {
+  const t = raw.trim();
+  if (/^TBA$/i.test(t)) return { date: null, tba: true, no_release: false, display: "TBA" };
+  if (/^(No\s+Release|N\/R)$/i.test(t)) return { date: null, tba: false, no_release: true, display: "No Release" };
+  const m = t.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2}|\d{4})$/);
+  if (m) {
+    const day = m[1].padStart(2, "0");
+    const month = BLOCKS_MONTH_MAP[m[2].toLowerCase()];
+    if (!month) return { date: null, tba: false, no_release: false, display: t };
+    let year = m[3];
+    if (year.length === 2) year = parseInt(year, 10) <= 50 ? `20${year}` : `19${year}`;
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const display = `${months[Number(month) - 1]} ${Number(day)}, ${year.slice(2)}`;
+    return { date: `${year}-${month}-${day}`, tba: false, no_release: false, display };
+  }
+  return { date: null, tba: false, no_release: false, display: t };
+}
+
+const BLOCKS_NOISE_RE = [
+  /^\d+$/,
+  /territory[\s\S]*release[\s\S]*date/i,
+  /privileged|confidential|internal only|do not distribute/i,
+  /page\s+\d+/i,
+  /^©/,
+  /^[-–—]+$/,
+  /international release schedule/i,
+  /prepared\s+on/i,
+  /^[>^*]/,
+  /=\s*released/i,
+  /^(region|territory|release\s+date)$/i,
+];
+
+function blockIsNoise(line: string): boolean {
+  return BLOCKS_NOISE_RE.some((re) => re.test(line));
+}
+
+function parseBlocksTerritory(text: string): string[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 1 && !blockIsNoise(l) && !BLOCKS_DATE_RE.test(l));
+}
+
+function parseBlocksDates(text: string): string[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => BLOCKS_DATE_RE.test(l));
+}
+
 // ── Release Dates popover ─────────────────────────────────────────────────────
+
+const POPOVER_W = 320; // matches w-80
 
 function ReleaseDatesPopover({
   boardId,
@@ -218,63 +286,127 @@ function ReleaseDatesPopover({
   onScheduleChange: (rows: ReleaseScheduleItem[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [regionFilter, setRegionFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [importing, setImporting] = useState(false);
-  const [pasteMode, setPasteMode] = useState(false);
+  const [pasteMode, setPasteMode] = useState<"none" | "text" | "blocks">("none");
   const [pasteText, setPasteText] = useState("");
+  const [blocksA, setBlocksA] = useState("");
+  const [blocksB, setBlocksB] = useState("");
+  const [blocksPreview, setBlocksPreview] = useState<BlocksPreviewRow[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Open / close ────────────────────────────────────────────────────────────
+
+  function openPopover() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.min(rect.left, window.innerWidth - POPOVER_W - 16);
+    setPos({ top: rect.bottom + 6, left });
+    setOpen(true);
+  }
+
+  function closePopover() {
+    setOpen(false);
+    setPos(null);
+  }
+
+  // Outside click → close
   useEffect(() => {
     if (!open) return;
-    function onPointerDown(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+    function onMouseDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (!popoverRef.current?.contains(t) && !triggerRef.current?.contains(t)) {
         setOpen(false);
+        setPos(null);
       }
     }
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
   }, [open]);
 
-  const regions = useMemo(() => {
+  // Any external scroll → close (ignore scroll inside the popover itself)
+  useEffect(() => {
+    if (!open) return;
+    function onScroll(e: Event) {
+      if (popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+      setPos(null);
+    }
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", onScroll, { capture: true });
+  }, [open]);
+
+  // Escape → close
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { setOpen(false); setPos(null); }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  // ── Derived data ────────────────────────────────────────────────────────────
+
+  // Region order: stable, first appearance in schedule
+  const regionOrder = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
     for (const item of schedule) {
-      if (item.region && !seen.has(item.region)) {
-        seen.add(item.region);
-        out.push(item.region);
-      }
+      const k = item.region ?? "(NO REGION)";
+      if (!seen.has(k)) { seen.add(k); out.push(k); }
     }
     return out;
   }, [schedule]);
 
-  const filtered = useMemo(() => {
+  // Named regions only — used by filter chips
+  const namedRegions = useMemo(
+    () => regionOrder.filter((r) => r !== "(NO REGION)"),
+    [regionOrder],
+  );
+
+  // Filtered rows → grouped by region (preserving regionOrder) → sorted within group
+  const groups = useMemo(() => {
     let rows = schedule;
-    if (regionFilter) rows = rows.filter((r) => r.region === regionFilter);
+    if (regionFilter) rows = rows.filter((r) => (r.region ?? "(NO REGION)") === regionFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter((r) => r.territory.toLowerCase().includes(q));
     }
-    return rows;
-  }, [schedule, regionFilter, search]);
 
-  const grouped = useMemo(() => {
     const map = new Map<string, ReleaseScheduleItem[]>();
-    for (const item of filtered) {
-      const key = item.region ?? "(No region)";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(item);
+    for (const k of regionOrder) map.set(k, []);
+    for (const item of rows) {
+      const k = item.region ?? "(NO REGION)";
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(item);
     }
-    return map;
-  }, [filtered]);
 
-  async function callImportApi(
-    body: BodyInit,
-    headers?: HeadersInit,
-  ): Promise<boolean> {
+    const result: { region: string; items: ReleaseScheduleItem[] }[] = [];
+    for (const [region, items] of map.entries()) {
+      if (!items.length) continue;
+      // Within group: dated asc → TBA → No Release; tie-break by territory alpha
+      const sorted = [...items].sort((a, b) => {
+        const ra = a.date ? 0 : a.tba ? 1 : 2;
+        const rb = b.date ? 0 : b.tba ? 1 : 2;
+        if (ra !== rb) return ra - rb;
+        if (a.date && b.date) return a.date.localeCompare(b.date);
+        return a.territory.localeCompare(b.territory);
+      });
+      result.push({ region, items: sorted });
+    }
+    return result;
+  }, [schedule, regionOrder, regionFilter, search]);
+
+  // ── API helpers ─────────────────────────────────────────────────────────────
+
+  async function callImportApi(body: BodyInit, headers?: HeadersInit): Promise<boolean> {
     setImporting(true);
     setImportError(null);
     try {
@@ -290,26 +422,20 @@ function ReleaseDatesPopover({
         warning?: string;
         message?: string;
         error_code?: string;
-        extractedTextPreview?: string;
       };
 
       let json: ApiResponse;
-      try {
-        json = (await res.json()) as ApiResponse;
-      } catch {
-        setImportError("Server returned an unreadable response");
-        return false;
-      }
+      try { json = (await res.json()) as ApiResponse; }
+      catch { setImportError("Server returned an unreadable response"); return false; }
 
-      if (!res.ok) {
-        setImportError(json.message ?? "Import failed");
-        return false;
-      }
+      if (!res.ok) { setImportError(json.message ?? "Import failed"); return false; }
 
-      if (json.warning === "no_rows_detected") {
-        setImportError(
-          "Couldn't detect a schedule in this PDF. Try the Paste text fallback.",
-        );
+      if (json.warning) {
+        const WARN_MESSAGES: Record<string, string> = {
+          no_rows_detected: "Couldn't detect a schedule in this PDF. Try the Paste text fallback.",
+          mismatch_counts: "Territory and date counts don't match — the PDF columns may not have aligned. Try the Paste text fallback.",
+        };
+        setImportError(WARN_MESSAGES[json.warning] ?? "Import returned a warning. Try the Paste text fallback.");
         return false;
       }
 
@@ -337,11 +463,44 @@ function ReleaseDatesPopover({
   async function handlePaste() {
     if (!pasteText.trim()) return;
     const ok = await callImportApi(pasteText, { "Content-Type": "text/plain" });
-    if (ok) {
-      setPasteText("");
-      setPasteMode(false);
-    }
+    if (ok) { setPasteText(""); setPasteMode("none"); }
   }
+
+  function handleBlocksZip() {
+    setImportError(null);
+    setBlocksPreview(null);
+    const territories = parseBlocksTerritory(blocksA);
+    const dateStrs = parseBlocksDates(blocksB);
+    if (territories.length === 0 || dateStrs.length === 0) {
+      setImportError("Both blocks must have at least one entry.");
+      return;
+    }
+    if (territories.length !== dateStrs.length) {
+      setImportError(`Count mismatch: ${territories.length} territories vs ${dateStrs.length} dates. Trim blank lines and retry.`);
+      return;
+    }
+    setBlocksPreview(
+      territories.map((territory, i) => {
+        const { display, ...dateFields } = blockNormalizeDate(dateStrs[i]);
+        return { territory, dateDisplay: display, ...dateFields };
+      }),
+    );
+  }
+
+  function handleBlocksSave() {
+    if (!blocksPreview) return;
+    onScheduleChange(
+      blocksPreview.map(({ territory, date, tba, no_release }) => ({
+        region: null, territory, date, tba, no_release,
+      })),
+    );
+    setBlocksPreview(null);
+    setBlocksA("");
+    setBlocksB("");
+    setPasteMode("none");
+  }
+
+  // ── Display helpers ─────────────────────────────────────────────────────────
 
   function formatDisplayDate(item: ReleaseScheduleItem): { text: string; cls: string } {
     if (item.tba) return { text: "TBA", cls: "text-amber-400/80" };
@@ -350,182 +509,244 @@ function ReleaseDatesPopover({
     return { text: "—", cls: "text-neutral-700" };
   }
 
-  const label =
-    schedule.length > 0
-      ? `Release Dates · ${schedule.length} ▾`
-      : "Release Dates ▾";
+  const label = schedule.length > 0 ? `Release Dates · ${schedule.length} ▾` : "Release Dates ▾";
+
+  // ── Popover content (rendered into a portal) ────────────────────────────────
+
+  const popoverEl = pos ? (
+    <div
+      ref={popoverRef}
+      style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999, width: POPOVER_W }}
+      className="flex max-h-[80vh] flex-col rounded-lg border border-white/[0.07] bg-neutral-950 shadow-2xl shadow-black/80 ring-1 ring-black/30"
+    >
+      {/* ── Fixed header ──────────────────────────────────────────────────── */}
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/[0.05] px-3 py-2.5">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[11px] font-medium tracking-wide text-neutral-300">Release Dates</span>
+          {schedule.length > 0 && (
+            <span className="tabular-nums text-[10px] text-neutral-600">{schedule.length}</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={closePopover}
+          className="text-[13px] leading-none text-neutral-700 transition-colors hover:text-neutral-400"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* ── Fixed search + region filter chips ────────────────────────────── */}
+      <div className="flex-shrink-0 space-y-1.5 border-b border-white/[0.05] px-3 py-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search territory…"
+          className="w-full rounded border border-white/[0.05] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-300 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+        />
+        {namedRegions.length > 1 && (
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setRegionFilter(null)}
+              className={`rounded px-2 py-px text-[10px] tracking-wide transition-colors ${
+                regionFilter === null
+                  ? "bg-indigo-950/60 text-indigo-300 ring-1 ring-inset ring-indigo-500/20"
+                  : "text-neutral-600 hover:text-neutral-400"
+              }`}
+            >
+              All
+            </button>
+            {namedRegions.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRegionFilter(regionFilter === r ? null : r)}
+                className={`rounded px-2 py-px text-[10px] tracking-wide transition-colors ${
+                  regionFilter === r
+                    ? "bg-indigo-950/60 text-indigo-300 ring-1 ring-inset ring-indigo-500/20"
+                    : "text-neutral-600 hover:text-neutral-400"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Scrollable content — list or paste panel ──────────────────────── */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {pasteMode === "none" ? (
+          schedule.length === 0 ? (
+            <p className="px-3 py-6 text-center text-[11px] text-neutral-700">No schedule imported yet.</p>
+          ) : groups.length === 0 ? (
+            <p className="px-3 py-4 text-center text-[11px] text-neutral-700">No territories match.</p>
+          ) : (
+            groups.map(({ region, items }) => (
+              <div key={region}>
+                {/* Sticky region heading */}
+                <div className="sticky top-0 z-[1] flex items-baseline justify-between bg-neutral-950 px-3 pb-1 pt-2.5">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-neutral-600">
+                    {region}
+                  </span>
+                  <span className="tabular-nums text-[10px] text-neutral-800">{items.length}</span>
+                </div>
+                {items.map((item, i) => {
+                  const { text, cls } = formatDisplayDate(item);
+                  return (
+                    <div
+                      key={`${item.region ?? "none"}|${item.territory}|${item.date ?? "null"}|${i}`}
+                      className="flex items-center justify-between px-3 py-1 transition-colors hover:bg-white/[0.02]"
+                    >
+                      <span className="min-w-0 flex-1 truncate pr-3 text-[11px] text-neutral-300">
+                        {item.territory}
+                      </span>
+                      <span className={`flex-shrink-0 tabular-nums text-[11px] ${cls}`}>
+                        {text}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          )
+        ) : pasteMode === "text" ? (
+          /* ── Paste text panel ────────────────────────────────────────────── */
+          <div className="space-y-2 p-3">
+            <textarea
+              rows={7}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder="Paste raw PDF text here…"
+              className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1.5 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+            />
+            <button
+              type="button"
+              disabled={importing || !pasteText.trim()}
+              onClick={() => void handlePaste()}
+              className="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
+            >
+              {importing ? "Parsing…" : "Parse & Save"}
+            </button>
+          </div>
+        ) : (
+          /* ── Two-blocks panel ────────────────────────────────────────────── */
+          <div className="space-y-2 p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-0.5">
+                <p className="text-[10px] text-neutral-600">Territories</p>
+                <textarea
+                  rows={7}
+                  value={blocksA}
+                  onChange={(e) => { setBlocksA(e.target.value); setBlocksPreview(null); }}
+                  placeholder={"Australia\nUnited Kingdom\nFrance\n…"}
+                  className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] text-neutral-600">Dates</p>
+                <textarea
+                  rows={7}
+                  value={blocksB}
+                  onChange={(e) => { setBlocksB(e.target.value); setBlocksPreview(null); }}
+                  placeholder={"1-Jan-26\nTBA\nNo Release\n…"}
+                  className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+                />
+              </div>
+            </div>
+            {!blocksPreview ? (
+              <button
+                type="button"
+                disabled={!blocksA.trim() || !blocksB.trim()}
+                onClick={handleBlocksZip}
+                className="rounded border border-neutral-700/60 px-2.5 py-1 text-[11px] text-neutral-400 transition-colors hover:border-neutral-600 hover:text-neutral-200 disabled:opacity-40"
+              >
+                Zip &amp; Preview
+              </button>
+            ) : (
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-neutral-500">
+                  {blocksPreview.length} rows matched{blocksPreview.length > 10 ? " · showing first 10" : ""}
+                </p>
+                <div className="rounded border border-white/[0.05] bg-neutral-900/60">
+                  <table className="w-full text-[11px]">
+                    <tbody>
+                      {blocksPreview.slice(0, 10).map((row, i) => (
+                        <tr key={i} className="border-b border-white/[0.04] last:border-0">
+                          <td className="max-w-[110px] truncate px-2 py-[3px] text-neutral-300">{row.territory}</td>
+                          <td className={`px-2 py-[3px] text-right tabular-nums ${row.tba ? "text-amber-400/80" : row.no_release ? "text-neutral-600" : "text-neutral-400"}`}>{row.dateDisplay}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={handleBlocksSave} className="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500">
+                    Save {blocksPreview.length} rows
+                  </button>
+                  <button type="button" onClick={() => setBlocksPreview(null)} className="rounded border border-neutral-700/60 px-2.5 py-1 text-[11px] text-neutral-600 transition-colors hover:text-neutral-400">
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Sticky footer — import controls always visible ────────────────── */}
+      <div className="flex-shrink-0 space-y-1.5 border-t border-white/[0.05] bg-neutral-950/95 px-3 py-2.5 backdrop-blur-sm">
+        {importError && (
+          <p className="text-[11px] leading-snug text-red-400/80">{importError}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChange} />
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded border border-neutral-700/60 px-2 py-px text-[11px] text-neutral-500 transition-colors hover:border-neutral-600 hover:text-neutral-200 disabled:opacity-40"
+          >
+            {importing ? "Importing…" : "Import PDF"}
+          </button>
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => { setPasteMode(pasteMode === "text" ? "none" : "text"); setBlocksPreview(null); setImportError(null); }}
+            className={`rounded border px-2 py-px text-[11px] transition-colors disabled:opacity-40 ${pasteMode === "text" ? "border-indigo-800/60 text-indigo-400" : "border-neutral-700/60 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"}`}
+          >
+            Paste text
+          </button>
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => { setPasteMode(pasteMode === "blocks" ? "none" : "blocks"); setBlocksPreview(null); setImportError(null); }}
+            className={`rounded border px-2 py-px text-[11px] transition-colors disabled:opacity-40 ${pasteMode === "blocks" ? "border-indigo-800/60 text-indigo-400" : "border-neutral-700/60 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"}`}
+          >
+            Two blocks
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <div className="relative">
+    <>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? closePopover() : openPopover())}
         className="rounded border border-neutral-800/80 px-1.5 py-px text-[11px] text-neutral-600 transition-colors duration-100 hover:border-neutral-700 hover:text-neutral-400"
       >
         {label}
       </button>
-
-      {open && (
-        <div
-          ref={popoverRef}
-          className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-white/[0.07] bg-neutral-950 shadow-2xl shadow-black/70 ring-1 ring-black/20"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/[0.05] px-3 py-2.5">
-            <span className="text-[11px] font-medium tracking-wide text-neutral-400">Release Dates</span>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-[13px] leading-none text-neutral-700 transition-colors duration-100 hover:text-neutral-400"
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </div>
-
-          {schedule.length === 0 ? (
-            <div className="px-3 py-5 text-center">
-              <p className="text-[11px] text-neutral-700">No schedule imported yet.</p>
-            </div>
-          ) : (
-            <>
-              {/* Region filter chips */}
-              {regions.length > 1 && (
-                <div className="flex flex-wrap gap-1 border-b border-white/[0.05] px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => setRegionFilter(null)}
-                    className={`rounded px-2 py-px text-[10px] tracking-wide transition-colors duration-100 ${
-                      regionFilter === null
-                        ? "bg-indigo-950/60 text-indigo-300 ring-1 ring-inset ring-indigo-500/20"
-                        : "text-neutral-600 hover:text-neutral-400"
-                    }`}
-                  >
-                    All
-                  </button>
-                  {regions.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRegionFilter(regionFilter === r ? null : r)}
-                      className={`rounded px-2 py-px text-[10px] tracking-wide transition-colors duration-100 ${
-                        regionFilter === r
-                          ? "bg-indigo-950/60 text-indigo-300 ring-1 ring-inset ring-indigo-500/20"
-                          : "text-neutral-600 hover:text-neutral-400"
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Search */}
-              <div className="border-b border-white/[0.05] px-3 py-1.5">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search territory…"
-                  className="w-full rounded border border-white/[0.05] bg-neutral-800/50 px-2 py-px text-[11px] text-neutral-300 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
-                />
-              </div>
-
-              {/* Territory list */}
-              <div className="max-h-60 overflow-y-auto">
-                {filtered.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-[11px] text-neutral-700">
-                    No territories match.
-                  </p>
-                ) : (
-                  <div className="py-1">
-                    {Array.from(grouped.entries()).map(([region, items]) => (
-                      <div key={region}>
-                        <div className="px-3 pb-0.5 pt-2 text-[10px] tracking-[0.1em] text-neutral-700 uppercase first:pt-1">
-                          {region}
-                        </div>
-                        {items.map((item) => {
-                          const { text, cls } = formatDisplayDate(item);
-                          return (
-                            <div
-                              key={item.territory}
-                              className="flex items-center justify-between px-3 py-[3px] transition-colors duration-75 hover:bg-white/[0.02]"
-                            >
-                              <span className="min-w-0 truncate text-[11px] text-neutral-300">
-                                {item.territory}
-                              </span>
-                              <span className={`ml-2 flex-shrink-0 tabular-nums text-[11px] ${cls}`}>
-                                {text}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Footer: import controls */}
-          <div className="space-y-1.5 border-t border-white/[0.05] px-3 py-2.5">
-            {importError && (
-              <p className="text-[11px] leading-snug text-red-400/80">{importError}</p>
-            )}
-            <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,application/pdf"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <button
-                type="button"
-                disabled={importing}
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded border border-neutral-700/60 px-2 py-px text-[11px] text-neutral-500 transition-colors duration-100 hover:border-neutral-600 hover:text-neutral-200 disabled:opacity-40"
-              >
-                {importing ? "Importing…" : "Import PDF"}
-              </button>
-              <button
-                type="button"
-                disabled={importing}
-                onClick={() => { setPasteMode((v) => !v); setImportError(null); }}
-                className={`rounded border px-2 py-px text-[11px] transition-colors duration-100 disabled:opacity-40 ${
-                  pasteMode
-                    ? "border-indigo-800/60 text-indigo-400"
-                    : "border-neutral-700/60 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
-                }`}
-              >
-                Paste text
-              </button>
-            </div>
-
-            {pasteMode && (
-              <div className="space-y-1.5">
-                <textarea
-                  rows={5}
-                  value={pasteText}
-                  onChange={(e) => setPasteText(e.target.value)}
-                  placeholder="Paste raw PDF text here…"
-                  className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
-                />
-                <button
-                  type="button"
-                  disabled={importing || !pasteText.trim()}
-                  onClick={() => void handlePaste()}
-                  className="rounded bg-indigo-600 px-2.5 py-px text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
-                >
-                  {importing ? "Parsing…" : "Parse"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      {open && popoverEl !== null && typeof document !== "undefined"
+        ? createPortal(popoverEl, document.body)
+        : null}
+    </>
   );
 }
 

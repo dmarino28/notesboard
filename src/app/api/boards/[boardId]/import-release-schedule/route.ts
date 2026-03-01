@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 import { parseReleaseSchedule } from "@/lib/parseReleaseSchedule";
+import { extractPdfSchedulePositional } from "@/lib/extractPdfSchedule";
+
+export const runtime = "nodejs";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const DEV = process.env.NODE_ENV === "development";
@@ -29,17 +32,18 @@ export async function POST(
   const { client } = auth;
   const { boardId } = await params;
 
-  let rawText: string;
-
   const contentType = req.headers.get("content-type") ?? "";
   console.log(`[import-release-schedule] boardId=${boardId} content-type=${contentType}`);
 
   // ── Branch on content type ────────────────────────────────────────────────
 
+  let parseResult: ReturnType<typeof parseReleaseSchedule>;
+
   if (contentType.startsWith("text/plain")) {
-    // Paste-text path
-    rawText = await req.text();
+    // Paste-text path — raw text straight through the text parser
+    const rawText = await req.text();
     console.log(`[import-release-schedule] paste path textLength=${rawText.length}`);
+    parseResult = parseReleaseSchedule(rawText);
 
   } else if (contentType.startsWith("application/json")) {
     // JSON { text } path
@@ -52,11 +56,11 @@ export async function POST(
     if (!body.text || typeof body.text !== "string") {
       return errJson(400, "missing_text", "JSON body must include a non-empty 'text' field");
     }
-    rawText = body.text;
-    console.log(`[import-release-schedule] json path textLength=${rawText.length}`);
+    console.log(`[import-release-schedule] json path textLength=${body.text.length}`);
+    parseResult = parseReleaseSchedule(body.text);
 
   } else {
-    // Multipart PDF upload path (browser sends Content-Type: multipart/form-data with boundary)
+    // Multipart PDF upload path
     if (!contentType.startsWith("multipart/form-data")) {
       return errJson(
         415,
@@ -94,47 +98,31 @@ export async function POST(
     const buffer = Buffer.from(await file.arrayBuffer());
     console.log(`[import-release-schedule] PDF upload size=${buffer.length}B name="${file.name}"`);
 
-    // Use the inner implementation path to avoid the test-fixture loading that
-    // pdf-parse/index.js performs at module init time (causes require() to throw).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    let pdfParse: (buf: Buffer) => Promise<{ text: string }>;
     try {
-      pdfParse = require("pdf-parse/lib/pdf-parse.js") as typeof pdfParse;
+      parseResult = await extractPdfSchedulePositional(buffer);
     } catch (err) {
-      console.error("[import-release-schedule] pdf-parse load error", err);
-      return errJson(500, "parser_unavailable", "PDF parser could not be loaded on the server");
-    }
-
-    let result: { text: string };
-    try {
-      result = await pdfParse(buffer);
-    } catch (err) {
-      console.error("[import-release-schedule] pdfParse extraction error", err);
+      console.error("[import-release-schedule] PDF extraction error", err);
       return errJson(
         422,
         "pdf_extraction_failed",
         "Could not extract text from this PDF. The file may be scanned/image-only. Try the Paste text fallback.",
-        DEV ? { pdfParseError: String(err) } : undefined,
+        DEV ? { extractionError: String(err) } : undefined,
       );
     }
-
-    rawText = result.text;
-    console.log(`[import-release-schedule] extracted textLength=${rawText.length}`);
   }
 
-  // ── Parse ─────────────────────────────────────────────────────────────────
+  // ── Parse result ──────────────────────────────────────────────────────────
 
-  const rows = parseReleaseSchedule(rawText);
-  console.log(`[import-release-schedule] parsed rows=${rows.length}`);
+  const { rows, warning: parseWarning } = parseResult;
+  console.log(`[import-release-schedule] rows=${rows.length} warning=${parseWarning ?? "none"}`);
 
-  // 0 rows: return 200 with a warning; do NOT overwrite an existing schedule.
-  if (rows.length === 0) {
-    console.warn("[import-release-schedule] parse returned 0 rows — schedule not saved");
+  // Warning or 0 rows: return 200 without overwriting the existing schedule.
+  if (parseWarning || rows.length === 0) {
+    console.warn(`[import-release-schedule] not saved — warning=${parseWarning ?? "no_rows_detected"}`);
     return NextResponse.json({
       rows: [],
       count: 0,
-      warning: "no_rows_detected",
-      ...(DEV ? { extractedTextPreview: rawText.slice(0, 1500) } : {}),
+      warning: parseWarning ?? "no_rows_detected",
     });
   }
 
