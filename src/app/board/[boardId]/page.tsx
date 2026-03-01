@@ -6,9 +6,11 @@ import {
   createNote,
   deleteNote,
   updateNote,
+  updateNoteFields,
   getNote,
   type NoteRow,
 } from "@/lib/notes";
+import { bucketKeyForDueDate } from "@/lib/dateUtils";
 import {
   listPlacements,
   createPlacement,
@@ -39,6 +41,7 @@ import { moveColumnToBoard, copyColumnToBoard } from "@/lib/columnOps";
 import { useToast } from "@/lib/useToast";
 import { Board } from "@/components/Board";
 import { BoardTopBar } from "@/components/BoardTopBar";
+import { SnapshotHeader } from "@/components/SnapshotHeader";
 import { CardDetailsModal } from "@/components/CardDetailsModal";
 import { ActionContext } from "@/lib/ActionContext";
 import {
@@ -533,6 +536,7 @@ export default function BoardPage() {
       last_public_activity_type: p.last_public_activity_type,
       last_public_activity_preview: p.last_public_activity_preview,
       updated_at: p.updated_at,
+      highlight_on_snapshot: p.highlight_on_snapshot,
     }));
 
     const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);
@@ -552,7 +556,51 @@ export default function BoardPage() {
     showToast(`List copied to "${targetBoard?.name ?? "board"}"`);
   }
 
+  // ── Snapshot Header handlers ──────────────────────────────────────────────
+
+  async function handleBoardUpdate(fields: Partial<BoardRow>) {
+    // Optimistic patch on boards list
+    setBoards((prev) => prev.map((b) => (b.id === boardId ? { ...b, ...fields } : b)));
+    const { error } = await updateBoard(boardId, fields);
+    if (error) {
+      // Revert: re-fetch boards
+      listBoards().then(({ data }) => { if (data) setBoards(data); });
+      showToast("Failed to save snapshot field");
+    }
+  }
+
+  async function handleHighlightToggle(noteId: string, val: boolean) {
+    handleNoteChange(noteId, { highlight_on_snapshot: val });
+    const { error } = await updateNoteFields(noteId, { highlight_on_snapshot: val });
+    if (error) {
+      // Revert
+      handleNoteChange(noteId, { highlight_on_snapshot: !val });
+      showToast("Failed to update highlight");
+    }
+  }
+
+  // ── Snapshot derived state (board-scoped, excludes archived) ─────────────
   const currentBoard = boards.find((b) => b.id === boardId);
+
+  const snapshotPlacements = placements.filter((p) => !p.archived);
+
+  const highlightedNotes = snapshotPlacements
+    .filter((p) => p.highlight_on_snapshot)
+    .sort((a, b) => {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
+
+  const _snapshotToday = new Date();
+  const blockedCount = snapshotPlacements.filter((p) => p.status === "blocked").length;
+  const overdueCount = snapshotPlacements.filter(
+    (p) =>
+      p.due_date !== null &&
+      p.status !== "done" &&
+      bucketKeyForDueDate(p.due_date, _snapshotToday) === "overdue",
+  ).length;
 
   return (
     <ActionContext.Provider value={{
@@ -578,6 +626,18 @@ export default function BoardPage() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
+
+      {currentBoard?.show_snapshot_header && !isSearchMode && (
+        <SnapshotHeader
+          board={currentBoard}
+          highlightedNotes={highlightedNotes}
+          blockedCount={blockedCount}
+          overdueCount={overdueCount}
+          onBoardUpdate={handleBoardUpdate}
+          onHighlightToggle={handleHighlightToggle}
+          onOpenNote={openModal}
+        />
+      )}
 
       <div
         className="min-h-0 flex-1"
@@ -617,6 +677,7 @@ export default function BoardPage() {
             onUpdateColumnColor={handleUpdateColumnColor}
             onMoveColumnToBoard={handleMoveColumnToBoard}
             onCopyColumnToBoard={handleCopyColumnToBoard}
+            onHighlightToggle={handleHighlightToggle}
           />
         )}
       </div>

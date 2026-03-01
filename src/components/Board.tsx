@@ -44,6 +44,7 @@ type Props = {
   onUpdateColumnColor: (id: string, color: string) => void;
   onMoveColumnToBoard: (columnId: string, targetBoardId: string) => Promise<void>;
   onCopyColumnToBoard: (columnId: string, targetBoardId: string) => Promise<void>;
+  onHighlightToggle?: (noteId: string, val: boolean) => void;
 };
 
 export function Board({
@@ -67,6 +68,7 @@ export function Board({
   onUpdateColumnColor,
   onMoveColumnToBoard,
   onCopyColumnToBoard,
+  onHighlightToggle,
 }: Props) {
   // --- Note drag state ---
   const [localNotes, setLocalNotes] = useState<PlacedNoteRow[]>([]);
@@ -389,6 +391,7 @@ export function Board({
                   onMoveToBoard={(targetBoardId) => onMoveColumnToBoard(col.id, targetBoardId)}
                   onCopyToBoard={(targetBoardId) => onCopyColumnToBoard(col.id, targetBoardId)}
                   onToggleCollapse={() => toggleCollapse(col.id)}
+                  onHighlightToggle={onHighlightToggle}
                 />
               ))}
               <AddListStub onAdd={onAddColumn} />
@@ -461,6 +464,7 @@ export function Board({
                           onUpdate={onUpdateNote}
                           onOpen={() => onOpenNote(note.note_id)}
                           onMoveRequest={(placementId) => setMovingPlacementId(placementId)}
+                          onHighlightToggle={onHighlightToggle}
                         />
                       ))
                     )}

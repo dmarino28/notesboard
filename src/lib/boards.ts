@@ -5,12 +5,20 @@ export type BoardRow = {
   name: string;
   position: number;
   created_at: string;
+  // Snapshot header (Bucket 6A)
+  show_snapshot_header: boolean;
+  campaign_phase: string | null;
+  release_date: string | null;
+  premiere_date: string | null;
+  trailer_debut_date: string | null;
+  key_markets: string[];
+  snapshot_notes: string | null;
 };
 
 export async function listBoards(): Promise<{ data: BoardRow[]; error: string | null }> {
   const { data, error } = await supabase
     .from("boards")
-    .select("id, name, position, created_at")
+    .select("id, name, position, created_at, show_snapshot_header, campaign_phase, release_date, premiere_date, trailer_debut_date, key_markets, snapshot_notes")
     .order("position", { ascending: true });
 
   return {
@@ -44,7 +52,7 @@ export async function createBoard(
 
 export async function updateBoard(
   id: string,
-  updates: { name?: string },
+  updates: Partial<Pick<BoardRow, "name" | "show_snapshot_header" | "campaign_phase" | "release_date" | "premiere_date" | "trailer_debut_date" | "key_markets" | "snapshot_notes">>,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.from("boards").update(updates).eq("id", id);
   return { error: error?.message ?? null };

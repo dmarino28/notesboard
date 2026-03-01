@@ -457,6 +457,7 @@ export function OutlookBoardShell({ thread }: Props) {
       last_public_activity_type: p.last_public_activity_type,
       last_public_activity_preview: p.last_public_activity_preview,
       updated_at: p.updated_at,
+      highlight_on_snapshot: p.highlight_on_snapshot,
     }));
 
     const { data, error } = await copyColumnToBoard(column, colNotes, targetBoardId, noteLabelMap);

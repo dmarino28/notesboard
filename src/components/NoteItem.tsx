@@ -38,9 +38,10 @@ type Props = {
   onUpdate: (noteId: string, content: string) => Promise<void>;
   onOpen: () => void;
   onMoveRequest?: (placementId: string) => void;
+  onHighlightToggle?: (noteId: string, val: boolean) => void;
 };
 
-export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate, onOpen, onMoveRequest }: Props) {
+export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate, onOpen, onMoveRequest, onHighlightToggle }: Props) {
   const { actionMap, awarenessMap, onActionChange } = useActions();
   const currActionState = (actionMap[note.note_id]?.action_state ?? null) as ActionState | null;
 
@@ -219,6 +220,9 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   {ACTION_TEXT[currActionState]}
                 </button>
               )}
+              {note.highlight_on_snapshot && (
+                <span className="text-[11px] leading-none text-amber-500" title="Pinned to snapshot">★</span>
+              )}
               {hasEmailThread && (
                 <span className="text-[11px] leading-none text-neutral-600" title="Email thread linked">✉</span>
               )}
@@ -280,6 +284,17 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
               >
                 Remove
               </button>
+              {onHighlightToggle && (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); onHighlightToggle(note.note_id, !note.highlight_on_snapshot); }}
+                  className={`text-[11px] transition-colors ${note.highlight_on_snapshot ? "text-amber-400 opacity-100" : "text-neutral-600 hover:text-amber-400"}`}
+                  title={note.highlight_on_snapshot ? "Remove from snapshot" : "Pin to snapshot"}
+                >
+                  {note.highlight_on_snapshot ? "★" : "☆"}
+                </button>
+              )}
             </div>
           </div>
 

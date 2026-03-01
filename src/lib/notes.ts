@@ -19,16 +19,17 @@ export type NoteRow = {
   last_public_activity_preview: string | null;
   /** Set on any INSERT or UPDATE via DB trigger. Null for rows predating migration 000007. */
   updated_at?: string | null;
+  highlight_on_snapshot: boolean;
 };
 
 export type ReorderUpdate = { id: string; column_id: string; position: number };
 
 export type NoteFieldUpdates = Partial<
-  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived" | "status">
+  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived" | "status" | "highlight_on_snapshot">
 >;
 
 const NOTE_SELECT =
-  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at";
+  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at, highlight_on_snapshot";
 
 export async function listNotes(
   boardId: string,

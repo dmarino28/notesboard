@@ -27,6 +27,7 @@ type Props = {
   onMoveToBoard: (targetBoardId: string) => void;
   onCopyToBoard: (targetBoardId: string) => void;
   onToggleCollapse: () => void;
+  onHighlightToggle?: (noteId: string, val: boolean) => void;
 };
 
 export function ColumnContainer({
@@ -47,6 +48,7 @@ export function ColumnContainer({
   onMoveToBoard,
   onCopyToBoard,
   onToggleCollapse,
+  onHighlightToggle,
 }: Props) {
   // Disabled while the title is being inline-edited so typing doesn't start a drag
   const [sortableDisabled, setSortableDisabled] = useState(false);
@@ -84,6 +86,7 @@ export function ColumnContainer({
         onCopyToBoard={onCopyToBoard}
         onToggleCollapse={onToggleCollapse}
         onEditingChange={setSortableDisabled}
+        onHighlightToggle={onHighlightToggle}
         dragHandleListeners={listeners}
         dragHandleAttributes={attributes}
       />

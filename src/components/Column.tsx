@@ -31,6 +31,7 @@ type Props = {
   onEditingChange: (editing: boolean) => void;
   dragHandleListeners?: DraggableSyntheticListeners;
   dragHandleAttributes?: DraggableAttributes;
+  onHighlightToggle?: (noteId: string, val: boolean) => void;
 };
 
 export function Column({
@@ -54,6 +55,7 @@ export function Column({
   onEditingChange,
   dragHandleListeners,
   dragHandleAttributes,
+  onHighlightToggle,
 }: Props) {
   // NoteItem sortable id = placement_id = note.id
   const noteIds = notes.map((n) => n.id);
@@ -139,6 +141,7 @@ export function Column({
                   onRemove={onRemoveNote}
                   onUpdate={onUpdateNote}
                   onOpen={() => onOpenNote(note.note_id)}
+                  onHighlightToggle={onHighlightToggle}
                 />
               ))
             )}
