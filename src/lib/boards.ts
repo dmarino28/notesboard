@@ -1,5 +1,14 @@
 import { supabase } from "./supabase";
 
+// Bucket 6C: one item in a board's release_schedule
+export type ReleaseScheduleItem = {
+  region: string | null;
+  territory: string;
+  date: string | null;   // ISO yyyy-mm-dd, or null
+  tba: boolean;
+  no_release: boolean;
+};
+
 export type BoardRow = {
   id: string;
   name: string;
@@ -13,12 +22,14 @@ export type BoardRow = {
   trailer_debut_date: string | null;
   key_markets: string[];
   snapshot_notes: string | null;
+  // Release schedule (Bucket 6C)
+  release_schedule: ReleaseScheduleItem[];
 };
 
 export async function listBoards(): Promise<{ data: BoardRow[]; error: string | null }> {
   const { data, error } = await supabase
     .from("boards")
-    .select("id, name, position, created_at, show_snapshot_header, campaign_phase, release_date, premiere_date, trailer_debut_date, key_markets, snapshot_notes")
+    .select("id, name, position, created_at, show_snapshot_header, campaign_phase, release_date, premiere_date, trailer_debut_date, key_markets, snapshot_notes, release_schedule")
     .order("position", { ascending: true });
 
   return {
@@ -52,7 +63,7 @@ export async function createBoard(
 
 export async function updateBoard(
   id: string,
-  updates: Partial<Pick<BoardRow, "name" | "show_snapshot_header" | "campaign_phase" | "release_date" | "premiere_date" | "trailer_debut_date" | "key_markets" | "snapshot_notes">>,
+  updates: Partial<Pick<BoardRow, "name" | "show_snapshot_header" | "campaign_phase" | "release_date" | "premiere_date" | "trailer_debut_date" | "key_markets" | "snapshot_notes" | "release_schedule">>,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.from("boards").update(updates).eq("id", id);
   return { error: error?.message ?? null };

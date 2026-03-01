@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Prevent Next.js from bundling Node-only packages used in API routes
+  serverExternalPackages: ["pdf-parse"],
+
   async headers() {
     return [
       {
