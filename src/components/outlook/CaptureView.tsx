@@ -9,7 +9,7 @@ import { listColumns, type ColumnRow } from "@/lib/columns";
 type LinkRef = { noteId: string; noteTitle: string; boardId: string };
 
 type Props = {
-  thread: OutlookThread;
+  thread: OutlookThread | null;
   isDevMode: boolean;
   onOpenCard: (noteId: string) => void;
   onStartLinking: () => void;
@@ -35,9 +35,15 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!thread) {
+      setExistingLinks(null);
+      return;
+    }
+    // Capture in a local const so the async closure retains the non-null type.
+    const t = thread;
     async function load() {
       const [links, boardsResult] = await Promise.all([
-        listThreadLinksByConversationId(thread.conversationId),
+        listThreadLinksByConversationId(t.conversationId),
         listBoards(),
       ]);
       setExistingLinks(links);
@@ -52,7 +58,7 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread.conversationId]);
+  }, [thread?.conversationId]);
 
   useEffect(() => {
     if (!selectedBoardId) return;
@@ -69,7 +75,7 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
   // ── Create ───────────────────────────────────────────────────────────────────
   async function handleCreate() {
-    if (!selectedBoardId || !selectedColumnId) return;
+    if (!thread || !selectedBoardId || !selectedColumnId) return;
     setCreating(true);
     setCreateError(null);
     try {
@@ -96,6 +102,15 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
       setCreateError(e instanceof Error ? e.message : "Unknown error");
       setCreating(false);
     }
+  }
+
+  // ── No selection ─────────────────────────────────────────────────────────────
+  if (!thread) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+        <p className="text-xs text-neutral-500">Select a single email to continue.</p>
+      </div>
+    );
   }
 
   return (

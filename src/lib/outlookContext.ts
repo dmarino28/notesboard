@@ -77,6 +77,40 @@ async function fetchRestWebLink(
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Synchronously reads the current Outlook item context.
+ *
+ * Designed for use inside an `ItemChanged` event handler where async operations
+ * are not practical. Unlike `readOutlookItem()`, this does NOT fetch the REST
+ * web-link (webLink is always null here) and does NOT wait for Office.onReady.
+ *
+ * Returns null when:
+ *   - `Office.context.mailbox.item` is null (folder selected, calendar, multi-select)
+ *   - The selected item has no conversationId (e.g. a draft or calendar event)
+ *   - Any other unexpected error reading the context
+ */
+export function readCurrentItemSync(): OutlookThread | null {
+  try {
+    const mailbox = Office.context.mailbox;
+    const item = mailbox.item;
+    if (!item) return null;
+    const conversationId = item.conversationId ?? "";
+    if (!conversationId) return null;
+    return {
+      conversationId,
+      messageId: item.itemId || "",
+      webLink: null, // async fetch not possible in sync handler
+      subject: item.subject ?? "",
+      provider: "outlook",
+      mailbox: mailbox.userProfile.emailAddress ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const POLL_INTERVAL_MS = 100;
 const POLL_TIMEOUT_MS = 10_000; // wait up to 10s for Office.js to appear
 const READY_TIMEOUT_MS = 8_000; // wait up to 8s for Office.onReady

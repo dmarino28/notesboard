@@ -20,11 +20,13 @@ type ViewState =
   | { kind: "list"; tab: Tab }
   | { kind: "card-detail"; noteId: string; returnTab: Tab };
 
-type Props = { init: ReadItemResult };
+type Props = { init: ReadItemResult; currentThread: OutlookThread | null };
 
-export function OutlookAddinShell({ init }: Props) {
+export function OutlookAddinShell({ init, currentThread }: Props) {
   const isDevMode = init.kind === "no_office";
-  const thread = init.kind === "ok" ? init.thread : DEV_THREAD;
+  // In dev mode use the stub; otherwise use the live thread from page.tsx
+  // (updated on every ItemChanged event). May be null when no message is selected.
+  const thread: OutlookThread | null = isDevMode ? DEV_THREAD : currentThread;
 
   const [view, setView] = useState<ViewState>({ kind: "list", tab: "capture" });
   const [linkingCtx, setLinkingCtx] = useState<OutlookThread | null>(null);
@@ -44,6 +46,7 @@ export function OutlookAddinShell({ init }: Props) {
 
   // ── Linking flow ──────────────────────────────────────────────────────────────
   function startLinking() {
+    if (!thread) return; // no message selected — guard before entering linking mode
     setLinkingCtx(thread);
     setView({ kind: "list", tab: "browse" });
   }
@@ -112,7 +115,7 @@ export function OutlookAddinShell({ init }: Props) {
         {isCardDetail ? (
           <CardDetailPane
             noteId={(view as { kind: "card-detail"; noteId: string }).noteId}
-            currentThread={thread}
+            currentThread={thread ?? undefined}
           />
         ) : activeTab === "capture" ? (
           <CaptureView
