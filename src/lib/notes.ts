@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { getMyProfile } from "./profile";
 
 export type NoteRow = {
   id: string;
@@ -20,16 +21,19 @@ export type NoteRow = {
   /** Set on any INSERT or UPDATE via DB trigger. Null for rows predating migration 000007. */
   updated_at?: string | null;
   highlight_on_snapshot: boolean;
+  visibility: string | null;
+  region: string | null;
+  created_by: string | null;
 };
 
 export type ReorderUpdate = { id: string; column_id: string; position: number };
 
 export type NoteFieldUpdates = Partial<
-  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived" | "status" | "highlight_on_snapshot">
+  Pick<NoteRow, "content" | "description" | "due_date" | "event_start" | "event_end" | "archived" | "status" | "highlight_on_snapshot" | "visibility">
 >;
 
 const NOTE_SELECT =
-  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at, highlight_on_snapshot";
+  "id, content, column_id, board_id, position, created_at, description, due_date, event_start, event_end, archived, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at, highlight_on_snapshot, visibility, region, created_by";
 
 export async function listNotes(
   boardId: string,
@@ -61,9 +65,17 @@ export async function createNote(
   position: number,
   boardId: string,
 ): Promise<{ data: NoteRow | null; error: string | null }> {
+  const profile = await getMyProfile();
+  const region =
+    profile?.primary_region ??
+    (profile?.regions?.length ? profile.regions[0] : null) ??
+    "global";
+
   const { data, error } = await supabase
     .from("notes")
-    .insert([{ content, column_id: columnId, position, board_id: boardId }])
+    .insert([{ content, column_id: columnId, position, board_id: boardId,
+               visibility: "personal", region }])
+    // created_by is omitted — DB DEFAULT auth.uid() sets it automatically
     .select(NOTE_SELECT)
     .single();
   return { data: (data as NoteRow | null) ?? null, error: error?.message ?? null };

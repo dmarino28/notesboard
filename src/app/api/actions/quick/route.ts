@@ -10,6 +10,17 @@ export async function POST(req: NextRequest) {
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { client, user } = auth;
 
+  // ── Region from profile ────────────────────────────────────────────────────
+  const { data: profile } = await client
+    .from("profiles")
+    .select("primary_region, regions")
+    .eq("id", user.id)
+    .single();
+  const region =
+    profile?.primary_region ??
+    (Array.isArray(profile?.regions) && profile.regions.length ? profile.regions[0] : null) ??
+    "global";
+
   const body = await req.json().catch(() => null);
 
   const title = typeof body?.title === "string" ? body.title.trim() : "";
@@ -32,7 +43,8 @@ export async function POST(req: NextRequest) {
   // 1. Create the note with due_date on the notes row
   const { data: note, error: noteError } = await client
     .from("notes")
-    .insert({ content: title, description, due_date })
+    .insert({ content: title, description, due_date,
+              visibility: "personal", region, created_by: user.id })
     .select("id")
     .single();
 

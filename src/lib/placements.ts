@@ -22,6 +22,9 @@ export type PlacedNoteRow = {
   /** Set on any INSERT or UPDATE via DB trigger. Null for rows predating migration 000007. */
   updated_at: string | null;
   highlight_on_snapshot: boolean;
+  visibility: string | null;
+  region: string | null;
+  created_by: string | null;
 };
 
 export type PlacementReorderUpdate = { id: string; column_id: string; position: number };
@@ -33,7 +36,7 @@ export async function listPlacements(
   const { data, error } = await supabase
     .from("note_placements")
     .select(
-      "id, note_id, board_id, column_id, position, notes(id, content, description, due_date, event_start, event_end, archived, created_at, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at, highlight_on_snapshot)",
+      "id, note_id, board_id, column_id, position, notes(id, content, description, due_date, event_start, event_end, archived, created_at, status, last_public_activity_at, last_public_activity_user_id, last_public_activity_type, last_public_activity_preview, updated_at, highlight_on_snapshot, visibility, region, created_by)",
     )
     .eq("board_id", boardId)
     .order("column_id", { ascending: true })
@@ -57,6 +60,9 @@ export async function listPlacements(
     last_public_activity_preview: string | null;
     updated_at: string | null;
     highlight_on_snapshot: boolean;
+    visibility: string | null;
+    region: string | null;
+    created_by: string | null;
   };
   type RawRow = {
     id: string;
@@ -119,6 +125,9 @@ export async function listPlacements(
       last_public_activity_preview: note.last_public_activity_preview,
       updated_at: note.updated_at,
       highlight_on_snapshot: note.highlight_on_snapshot,
+      visibility: note.visibility,
+      region: note.region,
+      created_by: note.created_by,
     };
   });
 

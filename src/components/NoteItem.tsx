@@ -220,6 +220,17 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   {ACTION_TEXT[currActionState]}
                 </button>
               )}
+              {note.visibility && (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    note.visibility === "personal"
+                      ? "bg-neutral-800/80 text-neutral-500"
+                      : "bg-sky-950/60 text-sky-500"
+                  }`}
+                >
+                  {note.visibility === "personal" ? "Personal" : "Shared"}
+                </span>
+              )}
               {note.highlight_on_snapshot && (
                 <span className="text-[11px] leading-none text-amber-500" title="Pinned to snapshot">★</span>
               )}

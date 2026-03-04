@@ -24,15 +24,14 @@ import {
 } from "@/lib/emailThreads";
 import { acquireMailToken } from "@/lib/msalConfig";
 import { LABEL_PALETTE } from "@/lib/palette";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import type { DateRange } from "@/components/DateRangePicker";
 import {
-  CollabData,
   NoteActivity,
   NoteStatus,
-  NoteUpdate,
   STATUS_META,
   STATUS_VALUES,
   listCollab,
-  postNoteUpdate,
 } from "@/lib/collab";
 import { updateNoteDueDate } from "@/lib/userActions";
 
@@ -51,6 +50,7 @@ type NoteInput = {
   last_public_activity_type: string | null;
   last_public_activity_preview: string | null;
   updated_at?: string | null;
+  visibility?: string | null;
 };
 
 type Props = {
@@ -126,7 +126,7 @@ export function CardDetailsModal({
 
   // --- Comments ---
   const [comments, setComments] = useState<CommentRow[]>([]);
-  const [commentsLoading, setCommentsLoading] = useState(true);
+
   const [newComment, setNewComment] = useState("");
   const [addingComment, setAddingComment] = useState(false);
 
@@ -149,24 +149,43 @@ export function CardDetailsModal({
     (note.status as NoteStatus | null) ?? null,
   );
 
-  // --- Collab (updates + activity) ---
-  const [updates, setUpdates] = useState<NoteUpdate[]>([]);
+  // --- Collab (activity + comments) ---
   const [activity, setActivity] = useState<NoteActivity[]>([]);
   const [collabLoading, setCollabLoading] = useState(true);
   const [collabAuthed, setCollabAuthed] = useState<boolean | null>(null); // null=loading, false=unauthed
   const [collabUserId, setCollabUserId] = useState<string | null>(null);
-  const [newUpdate, setNewUpdate] = useState("");
-  const [updateStatusChange, setUpdateStatusChange] = useState<NoteStatus | null>(null);
-  const [postingUpdate, setPostingUpdate] = useState(false);
+  const [composerStatusChange, setComposerStatusChange] = useState<NoteStatus | null>(null);
 
   // --- Debounced save ---
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<NoteFieldUpdates>({});
 
+  // --- Visibility ---
+  const [visibility, setVisibility] = useState<"personal" | "shared">(
+    (note.visibility as "personal" | "shared") ?? "personal",
+  );
+  const [showVisibilityConfirm, setShowVisibilityConfirm] = useState(false);
+
+  // --- My Layer panel ---
+  const [panelOpen, setPanelOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("nb_panel_open") !== "false";
+  });
+
+  // --- Personal reminder (localStorage only) ---
+  const [personalReminder, setPersonalReminder] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(`nb_reminder_${noteId}`) ?? "";
+  });
+
+  // --- Event range picker ---
+  const [showEventPicker, setShowEventPicker] = useState(false);
+
   // --- Animation ---
   const [visible, setVisible] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dueDateInputRef = useRef<HTMLInputElement>(null);
 
   // --- Link to board state ---
   const [showLinkForm, setShowLinkForm] = useState(false);
@@ -189,7 +208,6 @@ export function CardDetailsModal({
     });
     listComments(noteId).then(({ data }) => {
       setComments(data);
-      setCommentsLoading(false);
     });
     listEmailThreadsForNote(noteId).then(({ data }) => {
       setEmailThreads(data);
@@ -200,7 +218,6 @@ export function CardDetailsModal({
         setCollabAuthed(false);
       } else {
         setCollabAuthed(true);
-        setUpdates(data.updates);
         setActivity(data.activity);
         setCollabUserId(data.currentUserId ?? null);
       }
@@ -235,7 +252,11 @@ export function CardDetailsModal({
     setEventEnd(note.event_end ? toDatetimeLocal(note.event_end) : "");
     setArchived(note.archived);
     setStatus((note.status as NoteStatus | null) ?? null);
-    setUpdates([]);
+    setVisibility((note.visibility as "personal" | "shared") ?? "personal");
+    setShowEventPicker(false);
+    setPersonalReminder(
+      typeof window !== "undefined" ? (localStorage.getItem(`nb_reminder_${noteId}`) ?? "") : "",
+    );
     setActivity([]);
     setCollabLoading(true);
     setCollabAuthed(null);
@@ -355,70 +376,60 @@ export function CardDetailsModal({
     }
   }
 
-  // ------------------------------------------------------------------ updates
+  // ------------------------------------------------------------------ visibility
 
-  async function handlePostUpdate() {
-    const trimmed = newUpdate.trim();
-    if (!trimmed) return;
-    setPostingUpdate(true);
+  async function handleVisibilityChange(next: "personal" | "shared") {
+    setVisibility(next);
+    onNoteChange(noteId, { visibility: next });
+    scheduleFieldSave({ visibility: next });
+  }
 
-    const { error } = await postNoteUpdate(noteId, {
-      content: trimmed,
-      statusChange: updateStatusChange,
+  // ------------------------------------------------------------------ panel
+
+  function togglePanel() {
+    setPanelOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("nb_panel_open", String(next));
+      return next;
     });
+  }
 
-    setPostingUpdate(false);
-    if (error) {
-      onError(error === "HTTP 401" ? "Sign in to post updates" : `Failed to post: ${error}`);
-      return;
+  // ------------------------------------------------------------------ personal reminder
+
+  function handlePersonalReminderChange(v: string) {
+    setPersonalReminder(v);
+    localStorage.setItem(`nb_reminder_${noteId}`, v);
+  }
+
+  // ------------------------------------------------------------------ composer submit
+
+  async function handleSubmitComposer() {
+    const hasComment = newComment.trim().length > 0;
+    const hasStatus = composerStatusChange !== null;
+    if (!hasComment && !hasStatus) return;
+
+    // Status change — save + optimistic activity entry
+    if (hasStatus) {
+      const prevStatus = status;
+      void handleStatusChange(composerStatusChange!);
+      setActivity((prev) => [
+        ...prev,
+        {
+          id: `temp-act-${Date.now()}`,
+          note_id: noteId,
+          actor_user_id: collabUserId,
+          activity_type: "status_changed",
+          payload: { from: prevStatus, to: composerStatusChange! },
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      setComposerStatusChange(null);
     }
 
-    // Optimistic add — prepend so newest appears first
-    const now = new Date().toISOString();
-    const optimistic: NoteUpdate = {
-      id: `temp-${Date.now()}`,
-      note_id: noteId,
-      user_id: collabUserId,
-      content: trimmed,
-      status_change: updateStatusChange,
-      due_date_change: null,
-      created_at: now,
-    };
-    setUpdates((prev) => [optimistic, ...prev]);
-
-    // Patch the board card surface immediately — mirrors what the DB trigger does.
-    // Must include updated_at because NoteItem renders (updated_at ?? last_public_activity_at)
-    // and updated_at takes nullish-coalescing priority; omitting it leaves the stale timestamp.
-    onNoteChange(noteId, {
-      updated_at: now,
-      last_public_activity_at: now,
-      last_public_activity_user_id: collabUserId,
-      last_public_activity_type: "update",
-      last_public_activity_preview: trimmed.slice(0, 80),
-    });
-
-    // Sync status if changed
-    if (updateStatusChange) {
-      setStatus(updateStatusChange);
-      onNoteChange(noteId, { status: updateStatusChange });
+    // Comment text — post as normal comment
+    if (hasComment) {
+      await handleAddComment();
     }
-
-    // Log optimistic activity — prepend so newest appears first
-    const newActivityRows: NoteActivity[] = [];
-    if (updateStatusChange) {
-      newActivityRows.push({
-        id: `temp-act-s-${Date.now()}`,
-        note_id: noteId,
-        actor_user_id: collabUserId,
-        activity_type: "status_changed",
-        payload: { from: status, to: updateStatusChange },
-        created_at: new Date().toISOString(),
-      });
-    }
-    setActivity((prev) => [...newActivityRows, ...prev]);
-
-    setNewUpdate("");
-    setUpdateStatusChange(null);
   }
 
   // ------------------------------------------------------------------ delete everywhere
@@ -750,6 +761,16 @@ export function CardDetailsModal({
   const noteLabelIds = new Set(noteLabels.map((l) => l.id));
   const unattachedLabels = boardLabels.filter((l) => !noteLabelIds.has(l.id));
 
+  type FeedEntry =
+    | { kind: "comment"; data: CommentRow; ts: string }
+    | { kind: "activity"; data: NoteActivity; ts: string };
+
+  // Newest first
+  const feedEntries: FeedEntry[] = [
+    ...comments.map((c) => ({ kind: "comment" as const, data: c, ts: c.created_at })),
+    ...activity.map((a) => ({ kind: "activity" as const, data: a, ts: a.created_at })),
+  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
   // Boards available for linking: exclude boards the note is already placed on
   // We show all boards; the DB unique constraint will reject duplicates gracefully
   const otherBoards = boards?.filter((b) => b.id !== boardId) ?? [];
@@ -766,53 +787,126 @@ export function CardDetailsModal({
         if (e.target === e.currentTarget) triggerClose();
       }}
     >
-      {/* Panel — full-screen on mobile, constrained card on sm+ */}
+      {/* Panel */}
       <div
-        className={`fixed inset-0 flex flex-col bg-neutral-950 transition-all duration-200 sm:relative sm:inset-auto sm:w-full sm:max-w-2xl sm:rounded-xl sm:border sm:border-neutral-800 sm:shadow-2xl ${
+        className={`fixed inset-0 flex flex-col bg-neutral-950 transition-all duration-200 sm:relative sm:inset-auto sm:w-full sm:max-w-3xl sm:rounded-xl sm:border sm:border-neutral-800 sm:shadow-2xl ${
           visible ? "opacity-100 sm:scale-100" : "opacity-0 sm:scale-95"
         }`}
         role="dialog"
         aria-modal="true"
       >
-        {/* Header — flex-shrink-0 keeps it pinned on mobile; sticky inside outer scroll on sm+ */}
-        <div className="flex flex-shrink-0 items-center gap-3 border-b border-neutral-800 bg-neutral-950 px-5 py-3 sm:sticky sm:top-0 sm:z-10">
-          <input
-            className="flex-1 bg-transparent text-base font-semibold text-neutral-100 outline-none placeholder:text-neutral-600"
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="Note title"
-            autoFocus
-          />
-          <span
-            className={`shrink-0 text-xs transition-colors ${
-              saveStatus === "saving"
-                ? "text-neutral-500"
-                : saveStatus === "saved"
-                  ? "text-green-500"
-                  : "text-transparent select-none"
-            }`}
-          >
-            {saveStatus === "saving" ? "Saving…" : "Saved"}
-          </span>
-          <button
-            className="shrink-0 rounded p-1 text-neutral-400 hover:text-white"
-            onClick={triggerClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+        {/* Confirmation overlay — Personal → Shared */}
+        {showVisibilityConfirm && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-black/60">
+            <div className="mx-4 max-w-sm space-y-3 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
+              <p className="text-sm font-medium text-neutral-100">
+                This card will become visible to others.
+              </p>
+              <p className="text-xs text-neutral-500">Your private layer will remain private.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleVisibilityChange("shared");
+                    setShowVisibilityConfirm(false);
+                  }}
+                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
+                >
+                  Make Shared
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowVisibilityConfirm(false)}
+                  className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="flex-shrink-0 border-b border-neutral-800 bg-neutral-950 px-5 py-3 sm:sticky sm:top-0 sm:z-10">
+          <div className="flex items-center gap-3">
+            <input
+              className="flex-1 bg-transparent text-base font-semibold text-neutral-100 outline-none placeholder:text-neutral-600"
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              placeholder="Note title"
+              autoFocus
+            />
+            {/* Status pills — md+ only */}
+            <div className="hidden items-center gap-1 md:flex">
+              {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleStatusChange(status === s ? null : s)}
+                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    status === s
+                      ? `${STATUS_META[s].badgeClass} ring-1 ring-inset ring-white/20`
+                      : "border border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[s].dotClass} ${status !== s ? "opacity-40" : ""}`}
+                  />
+                  {STATUS_META[s].label}
+                </button>
+              ))}
+            </div>
+            {/* Visibility toggle */}
+            <div className="flex overflow-hidden rounded-lg border border-neutral-800 text-xs">
+              {(["personal", "shared"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() =>
+                    v === "shared" && visibility === "personal"
+                      ? setShowVisibilityConfirm(true)
+                      : void handleVisibilityChange(v)
+                  }
+                  className={`px-3 py-1 transition-colors ${
+                    visibility === v
+                      ? "bg-neutral-800 font-medium text-neutral-100"
+                      : "text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  {v === "personal" ? "Personal" : "Shared"}
+                </button>
+              ))}
+            </div>
+            <span
+              className={`shrink-0 text-xs transition-colors ${
+                saveStatus === "saving"
+                  ? "text-neutral-500"
+                  : saveStatus === "saved"
+                    ? "text-green-500"
+                    : "select-none text-transparent"
+              }`}
+            >
+              {saveStatus === "saving" ? "Saving…" : "Saved"}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 rounded p-1 text-neutral-400 hover:text-white"
+              onClick={triggerClose}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        {/* Body — scrolls on mobile (flex-1); sm+ parent div handles scroll */}
-        <div className="flex-1 overflow-y-auto sm:overflow-visible">
-        <div className="space-y-5 p-5">
-          {/* Status */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-              Status
-            </label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {STATUS_VALUES.map((s) => (
+        {/* Body — two columns on md+ */}
+        <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+          {/* Main scroll */}
+          <div className="flex-1 overflow-y-auto">
+          <div className="space-y-5 p-5">
+            {/* Status pills — mobile only */}
+            <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+              {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -830,13 +924,8 @@ export function CardDetailsModal({
                 </button>
               ))}
             </div>
-          </section>
 
-          {/* Description */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-              Description
-            </label>
+            {/* Description */}
             <textarea
               className="w-full resize-y rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-700"
               value={description}
@@ -844,215 +933,119 @@ export function CardDetailsModal({
               placeholder="Add a description…"
               rows={3}
             />
-          </section>
 
-          {/* Due Date */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Due Date</label>
-            <div className="flex items-center gap-2">
+            {/* Due date row — chip style */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Hidden datetime picker triggered by chip */}
               <input
+                ref={dueDateInputRef}
                 type="datetime-local"
-                className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-700"
+                className="sr-only"
                 value={dueDate}
                 onChange={(e) => handleDueDateChange(e.target.value)}
+                tabIndex={-1}
               />
+              <button
+                type="button"
+                onClick={() => dueDateInputRef.current?.showPicker()}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                  dueDate
+                    ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
+                    : "border border-dashed border-neutral-700 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
+                }`}
+              >
+                {dueDate
+                  ? new Date(dueDate).toLocaleString(undefined, { month: "short", day: "numeric" })
+                  : "Set due date"}
+              </button>
               {dueDate && (
                 <button
-                  className="text-xs text-neutral-600 hover:text-neutral-400"
+                  type="button"
+                  className="text-xs text-neutral-700 hover:text-neutral-400"
                   onClick={() => handleDueDateChange("")}
                 >
                   Clear
                 </button>
               )}
             </div>
-            {dueDate && (
-              <p className="mt-1 text-xs text-neutral-500">{formatDisplayDate(dueDate)}</p>
-            )}
-          </section>
 
-          {/* My Action (Private) */}
-          <section>
-            <div className="mb-2 flex items-baseline gap-2">
-              <label className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">My Action</label>
-              <span className="text-[11px] text-neutral-700">Visible only to you</span>
-            </div>
-            <div className="space-y-2">
-              {/* Opt-in toggle — controls is_in_actions on the timed board */}
-              <button
-                type="button"
-                onClick={() => onToggleInActions(noteId, !isInActions)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  isInActions
-                    ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
-                    : "border-neutral-800 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                    isInActions ? "bg-indigo-400" : "bg-neutral-600"
-                  }`}
-                />
-                {isInActions ? "In My Actions" : "Add to My Actions"}
-              </button>
+            {/* Event row — compact chip + inline range picker */}
+            {(() => {
+              const hasEvent = Boolean(eventStart || eventEnd);
+              const fmtDate  = (dt: string) =>
+                new Date(dt).toLocaleString(undefined, { month: "short", day: "numeric" });
 
-              {isInActions && (
-                <>
-                  {/* State buttons */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {(["needs_action", "waiting", "done"] as const).map((s) => {
-                      const isActive = currAction === s;
-                      const labels = { needs_action: "Needs Action", waiting: "Waiting", done: "Done" };
-                      const activeClass = {
-                        needs_action: "bg-orange-950/60 text-orange-400 border-orange-900/30",
-                        waiting: "bg-sky-950/60 text-sky-400 border-sky-900/30",
-                        done: "bg-emerald-950/60 text-emerald-400 border-emerald-900/30",
-                      };
-                      return (
+              function handleRangeChange({ from, to }: DateRange) {
+                if (from) {
+                  const existing = eventStart ? new Date(eventStart) : null;
+                  from.setHours(existing?.getHours() ?? 9, existing?.getMinutes() ?? 0, 0, 0);
+                  handleEventStartChange(toDatetimeLocal(from.toISOString()));
+                } else {
+                  handleEventStartChange("");
+                }
+                if (to) {
+                  const existing = eventEnd ? new Date(eventEnd) : null;
+                  to.setHours(existing?.getHours() ?? 17, existing?.getMinutes() ?? 0, 0, 0);
+                  handleEventEndChange(toDatetimeLocal(to.toISOString()));
+                } else {
+                  handleEventEndChange("");
+                }
+              }
+
+              return (
+                <div className="relative">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEventPicker((v) => !v)}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                        hasEvent
+                          ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
+                          : "border border-dashed border-neutral-700 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
+                      }`}
+                    >
+                      {hasEvent
+                        ? `${eventStart ? fmtDate(eventStart) : "?"} – ${eventEnd ? fmtDate(eventEnd) : "?"}`
+                        : "Set event"}
+                    </button>
+                    {hasEvent && (
+                      <>
                         <button
-                          key={s}
                           type="button"
-                          onClick={() => onActionChange(noteId, s)}
-                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                            isActive
-                              ? activeClass[s]
-                              : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
-                          }`}
+                          className="text-xs text-neutral-700 hover:text-neutral-400"
+                          onClick={() => setShowEventPicker((v) => !v)}
                         >
-                          {labels[s]}
+                          Edit
                         </button>
-                      );
-                    })}
+                        <button
+                          type="button"
+                          className="text-xs text-neutral-700 hover:text-red-400"
+                          onClick={() => {
+                            handleEventStartChange("");
+                            handleEventEndChange("");
+                            setShowEventPicker(false);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
                   </div>
-
-                  {/* Mode toggle */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-neutral-600">Mode:</span>
-                    {(["timed", "flagged"] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => onModeChange(noteId, m)}
-                        className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                          currMode === m
-                            ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
-                            : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
-                        }`}
-                      >
-                        {m === "timed" ? "Timed" : "Flagged"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Timed: private categories */}
-                  {currMode === "timed" && (
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-                        Categories
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {currTags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300"
-                          >
-                            {tag}
-                            <button
-                              type="button"
-                              className="text-neutral-500 transition-colors hover:text-red-400"
-                              onClick={() => handleRemoveTag(tag)}
-                              aria-label={`Remove ${tag}`}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                        <TagInput onAdd={handleAddTag} />
-                      </div>
+                  {showEventPicker && (
+                    <div className="absolute left-0 top-full z-20 mt-1">
+                      <DateRangePicker
+                        value={{
+                          from: eventStart ? new Date(eventStart) : null,
+                          to:   eventEnd   ? new Date(eventEnd)   : null,
+                        }}
+                        onChange={handleRangeChange}
+                        onClose={() => setShowEventPicker(false)}
+                      />
                     </div>
                   )}
-
-                  {/* Flagged: group picker */}
-                  {currMode === "flagged" && (
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-                        Groups
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {[...tagDefs]
-                          .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
-                          .map((def) => (
-                            <button
-                              key={def.id}
-                              type="button"
-                              onClick={() => handleToggleGroup(def.name)}
-                              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
-                                currTags.includes(def.name)
-                                  ? "border-indigo-900/30 bg-indigo-950/60 text-indigo-400"
-                                  : "border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
-                              }`}
-                            >
-                              {def.name}
-                            </button>
-                          ))}
-                        <NewGroupInline
-                          tagDefs={tagDefs}
-                          onCreateTagDef={onCreateTagDef}
-                          onToggle={handleToggleGroup}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </section>
-
-          {/* Event Range */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Event</label>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-neutral-500">Start</span>
-                  <input
-                    type="datetime-local"
-                    className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-700"
-                    value={eventStart}
-                    onChange={(e) => handleEventStartChange(e.target.value)}
-                  />
                 </div>
-                {eventStart && (
-                  <p className="pl-10 text-xs text-neutral-500">{formatDisplayDate(eventStart)}</p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-neutral-500">End</span>
-                  <input
-                    type="datetime-local"
-                    className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-700"
-                    value={eventEnd}
-                    onChange={(e) => handleEventEndChange(e.target.value)}
-                  />
-                </div>
-                {eventEnd && (
-                  <p className="pl-10 text-xs text-neutral-500">{formatDisplayDate(eventEnd)}</p>
-                )}
-              </div>
-              {(eventStart || eventEnd) && (
-                <button
-                  className="self-start text-xs text-neutral-600 hover:text-neutral-400"
-                  onClick={() => {
-                    handleEventStartChange("");
-                    handleEventEndChange("");
-                  }}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            {eventRangeError && <p className="mt-1 text-xs text-red-400">{eventRangeError}</p>}
-          </section>
+              );
+            })()}
 
           {/* Labels */}
           <section>
@@ -1152,414 +1145,315 @@ export function CardDetailsModal({
             )}
           </section>
 
-          {/* Updates */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-              Updates
-            </label>
-            {collabLoading ? (
-              <p className="text-xs text-neutral-600">Loading…</p>
-            ) : collabAuthed === false ? (
-              <div className="flex items-center gap-1.5">
-                <p className="text-xs text-neutral-600">Sign in to view and post updates.</p>
-                <Link href="/login" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-                  Sign in →
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Composer — at top for fast entry */}
-                <div className="space-y-1.5">
-                  <textarea
-                    className="w-full resize-none rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-700"
-                    placeholder="Post an update… (Enter to send)"
-                    value={newUpdate}
-                    onChange={(e) => setNewUpdate(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void handlePostUpdate();
-                      }
-                    }}
-                    rows={2}
-                    disabled={postingUpdate}
-                    maxLength={500}
-                  />
-                  <div className="flex items-center gap-2">
-                    <select
-                      className="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-400 outline-none focus:border-neutral-700"
-                      value={updateStatusChange ?? ""}
-                      onChange={(e) =>
-                        setUpdateStatusChange((e.target.value as NoteStatus) || null)
-                      }
-                    >
-                      <option value="">Status unchanged</option>
-                      {STATUS_VALUES.map((s) => (
-                        <option key={s} value={s}>
-                          {STATUS_META[s].label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                      onClick={handlePostUpdate}
-                      disabled={postingUpdate || !newUpdate.trim()}
-                    >
-                      {postingUpdate ? "…" : "Post"}
-                    </button>
-                    {newUpdate.length > 400 && (
-                      <span className={`ml-auto text-[10px] ${newUpdate.length >= 500 ? "text-red-400" : "text-neutral-600"}`}>
-                        {newUpdate.length}/500
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Feed — newest first */}
-                {updates.length === 0 ? (
-                  <p className="text-xs text-neutral-600">No updates yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {updates.map((u) => (
-                      <div
-                        key={u.id}
-                        className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
-                      >
-                        <p className="break-words text-sm text-neutral-200">{u.content}</p>
-                        {u.status_change && (
-                          <p className="mt-0.5 text-xs text-neutral-500">
-                            → Status:{" "}
-                            {STATUS_META[u.status_change as NoteStatus]?.label ?? u.status_change}
-                          </p>
-                        )}
-                        {u.due_date_change && (
-                          <p className="mt-0.5 text-xs text-neutral-500">
-                            → Due:{" "}
-                            {u.due_date_change === "cleared" ? "cleared" : u.due_date_change}
-                          </p>
-                        )}
-                        <div className="mt-1 flex items-center gap-1.5">
-                          {u.user_id === collabUserId && u.user_id !== null && (
-                            <span className="text-[10px] font-medium text-indigo-400">You</span>
-                          )}
-                          <span className="text-[10px] text-neutral-600">{relativeTime(u.created_at)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* Comments */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Comments</label>
-            {commentsLoading ? (
-              <p className="text-xs text-neutral-600">Loading…</p>
-            ) : (
-              <div className="space-y-2">
-                {comments.length === 0 && (
-                  <p className="text-xs text-neutral-600">No comments yet.</p>
-                )}
-                {comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="group flex items-start gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
+            {/* Attachment chips */}
+            {!emailThreadsLoading && emailThreads.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {emailThreads.map((thread) => (
+                  <span
+                    key={thread.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-0.5 text-xs text-neutral-400"
                   >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-neutral-200 break-words">{comment.content}</p>
-                      <p className="mt-0.5 text-xs text-neutral-600">
-                        {new Date(comment.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <button
-                      className="shrink-0 text-xs text-neutral-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-                      onClick={() => handleDeleteComment(comment.id)}
-                      aria-label="Delete comment"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                    ✉{" "}
+                    {thread.subject
+                      ? thread.subject.slice(0, 30) + (thread.subject.length > 30 ? "…" : "")
+                      : "Email thread"}
+                  </span>
                 ))}
-
-                <div className="flex gap-2">
-                  <input
-                    className="flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-700"
-                    placeholder="Add a comment…"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) handleAddComment();
-                    }}
-                    disabled={addingComment}
-                  />
-                  <button
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                    onClick={handleAddComment}
-                    disabled={addingComment || !newComment.trim()}
-                  >
-                    {addingComment ? "…" : "Add"}
-                  </button>
-                </div>
               </div>
             )}
-          </section>
 
-          {/* Activity */}
-          {collabAuthed !== false && (collabLoading || activity.length > 0) && (
-            <section>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-                Activity
-              </label>
-              {collabLoading ? (
-                <p className="text-xs text-neutral-600">Loading…</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {activity.map((a) => (
-                    <div key={a.id} className="flex items-start gap-2 text-xs text-neutral-600">
-                      <span className="mt-[5px] h-1.5 w-1.5 flex-shrink-0 rounded-full bg-neutral-700" />
-                      <span className="flex-1">{formatActivity(a)}</span>
-                      <span className="shrink-0">{relativeTime(a.created_at)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Email threads */}
-          {(emailThreadsLoading || emailThreads.length > 0) && (
-            <section>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">
-                Email threads
-              </label>
-              {emailThreadsLoading ? (
-                <p className="text-xs text-neutral-600">Loading…</p>
-              ) : (
-                <div className="space-y-2">
-                  {emailThreads.map((thread) => {
-                    const threadAttachments = attachmentMap[thread.id];
-                    return (
-                      <div
-                        key={thread.id}
-                        className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2.5"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-neutral-200">
-                              ✉️ {thread.subject ?? "Email thread"}
-                            </p>
-                            {thread.last_activity_at && (
-                              <p className="mt-0.5 text-xs text-neutral-500">
-                                {relativeTime(thread.last_activity_at)}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            {/* Conversation / Message toggle */}
-                            <div className="flex items-center rounded border border-white/[0.08] overflow-hidden">
-                              {(["conversation", "message"] as const).map((m) => {
-                                const active = (threadOpenMode[thread.id] ?? "conversation") === m;
-                                return (
-                                  <button
-                                    key={m}
-                                    type="button"
-                                    onClick={() =>
-                                      setThreadOpenMode((prev) => ({ ...prev, [thread.id]: m }))
-                                    }
-                                    className={`px-1.5 py-0.5 text-[10px] capitalize transition-colors cursor-pointer ${
-                                      active
-                                        ? "bg-white/[0.10] text-neutral-300"
-                                        : "text-neutral-600 hover:text-neutral-400"
-                                    }`}
-                                  >
-                                    {m}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <button
-                              type="button"
-                              disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
-                              onClick={() => {
-                                void handleOpenThread(thread);
-                              }}
-                              className="text-xs text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
-                            >
-                              {emailSignInRedirecting === thread.id
-                                ? "Signing in…"
-                                : connectingThreadId === thread.id
-                                ? "Connecting…"
-                                : "Open →"}
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-neutral-600 hover:text-red-400 transition-colors"
-                              onClick={() => handleUnlinkThread(thread.id)}
-                            >
-                              Unlink
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Redirect sign-in in progress */}
-                        {emailSignInRedirecting === thread.id && (
-                          <p className="mt-1.5 text-xs text-blue-400">
-                            Completing Microsoft sign-in — you&apos;ll be returned here automatically.
-                          </p>
-                        )}
-
-                        {/* Inline error for this thread */}
-                        {emailOpenError?.threadId === thread.id && (
-                          <p className="mt-1.5 text-xs text-red-400">
-                            {emailOpenError.msg}
-                          </p>
-                        )}
-
-                        {/* Attachment section */}
-                        {threadAttachments === undefined ? (
-                          <button
-                            className="mt-1.5 text-xs text-neutral-500 hover:text-neutral-400 underline underline-offset-2"
-                            onClick={() => handleLoadAttachments(thread.id)}
-                          >
-                            Show attachments
-                          </button>
-                        ) : threadAttachments.length > 0 ? (
-                          <div className="mt-2 space-y-1">
-                            <p className="text-xs text-neutral-500">
-                              Attachments ({threadAttachments.length})
-                            </p>
-                            {threadAttachments.map((att) => (
-                              <div
-                                key={att.id}
-                                className="flex items-center justify-between gap-2"
-                              >
-                                <span className="truncate text-xs text-neutral-300">
-                                  {att.file_name}
-                                </span>
-                                <button
-                                  className="shrink-0 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
-                                  onClick={() => {
-                                    // Phase 1 will wire real Outlook deep-link
-                                    console.log("Open email with attachment", att.message_id);
-                                  }}
-                                >
-                                  Open email
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Link to board */}
-          {onLinkToBoard && otherBoards.length > 0 && (
-            <section className="border-t border-neutral-800 pt-4">
-              {!showLinkForm ? (
-                <button
-                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200 transition-colors"
-                  onClick={() => setShowLinkForm(true)}
-                >
-                  🔗 Link to another board…
-                </button>
-              ) : (
-                <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-                  <p className="text-xs font-medium text-neutral-400">Link to board</p>
-                  <select
-                    className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
-                    value={linkBoardId}
-                    onChange={(e) => handleLinkBoardChange(e.target.value)}
-                  >
-                    <option value="">Select board…</option>
-                    {otherBoards.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {linkBoardId && (
-                    <>
-                      {linkColumnsLoading ? (
-                        <p className="text-xs text-neutral-600">Loading columns…</p>
-                      ) : linkColumns.length === 0 ? (
-                        <p className="text-xs text-neutral-500">No columns on this board.</p>
-                      ) : (
+            {/* Discussion — only when visibility === "shared" */}
+            {visibility === "shared" && (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs font-medium text-neutral-500">Discussion</p>
+                {collabLoading ? (
+                  <p className="text-xs text-neutral-600">Loading…</p>
+                ) : collabAuthed === false ? (
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs text-neutral-600">Sign in to participate.</p>
+                    <Link href="/login" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">
+                      Sign in →
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Composer — at top */}
+                    <div className="overflow-hidden rounded-lg border border-neutral-800 transition-colors focus-within:border-neutral-700">
+                      <AutoTextarea
+                        className="w-full bg-transparent px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
+                        placeholder="Write a comment…"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void handleSubmitComposer();
+                          }
+                        }}
+                        disabled={addingComment}
+                      />
+                      <div className="flex items-center gap-2 border-t border-neutral-800/60 px-2 py-1.5">
                         <select
-                          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
-                          value={linkColumnId}
-                          onChange={(e) => setLinkColumnId(e.target.value)}
+                          className="bg-transparent px-1 py-0.5 text-xs text-neutral-600 outline-none"
+                          value={composerStatusChange ?? ""}
+                          onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}
                         >
-                          {linkColumns.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
+                          <option value="">Status…</option>
+                          {STATUS_VALUES.map((s) => (
+                            <option key={s} value={s}>{STATUS_META[s].label}</option>
                           ))}
                         </select>
-                      )}
-                    </>
-                  )}
+                        <button
+                          type="button"
+                          className="ml-auto rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                          onClick={handleSubmitComposer}
+                          disabled={addingComment || (!newComment.trim() && !composerStatusChange)}
+                        >
+                          {addingComment ? "…" : "Send"}
+                        </button>
+                      </div>
+                    </div>
+                    {/* Feed — newest first */}
+                    {feedEntries.length > 0 && (
+                      <div className="space-y-1">
+                        {feedEntries.map((entry) => {
+                          if (entry.kind === "comment") {
+                            const c = entry.data;
+                            return (
+                              <div key={c.id} className="group flex items-start gap-2 py-1">
+                                <div className="mt-0.5 h-6 w-6 flex-shrink-0 rounded-full bg-neutral-800 flex items-center justify-center">
+                                  <span className="text-[10px] text-neutral-500">✦</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-sm text-neutral-200">{c.content}</p>
+                                  <p className="mt-0.5 text-[10px] text-neutral-600">{relativeTime(c.created_at)}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="mt-1 shrink-0 text-xs text-neutral-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                                  onClick={() => handleDeleteComment(c.id)}
+                                  aria-label="Delete comment"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            );
+                          }
+                          // system activity — single muted line, no dividers
+                          const a = entry.data;
+                          return (
+                            <p key={a.id} className="py-0.5 text-[11px] text-neutral-600">
+                              {formatActivity(a)} · {relativeTime(a.created_at)}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-                  {linkSuccess ? (
-                    <p className="text-xs text-green-500">Linked successfully!</p>
+            {/* Bottom actions */}
+            <div className="space-y-3 border-t border-neutral-800 pt-4">
+              {onLinkToBoard && otherBoards.length > 0 && (
+                <>
+                  {!showLinkForm ? (
+                    <button
+                      type="button"
+                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200"
+                      onClick={() => setShowLinkForm(true)}
+                    >
+                      🔗 Link to another board…
+                    </button>
                   ) : (
-                    <div className="flex gap-2">
-                      <button
-                        className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                        onClick={handleLink}
-                        disabled={linking || !linkBoardId || !linkColumnId}
+                    <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3">
+                      <p className="text-xs font-medium text-neutral-400">Link to board</p>
+                      <select
+                        className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
+                        value={linkBoardId}
+                        onChange={(e) => handleLinkBoardChange(e.target.value)}
                       >
-                        {linking ? "Linking…" : "Link"}
-                      </button>
-                      <button
-                        className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
-                        onClick={() => {
-                          setShowLinkForm(false);
-                          setLinkBoardId("");
-                          setLinkColumns([]);
-                          setLinkColumnId("");
-                        }}
-                      >
-                        Cancel
-                      </button>
+                        <option value="">Select board…</option>
+                        {otherBoards.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                      {linkBoardId && (
+                        <>
+                          {linkColumnsLoading ? (
+                            <p className="text-xs text-neutral-600">Loading columns…</p>
+                          ) : linkColumns.length === 0 ? (
+                            <p className="text-xs text-neutral-500">No columns on this board.</p>
+                          ) : (
+                            <select
+                              className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
+                              value={linkColumnId}
+                              onChange={(e) => setLinkColumnId(e.target.value)}
+                            >
+                              {linkColumns.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </>
+                      )}
+                      {linkSuccess ? (
+                        <p className="text-xs text-green-500">Linked successfully!</p>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                            onClick={handleLink}
+                            disabled={linking || !linkBoardId || !linkColumnId}
+                          >
+                            {linking ? "Linking…" : "Link"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                            onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
-            </section>
-          )}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    archived
+                      ? "border-green-700 text-green-400 hover:bg-green-900/20"
+                      : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                  }`}
+                  onClick={handleArchiveToggle}
+                >
+                  {archived ? "Restore from Archive" : "Archive Card"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-neutral-700 transition-colors hover:text-red-400"
+                  onClick={handleDeleteEverywhere}
+                >
+                  Delete everywhere
+                </button>
+              </div>
+            </div>
+          </div>
+          </div>{/* end main scroll */}
 
-          {/* Archive + Delete everywhere */}
-          <section className="border-t border-neutral-800 pt-4 flex flex-wrap items-center gap-3">
-            <button
-              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                archived
-                  ? "border-green-700 text-green-400 hover:bg-green-900/20"
-                  : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
-              }`}
-              onClick={handleArchiveToggle}
-            >
-              {archived ? "Restore from Archive" : "Archive Card"}
-            </button>
+          {/* Private panel */}
+          <div
+            className={`flex-shrink-0 border-t border-neutral-800 transition-all duration-200 md:border-l md:border-t-0 ${
+              panelOpen ? "md:w-64" : "md:w-9"
+            }`}
+          >
+            {/* Toggle handle */}
+            <div className="flex items-center border-b border-neutral-800 px-2.5 py-2">
+              <button
+                type="button"
+                onClick={togglePanel}
+                className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
+              >
+                {panelOpen ? "My Notes ›" : "‹"}
+              </button>
+            </div>
 
-            <button
-              className="rounded-md border border-red-900 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-900/20 hover:text-red-400"
-              onClick={handleDeleteEverywhere}
-            >
-              Delete everywhere
-            </button>
-          </section>
-        </div>
-        </div>{/* end body scroll wrapper */}
-      </div>
+            {panelOpen && (
+              <div className="space-y-3 p-3">
+                {/* My Actions */}
+                <div className="space-y-1">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isInActions}
+                      onChange={(e) => onToggleInActions(noteId, e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-neutral-700 accent-indigo-500"
+                    />
+                    <span className="text-xs text-neutral-400">Add to My Actions</span>
+                  </label>
+                  {isInActions && (
+                    <Link
+                      href="/actions"
+                      className="block text-[11px] text-indigo-400 transition-colors hover:text-indigo-300"
+                    >
+                      View in Actions →
+                    </Link>
+                  )}
+                </div>
+
+                {/* Linked Emails */}
+                {(emailThreadsLoading || emailThreads.length > 0) && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-neutral-500">Linked emails</p>
+                    {emailThreadsLoading ? (
+                      <p className="text-xs text-neutral-700">Loading…</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {emailThreads.map((thread) => {
+                          const threadAttachments = attachmentMap[thread.id];
+                          return (
+                            <div key={thread.id} className="rounded border border-neutral-800/50 px-2 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
+                                  ✉ {thread.subject ?? "Email thread"}
+                                </p>
+                                <button
+                                  type="button"
+                                  disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
+                                  onClick={() => void handleOpenThread(thread)}
+                                  className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50"
+                                >
+                                  {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="shrink-0 text-[11px] text-neutral-700 transition-colors hover:text-red-400"
+                                  onClick={() => handleUnlinkThread(thread.id)}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                              {emailOpenError?.threadId === thread.id && (
+                                <p className="mt-0.5 text-[10px] text-red-400">{emailOpenError.msg}</p>
+                              )}
+                              {threadAttachments && threadAttachments.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {threadAttachments.map((att) => (
+                                    <span key={att.id} className="max-w-[100px] truncate rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-[10px] text-neutral-500">
+                                      📎 {att.file_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Note to self */}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-neutral-500">Note to self</p>
+                  <AutoTextarea
+                    className="w-full rounded-md border border-neutral-800/60 bg-transparent px-2.5 py-1.5 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-700"
+                    placeholder="Private note…"
+                    value={personalReminder}
+                    onChange={(e) => handlePersonalReminderChange(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>{/* end Private panel */}
+        </div>{/* end body */}
+      </div>{/* end panel */}
     </div>
   );
 }
@@ -1642,11 +1536,11 @@ function formatActivity(a: NoteActivity): string {
   const p = a.payload as Record<string, string>;
   switch (a.activity_type) {
     case "status_changed":
-      return `Status → ${STATUS_META[p.to as NoteStatus]?.label ?? p.to}`;
+      return `Status changed to ${STATUS_META[p.to as NoteStatus]?.label ?? p.to}`;
     case "due_date_changed":
-      return `Due date → ${p.value === "cleared" || !p.value ? "cleared" : p.value}`;
+      return p.value === "cleared" || !p.value ? "Due date cleared" : `Due date set to ${p.value}`;
     case "update_posted":
-      return `Update posted`;
+      return "Update posted";
     default:
       return a.activity_type;
   }
@@ -1678,4 +1572,30 @@ function formatDisplayDate(value: string): string {
   const year = d.getFullYear();
   const time = d.toLocaleString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
   return `${month} ${day}, ${year} ${time}`;
+}
+
+function AutoTextarea({
+  value,
+  onChange,
+  className,
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={onChange}
+      className={className}
+      style={{ overflow: "hidden", resize: "none" }}
+      rows={1}
+      {...props}
+    />
+  );
 }

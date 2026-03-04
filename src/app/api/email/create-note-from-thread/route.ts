@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createNote } from "@/lib/notes";
+import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 import { maxPlacementPosition } from "@/lib/placements";
 import {
   upsertEmailThreadForNote,
   upsertAttachments,
 } from "@/lib/emailThreads";
-import { supabase } from "@/lib/supabase";
 
 type RequestBody = {
   title: string;
@@ -23,6 +22,11 @@ type RequestBody = {
 };
 
 export async function POST(req: NextRequest) {
+  // ── Auth ─────────────────────────────────────────────────────────────────────
+  const auth = await getAuthedSupabase(req);
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { client, user } = auth;
+
   let body: RequestBody;
   try {
     body = (await req.json()) as RequestBody;
@@ -45,25 +49,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "conversationId is required" }, { status: 400 });
   }
 
+  // ── Region from profile ───────────────────────────────────────────────────────
+  const { data: profile } = await client
+    .from("profiles")
+    .select("primary_region, regions")
+    .eq("id", user.id)
+    .single();
+  const region =
+    profile?.primary_region ??
+    (Array.isArray(profile?.regions) && profile.regions.length ? profile.regions[0] : null) ??
+    "global";
+
   // 1. Compute next position in column
   const position = (await maxPlacementPosition(boardId, columnId)) + 1;
 
-  // 2. Create note (deprecated board_id/column_id/position fields kept for backward compat)
-  const { data: note, error: noteErr } = await createNote(
-    title.trim(),
-    columnId,
-    position,
-    boardId,
-  );
+  // 2. Create note — visibility='shared' because captured email threads are shared by default
+  const { data: note, error: noteErr } = await client
+    .from("notes")
+    .insert([{
+      content: title.trim(),
+      column_id: columnId,
+      position,
+      board_id: boardId,
+      visibility: "shared",
+      region,
+      created_by: user.id,
+    }])
+    .select("id, content")
+    .single();
   if (noteErr || !note) {
     return NextResponse.json(
-      { error: noteErr ?? "Failed to create note" },
+      { error: noteErr?.message ?? "Failed to create note" },
       { status: 500 },
     );
   }
 
   // 3. Create placement and retrieve its id
-  const { data: placementData, error: placementErr } = await supabase
+  const { data: placementData, error: placementErr } = await client
     .from("note_placements")
     .insert([{ note_id: note.id, board_id: boardId, column_id: columnId, position }])
     .select("id")
