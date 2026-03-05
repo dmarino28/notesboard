@@ -186,6 +186,7 @@ export function CardDetailsModal({
   const [visible, setVisible] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dueDateInputRef = useRef<HTMLInputElement>(null);
+  const emailsRef = useRef<HTMLDivElement>(null);
 
   // --- Link to board state ---
   const [showLinkForm, setShowLinkForm] = useState(false);
@@ -392,6 +393,14 @@ export function CardDetailsModal({
       localStorage.setItem("nb_panel_open", String(next));
       return next;
     });
+  }
+
+  function handleEmailChipClick() {
+    if (!panelOpen) {
+      setPanelOpen(true);
+      localStorage.setItem("nb_panel_open", "true");
+    }
+    setTimeout(() => emailsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
   }
 
   // ------------------------------------------------------------------ personal reminder
@@ -826,36 +835,17 @@ export function CardDetailsModal({
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-neutral-800 bg-neutral-950 px-5 py-3 sm:sticky sm:top-0 sm:z-10">
-          <div className="flex items-center gap-3">
+        {/* ── HEADER ─────────────────────────────────── */}
+        <div className="relative flex-shrink-0 border-b border-neutral-800 bg-neutral-950 pb-0 pl-5 pr-4 pt-3 sm:sticky sm:top-0 sm:z-10">
+          {/* Row 1: title + controls */}
+          <div className="flex items-center gap-3 pb-2">
             <input
               className="flex-1 bg-transparent text-base font-semibold text-neutral-100 outline-none placeholder:text-neutral-600"
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder="Note title"
+              placeholder="Untitled"
               autoFocus
             />
-            {/* Status pills — md+ only */}
-            <div className="hidden items-center gap-1 md:flex">
-              {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => handleStatusChange(status === s ? null : s)}
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                    status === s
-                      ? `${STATUS_META[s].badgeClass} ring-1 ring-inset ring-white/20`
-                      : "border border-neutral-800 text-neutral-600 hover:border-neutral-700 hover:text-neutral-400"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[s].dotClass} ${status !== s ? "opacity-40" : ""}`}
-                  />
-                  {STATUS_META[s].label}
-                </button>
-              ))}
-            </div>
             {/* Visibility toggle */}
             <div className="flex overflow-hidden rounded-lg border border-neutral-800 text-xs">
               {(["personal", "shared"] as const).map((v) => (
@@ -897,46 +887,108 @@ export function CardDetailsModal({
               ✕
             </button>
           </div>
-        </div>
 
-        {/* Body — two columns on md+ */}
-        <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-          {/* Main scroll */}
-          <div className="flex-1 overflow-y-auto">
-          <div className="space-y-5 p-5">
-            {/* Status pills — mobile only */}
-            <div className="flex flex-wrap items-center gap-1.5 md:hidden">
-              {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => handleStatusChange(status === s ? null : s)}
-                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                    status === s
-                      ? `${STATUS_META[s].badgeClass} ring-1 ring-inset ring-white/20`
-                      : "border border-neutral-800 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
-                  }`}
-                >
+          {/* Row 2: labels */}
+          <div className="flex flex-wrap items-center gap-1.5 pb-2">
+            {labelsLoading ? (
+              <span className="text-[11px] text-neutral-700">…</span>
+            ) : (
+              <>
+                {noteLabels.map((label) => (
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${STATUS_META[s].dotClass} ${status !== s ? "opacity-40" : ""}`}
-                  />
-                  {STATUS_META[s].label}
+                    key={label.id}
+                    className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                    style={{ backgroundColor: label.color }}
+                  >
+                    {label.name}
+                    <button
+                      type="button"
+                      className="ml-0.5 opacity-60 hover:opacity-100"
+                      onClick={() => handleDetachLabel(label.id)}
+                      aria-label={`Remove ${label.name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  className="rounded-full border border-dashed border-neutral-800 px-2 py-0.5 text-[11px] text-neutral-700 transition-colors hover:border-neutral-600 hover:text-neutral-500"
+                  onClick={() => setShowPicker((v) => !v)}
+                >
+                  + Label
                 </button>
-              ))}
+              </>
+            )}
+          </div>
+
+          {/* Label picker — drops below header */}
+          {showPicker && (
+            <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
+              <div className="space-y-3">
+                {unattachedLabels.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-neutral-500">Add existing</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {unattachedLabels.map((label) => (
+                        <button
+                          key={label.id}
+                          type="button"
+                          className="rounded-full px-2.5 py-0.5 text-xs font-medium text-white opacity-90 hover:opacity-100"
+                          style={{ backgroundColor: label.color }}
+                          onClick={() => { handleAttachLabel(label.id); setShowPicker(false); }}
+                        >
+                          {label.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-neutral-500">Create new</p>
+                  <div className="mb-1.5 flex flex-wrap gap-1.5">
+                    {LABEL_PALETTE.map(({ hex, label }) => (
+                      <button
+                        key={hex}
+                        type="button"
+                        onClick={() => setNewLabelColor(hex)}
+                        className={`h-5 w-5 rounded-full transition-all duration-100 ${
+                          newLabelColor === hex
+                            ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-950"
+                            : "opacity-60 hover:scale-105 hover:opacity-100"
+                        }`}
+                        style={{ backgroundColor: hex }}
+                        title={label}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-600"
+                      placeholder="Label name"
+                      value={newLabelName}
+                      onChange={(e) => setNewLabelName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCreateLabel(); }}
+                    />
+                    <button
+                      type="button"
+                      className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                      onClick={handleCreateLabel}
+                      disabled={creatingLabel || !newLabelName.trim()}
+                    >
+                      {creatingLabel ? "…" : "Create"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
 
-            {/* Description */}
-            <textarea
-              className="w-full resize-y rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-700"
-              value={description}
-              onChange={(e) => handleDescriptionChange(e.target.value)}
-              placeholder="Add a description…"
-              rows={3}
-            />
-
-            {/* Due date row — chip style */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Hidden datetime picker triggered by chip */}
+          {/* Row 3: timeline — Due · Event · Status */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-neutral-800/50 py-2 text-[11px] text-neutral-600">
+            {/* Due */}
+            <div className="flex items-center gap-1.5">
+              <span>Due</span>
               <input
                 ref={dueDateInputRef}
                 type="datetime-local"
@@ -948,96 +1000,64 @@ export function CardDetailsModal({
               <button
                 type="button"
                 onClick={() => dueDateInputRef.current?.showPicker()}
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                className={`rounded-full px-2 py-0.5 transition-colors ${
                   dueDate
                     ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
-                    : "border border-dashed border-neutral-700 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
+                    : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"
                 }`}
               >
                 {dueDate
                   ? new Date(dueDate).toLocaleString(undefined, { month: "short", day: "numeric" })
-                  : "Set due date"}
+                  : "Set"}
               </button>
               {dueDate && (
-                <button
-                  type="button"
-                  className="text-xs text-neutral-700 hover:text-neutral-400"
-                  onClick={() => handleDueDateChange("")}
-                >
-                  Clear
+                <button type="button" className="text-neutral-700 hover:text-neutral-400" onClick={() => handleDueDateChange("")}>
+                  ×
                 </button>
               )}
             </div>
 
-            {/* Event row — compact chip + inline range picker */}
+            {/* Event */}
             {(() => {
               const hasEvent = Boolean(eventStart || eventEnd);
-              const fmtDate  = (dt: string) =>
+              const fmtDate = (dt: string) =>
                 new Date(dt).toLocaleString(undefined, { month: "short", day: "numeric" });
-
               function handleRangeChange({ from, to }: DateRange) {
                 if (from) {
-                  const existing = eventStart ? new Date(eventStart) : null;
-                  from.setHours(existing?.getHours() ?? 9, existing?.getMinutes() ?? 0, 0, 0);
+                  const ex = eventStart ? new Date(eventStart) : null;
+                  from.setHours(ex?.getHours() ?? 9, ex?.getMinutes() ?? 0, 0, 0);
                   handleEventStartChange(toDatetimeLocal(from.toISOString()));
-                } else {
-                  handleEventStartChange("");
-                }
+                } else { handleEventStartChange(""); }
                 if (to) {
-                  const existing = eventEnd ? new Date(eventEnd) : null;
-                  to.setHours(existing?.getHours() ?? 17, existing?.getMinutes() ?? 0, 0, 0);
+                  const ex = eventEnd ? new Date(eventEnd) : null;
+                  to.setHours(ex?.getHours() ?? 17, ex?.getMinutes() ?? 0, 0, 0);
                   handleEventEndChange(toDatetimeLocal(to.toISOString()));
-                } else {
-                  handleEventEndChange("");
-                }
+                } else { handleEventEndChange(""); }
               }
-
               return (
-                <div className="relative">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowEventPicker((v) => !v)}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
-                        hasEvent
-                          ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
-                          : "border border-dashed border-neutral-700 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"
-                      }`}
-                    >
-                      {hasEvent
-                        ? `${eventStart ? fmtDate(eventStart) : "?"} – ${eventEnd ? fmtDate(eventEnd) : "?"}`
-                        : "Set event"}
+                <div className="relative flex items-center gap-1.5">
+                  <span>Event</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowEventPicker((v) => !v)}
+                    className={`rounded-full px-2 py-0.5 transition-colors ${
+                      hasEvent
+                        ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
+                        : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"
+                    }`}
+                  >
+                    {hasEvent ? `${eventStart ? fmtDate(eventStart) : "?"} – ${eventEnd ? fmtDate(eventEnd) : "?"}` : "Set"}
+                  </button>
+                  {hasEvent && (
+                    <button type="button" className="text-neutral-700 hover:text-neutral-400"
+                      onClick={() => { handleEventStartChange(""); handleEventEndChange(""); setShowEventPicker(false); }}>
+                      ×
                     </button>
-                    {hasEvent && (
-                      <>
-                        <button
-                          type="button"
-                          className="text-xs text-neutral-700 hover:text-neutral-400"
-                          onClick={() => setShowEventPicker((v) => !v)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-neutral-700 hover:text-red-400"
-                          onClick={() => {
-                            handleEventStartChange("");
-                            handleEventEndChange("");
-                            setShowEventPicker(false);
-                          }}
-                        >
-                          Clear
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  )}
                   {showEventPicker && (
-                    <div className="absolute left-0 top-full z-20 mt-1">
+                    <div className="absolute left-0 top-full z-30 mt-1">
                       <DateRangePicker
-                        value={{
-                          from: eventStart ? new Date(eventStart) : null,
-                          to:   eventEnd   ? new Date(eventEnd)   : null,
-                        }}
+                        value={{ from: eventStart ? new Date(eventStart) : null, to: eventEnd ? new Date(eventEnd) : null }}
                         onChange={handleRangeChange}
                         onClose={() => setShowEventPicker(false)}
                       />
@@ -1047,137 +1067,122 @@ export function CardDetailsModal({
               );
             })()}
 
-          {/* Labels */}
-          <section>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-600">Labels</label>
-            {labelsLoading ? (
-              <p className="text-xs text-neutral-600">Loading…</p>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {noteLabels.map((label) => (
-                    <span
-                      key={label.id}
-                      className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
-                      style={{ backgroundColor: label.color }}
-                    >
-                      {label.name}
-                      <button
-                        className="opacity-70 hover:opacity-100"
-                        onClick={() => handleDetachLabel(label.id)}
-                        aria-label={`Remove ${label.name}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  <button
-                    className="rounded-full border border-dashed border-neutral-700 px-2.5 py-0.5 text-xs text-neutral-400 hover:border-neutral-500 hover:text-neutral-300"
-                    onClick={() => setShowPicker((v) => !v)}
-                  >
-                    + Label
-                  </button>
-                </div>
-
-                {showPicker && (
-                  <div className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-                    {unattachedLabels.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs text-neutral-500">Add existing</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {unattachedLabels.map((label) => (
-                            <button
-                              key={label.id}
-                              className="rounded-full px-2.5 py-0.5 text-xs font-medium text-white opacity-90 hover:opacity-100"
-                              style={{ backgroundColor: label.color }}
-                              onClick={() => {
-                                handleAttachLabel(label.id);
-                                setShowPicker(false);
-                              }}
-                            >
-                              {label.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      <p className="text-xs text-neutral-500">Create new</p>
-                      <div className="mb-1.5 flex flex-wrap gap-1.5">
-                        {LABEL_PALETTE.map(({ hex, label }) => (
-                          <button
-                            key={hex}
-                            type="button"
-                            onClick={() => setNewLabelColor(hex)}
-                            className={`h-5 w-5 rounded-full transition-all duration-100 ${
-                              newLabelColor === hex
-                                ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-900"
-                                : "opacity-60 hover:opacity-100 hover:scale-105"
-                            }`}
-                            style={{ backgroundColor: hex }}
-                            title={label}
-                          />
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          className="flex-1 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-200 outline-none focus:border-neutral-600 placeholder:text-neutral-600"
-                          placeholder="Label name"
-                          value={newLabelName}
-                          onChange={(e) => setNewLabelName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleCreateLabel();
-                          }}
-                        />
-                        <button
-                          className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                          onClick={handleCreateLabel}
-                          disabled={creatingLabel || !newLabelName.trim()}
-                        >
-                          {creatingLabel ? "…" : "Create"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-            {/* Attachment chips */}
-            {!emailThreadsLoading && emailThreads.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {emailThreads.map((thread) => (
-                  <span
-                    key={thread.id}
-                    className="inline-flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-0.5 text-xs text-neutral-400"
-                  >
-                    ✉{" "}
-                    {thread.subject
-                      ? thread.subject.slice(0, 30) + (thread.subject.length > 30 ? "…" : "")
-                      : "Email thread"}
-                  </span>
+            {/* Status */}
+            <div className="flex items-center gap-1.5">
+              <span>Status</span>
+              {status && <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dotClass}`} />}
+              <select
+                className="cursor-pointer bg-transparent text-[11px] text-neutral-500 outline-none"
+                value={status ?? ""}
+                onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}
+              >
+                <option value="">—</option>
+                {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
+                  <option key={s} value={s}>{STATUS_META[s].label}</option>
                 ))}
-              </div>
-            )}
+              </select>
+            </div>
+          </div>
+        </div>
 
-            {/* Discussion — only when visibility === "shared" */}
-            {visibility === "shared" && (
-              <div className="space-y-3 pt-2">
-                <p className="text-xs font-medium text-neutral-500">Discussion</p>
+        {/* Body — two columns on md+ */}
+        <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+          {/* Main scroll */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-4 p-5">
+              {/* Description */}
+              <AutoTextarea
+                className="w-full bg-transparent text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
+                placeholder="Add a description…"
+                value={description}
+                onChange={(e) => handleDescriptionChange(e.target.value)}
+              />
+
+              {/* Context — Emails · Attachments */}
+              <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30">
+                <div className="p-3" ref={emailsRef}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Emails</span>
+                  </div>
+                  {emailThreadsLoading ? (
+                    <p className="text-[11px] text-neutral-700">Loading…</p>
+                  ) : emailThreads.length === 0 ? (
+                    <p className="text-[11px] text-neutral-700">No linked emails yet</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {emailThreads.map((thread) => {
+                        const threadAttachments = attachmentMap[thread.id];
+                        return (
+                          <div key={thread.id} className="rounded border border-neutral-800/50 px-2 py-1.5">
+                            <div className="flex items-center gap-1">
+                              <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
+                                ✉ {thread.subject ?? "Email thread"}
+                              </p>
+                              <button
+                                type="button"
+                                disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
+                                onClick={() => void handleOpenThread(thread)}
+                                className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50"
+                              >
+                                {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
+                              </button>
+                              <button
+                                type="button"
+                                className="shrink-0 text-[11px] text-neutral-700 transition-colors hover:text-red-400"
+                                onClick={() => handleUnlinkThread(thread.id)}
+                              >
+                                ×
+                              </button>
+                            </div>
+                            {emailOpenError?.threadId === thread.id && (
+                              <p className="mt-0.5 text-[10px] text-red-400">{emailOpenError.msg}</p>
+                            )}
+                            {threadAttachments && threadAttachments.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {threadAttachments.map((att) => (
+                                  <span key={att.id} className="max-w-[100px] truncate rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-[10px] text-neutral-500">
+                                    📎 {att.file_name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-neutral-800/60 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Attachments</span>
+                    <button
+                      type="button"
+                      className="text-[11px] text-neutral-700 hover:text-neutral-400"
+                      onClick={() => alert("File attachments coming soon")}
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Updates — always shown */}
+              <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30">
+                <div className="border-b border-neutral-800/60 px-3 pb-2 pt-3">
+                  <span className="text-xs text-neutral-500">Updates</span>
+                </div>
                 {collabLoading ? (
-                  <p className="text-xs text-neutral-600">Loading…</p>
+                  <p className="p-3 text-xs text-neutral-600">Loading…</p>
                 ) : collabAuthed === false ? (
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs text-neutral-600">Sign in to participate.</p>
+                  <div className="flex items-center gap-1.5 p-3">
+                    <p className="text-xs text-neutral-600">Sign in to post updates.</p>
                     <Link href="/login" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">
                       Sign in →
                     </Link>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {/* Composer — at top */}
+                  <div className="space-y-3 p-3">
+                    {/* Composer */}
                     <div className="overflow-hidden rounded-lg border border-neutral-800 transition-colors focus-within:border-neutral-700">
                       <AutoTextarea
                         className="w-full bg-transparent px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
@@ -1221,7 +1226,7 @@ export function CardDetailsModal({
                             const c = entry.data;
                             return (
                               <div key={c.id} className="group flex items-start gap-2 py-1">
-                                <div className="mt-0.5 h-6 w-6 flex-shrink-0 rounded-full bg-neutral-800 flex items-center justify-center">
+                                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-neutral-800">
                                   <span className="text-[10px] text-neutral-500">✦</span>
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -1239,7 +1244,6 @@ export function CardDetailsModal({
                               </div>
                             );
                           }
-                          // system activity — single muted line, no dividers
                           const a = entry.data;
                           return (
                             <p key={a.id} className="py-0.5 text-[11px] text-neutral-600">
@@ -1252,120 +1256,118 @@ export function CardDetailsModal({
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Bottom actions */}
-            <div className="space-y-3 border-t border-neutral-800 pt-4">
-              {onLinkToBoard && otherBoards.length > 0 && (
-                <>
-                  {!showLinkForm ? (
-                    <button
-                      type="button"
-                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200"
-                      onClick={() => setShowLinkForm(true)}
-                    >
-                      🔗 Link to another board…
-                    </button>
-                  ) : (
-                    <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-                      <p className="text-xs font-medium text-neutral-400">Link to board</p>
-                      <select
-                        className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
-                        value={linkBoardId}
-                        onChange={(e) => handleLinkBoardChange(e.target.value)}
+              {/* Bottom actions */}
+              <div className="space-y-3 border-t border-neutral-800 pt-4">
+                {onLinkToBoard && otherBoards.length > 0 && (
+                  <>
+                    {!showLinkForm ? (
+                      <button
+                        type="button"
+                        className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200"
+                        onClick={() => setShowLinkForm(true)}
                       >
-                        <option value="">Select board…</option>
-                        {otherBoards.map((b) => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
-                        ))}
-                      </select>
-                      {linkBoardId && (
-                        <>
-                          {linkColumnsLoading ? (
-                            <p className="text-xs text-neutral-600">Loading columns…</p>
-                          ) : linkColumns.length === 0 ? (
-                            <p className="text-xs text-neutral-500">No columns on this board.</p>
-                          ) : (
-                            <select
-                              className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
-                              value={linkColumnId}
-                              onChange={(e) => setLinkColumnId(e.target.value)}
+                        🔗 Link to another board…
+                      </button>
+                    ) : (
+                      <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3">
+                        <p className="text-xs font-medium text-neutral-400">Link to board</p>
+                        <select
+                          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
+                          value={linkBoardId}
+                          onChange={(e) => handleLinkBoardChange(e.target.value)}
+                        >
+                          <option value="">Select board…</option>
+                          {otherBoards.map((b) => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                        </select>
+                        {linkBoardId && (
+                          <>
+                            {linkColumnsLoading ? (
+                              <p className="text-xs text-neutral-600">Loading columns…</p>
+                            ) : linkColumns.length === 0 ? (
+                              <p className="text-xs text-neutral-500">No columns on this board.</p>
+                            ) : (
+                              <select
+                                className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
+                                value={linkColumnId}
+                                onChange={(e) => setLinkColumnId(e.target.value)}
+                              >
+                                {linkColumns.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            )}
+                          </>
+                        )}
+                        {linkSuccess ? (
+                          <p className="text-xs text-green-500">Linked successfully!</p>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                              onClick={handleLink}
+                              disabled={linking || !linkBoardId || !linkColumnId}
                             >
-                              {linkColumns.map((c) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
-                          )}
-                        </>
-                      )}
-                      {linkSuccess ? (
-                        <p className="text-xs text-green-500">Linked successfully!</p>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                            onClick={handleLink}
-                            disabled={linking || !linkBoardId || !linkColumnId}
-                          >
-                            {linking ? "Linking…" : "Link"}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
-                            onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                    archived
-                      ? "border-green-700 text-green-400 hover:bg-green-900/20"
-                      : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
-                  }`}
-                  onClick={handleArchiveToggle}
-                >
-                  {archived ? "Restore from Archive" : "Archive Card"}
-                </button>
-                <button
-                  type="button"
-                  className="text-xs text-neutral-700 transition-colors hover:text-red-400"
-                  onClick={handleDeleteEverywhere}
-                >
-                  Delete everywhere
-                </button>
+                              {linking ? "Linking…" : "Link"}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                              onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      archived
+                        ? "border-green-700 text-green-400 hover:bg-green-900/20"
+                        : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                    }`}
+                    onClick={handleArchiveToggle}
+                  >
+                    {archived ? "Restore from Archive" : "Archive Card"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-neutral-700 transition-colors hover:text-red-400"
+                    onClick={handleDeleteEverywhere}
+                  >
+                    Delete everywhere
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           </div>{/* end main scroll */}
 
-          {/* Private panel */}
+          {/* Workspace panel */}
           <div
             className={`flex-shrink-0 border-t border-neutral-800 transition-all duration-200 md:border-l md:border-t-0 ${
               panelOpen ? "md:w-64" : "md:w-9"
             }`}
           >
-            {/* Toggle handle */}
             <div className="flex items-center border-b border-neutral-800 px-2.5 py-2">
               <button
                 type="button"
                 onClick={togglePanel}
                 className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
               >
-                {panelOpen ? "My Notes ›" : "‹"}
+                {panelOpen ? "Workspace ›" : "‹"}
               </button>
             </div>
 
             {panelOpen && (
-              <div className="space-y-3 p-3">
+              <div className="space-y-4 p-3">
                 {/* My Actions */}
                 <div className="space-y-1">
                   <label className="flex cursor-pointer items-center gap-2">
@@ -1387,61 +1389,9 @@ export function CardDetailsModal({
                   )}
                 </div>
 
-                {/* Linked Emails */}
-                {(emailThreadsLoading || emailThreads.length > 0) && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-neutral-500">Linked emails</p>
-                    {emailThreadsLoading ? (
-                      <p className="text-xs text-neutral-700">Loading…</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {emailThreads.map((thread) => {
-                          const threadAttachments = attachmentMap[thread.id];
-                          return (
-                            <div key={thread.id} className="rounded border border-neutral-800/50 px-2 py-1.5">
-                              <div className="flex items-center gap-1">
-                                <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
-                                  ✉ {thread.subject ?? "Email thread"}
-                                </p>
-                                <button
-                                  type="button"
-                                  disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
-                                  onClick={() => void handleOpenThread(thread)}
-                                  className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50"
-                                >
-                                  {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="shrink-0 text-[11px] text-neutral-700 transition-colors hover:text-red-400"
-                                  onClick={() => handleUnlinkThread(thread.id)}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              {emailOpenError?.threadId === thread.id && (
-                                <p className="mt-0.5 text-[10px] text-red-400">{emailOpenError.msg}</p>
-                              )}
-                              {threadAttachments && threadAttachments.length > 0 && (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {threadAttachments.map((att) => (
-                                    <span key={att.id} className="max-w-[100px] truncate rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-[10px] text-neutral-500">
-                                      📎 {att.file_name}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Note to self */}
+                {/* Personal Notes */}
                 <div className="space-y-1.5">
-                  <p className="text-xs text-neutral-500">Note to self</p>
+                  <p className="text-xs text-neutral-500">Personal Notes</p>
                   <AutoTextarea
                     className="w-full rounded-md border border-neutral-800/60 bg-transparent px-2.5 py-1.5 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-700"
                     placeholder="Private note…"
@@ -1451,7 +1401,7 @@ export function CardDetailsModal({
                 </div>
               </div>
             )}
-          </div>{/* end Private panel */}
+          </div>{/* end Workspace panel */}
         </div>{/* end body */}
       </div>{/* end panel */}
     </div>
