@@ -156,6 +156,21 @@ export function CardDetailsModal({
   const [collabUserId, setCollabUserId] = useState<string | null>(null);
   const [composerStatusChange, setComposerStatusChange] = useState<NoteStatus | null>(null);
 
+  // --- Kebab menu ---
+  const [showKebabMenu, setShowKebabMenu] = useState(false);
+
+  // --- Local (optimistic) activity events that aren't persisted server-side yet ---
+  // We push entries here on field changes so the activity feed updates immediately.
+  type LocalEvent = { id: string; text: string; ts: string };
+  const [localEvents, setLocalEvents] = useState<LocalEvent[]>([]);
+
+  function pushLocalEvent(text: string) {
+    setLocalEvents((prev) => [
+      { id: `local-${Date.now()}-${Math.random()}`, text, ts: new Date().toISOString() },
+      ...prev,
+    ]);
+  }
+
   // --- Debounced save ---
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,10 +182,18 @@ export function CardDetailsModal({
   );
   const [showVisibilityConfirm, setShowVisibilityConfirm] = useState(false);
 
-  // --- My Layer panel ---
+  // --- My Layer panel (OLD layout) ---
   const [panelOpen, setPanelOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("nb_panel_open") !== "false";
+  });
+
+  // --- My layer collapse (NEW layout) ---
+  const [myLayerOpen, setMyLayerOpen] = useState<boolean>(() => {
+    const hasLocalData =
+      typeof window !== "undefined" &&
+      (localStorage.getItem(`nb_reminder_${noteId}`) ?? "").trim().length > 0;
+    return isInActions || hasLocalData;
   });
 
   // --- Personal reminder (localStorage only) ---
@@ -178,6 +201,10 @@ export function CardDetailsModal({
     if (typeof window === "undefined") return "";
     return localStorage.getItem(`nb_reminder_${noteId}`) ?? "";
   });
+
+  // --- Context section expanders ---
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [showLinks, setShowLinks] = useState(false);
 
   // --- Event range picker ---
   const [showEventPicker, setShowEventPicker] = useState(false);
@@ -187,6 +214,7 @@ export function CardDetailsModal({
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dueDateInputRef = useRef<HTMLInputElement>(null);
   const emailsRef = useRef<HTMLDivElement>(null);
+  const kebabRef = useRef<HTMLDivElement>(null);
 
   // --- Link to board state ---
   const [showLinkForm, setShowLinkForm] = useState(false);
@@ -213,6 +241,7 @@ export function CardDetailsModal({
     listEmailThreadsForNote(noteId).then(({ data }) => {
       setEmailThreads(data);
       setEmailThreadsLoading(false);
+      if (data.length > 0) setMyLayerOpen(true);
     });
     listCollab(noteId).then((data) => {
       if (data === null) {
@@ -244,6 +273,18 @@ export function CardDetailsModal({
     };
   }, []);
 
+  // Close kebab on outside click
+  useEffect(() => {
+    if (!showKebabMenu) return;
+    function onDown(e: MouseEvent) {
+      if (kebabRef.current && !kebabRef.current.contains(e.target as Node)) {
+        setShowKebabMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showKebabMenu]);
+
   // Re-sync fields when a different card is opened (noteId changes)
   useEffect(() => {
     setTitle(note.content);
@@ -258,10 +299,18 @@ export function CardDetailsModal({
     setPersonalReminder(
       typeof window !== "undefined" ? (localStorage.getItem(`nb_reminder_${noteId}`) ?? "") : "",
     );
+    setMyLayerOpen(
+      Boolean(actionMap[noteId]?.is_in_actions) ||
+        (typeof window !== "undefined" &&
+          (localStorage.getItem(`nb_reminder_${noteId}`) ?? "").trim().length > 0),
+    );
     setActivity([]);
+    setLocalEvents([]);
     setCollabLoading(true);
     setCollabAuthed(null);
     setCollabUserId(null);
+    setShowAttachments(false);
+    setShowLinks(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
@@ -316,14 +365,12 @@ export function CardDetailsModal({
 
   function handleDueDateChange(v: string) {
     setDueDate(v);
-    // YYYY-MM-DD for the canonical actions date; full ISO for the note display
     const dateStr = v ? v.slice(0, 10) : null;
     const iso = v ? new Date(v).toISOString() : null;
     onNoteChange(noteId, { due_date: iso });
-    // Route through /api/notes/[noteId]/due — updates notes.due_date + auto-adds to actions
     void updateNoteDueDate(noteId, dateStr);
-    // Also update via ActionContext so the actions page rawResult stays in sync
     onDueDateChange(noteId, dateStr);
+    pushLocalEvent(v ? `Due date set to ${new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "Due date cleared");
   }
 
   function handleEventStartChange(v: string) {
@@ -338,6 +385,20 @@ export function CardDetailsModal({
     const iso = v ? new Date(v).toISOString() : null;
     onNoteChange(noteId, { event_end: iso });
     scheduleFieldSave({ event_end: iso });
+  }
+
+  function handleEventRangeClear() {
+    handleEventStartChange("");
+    handleEventEndChange("");
+    setShowEventPicker(false);
+    pushLocalEvent("Event range cleared");
+  }
+
+  function handleEventRangeSet(start: string, end: string) {
+    // Called after a DateRangePicker selection
+    const fmt = (dt: string) => new Date(dt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    if (start && end) pushLocalEvent(`Event set ${fmt(start)} – ${fmt(end)}`);
+    else if (start) pushLocalEvent(`Event start set to ${fmt(start)}`);
   }
 
   const eventRangeError =
@@ -369,6 +430,11 @@ export function CardDetailsModal({
     const prevStatus = status;
     setStatus(newStatus);
     onNoteChange(noteId, { status: newStatus });
+    pushLocalEvent(
+      newStatus
+        ? `Status changed to ${STATUS_META[newStatus]?.label ?? newStatus}`
+        : "Status cleared",
+    );
     const { error } = await updateNoteFields(noteId, { status: newStatus });
     if (error) {
       setStatus(prevStatus);
@@ -383,6 +449,7 @@ export function CardDetailsModal({
     setVisibility(next);
     onNoteChange(noteId, { visibility: next });
     scheduleFieldSave({ visibility: next });
+    pushLocalEvent(next === "shared" ? "Card made shared" : "Card made personal");
   }
 
   // ------------------------------------------------------------------ panel
@@ -396,10 +463,7 @@ export function CardDetailsModal({
   }
 
   function handleEmailChipClick() {
-    if (!panelOpen) {
-      setPanelOpen(true);
-      localStorage.setItem("nb_panel_open", "true");
-    }
+    if (!myLayerOpen) setMyLayerOpen(true);
     setTimeout(() => emailsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
   }
 
@@ -417,21 +481,9 @@ export function CardDetailsModal({
     const hasStatus = composerStatusChange !== null;
     if (!hasComment && !hasStatus) return;
 
-    // Status change — save + optimistic activity entry
+    // Status change — handleStatusChange already pushes a local event
     if (hasStatus) {
-      const prevStatus = status;
       void handleStatusChange(composerStatusChange!);
-      setActivity((prev) => [
-        ...prev,
-        {
-          id: `temp-act-${Date.now()}`,
-          note_id: noteId,
-          actor_user_id: collabUserId,
-          activity_type: "status_changed",
-          payload: { from: prevStatus, to: composerStatusChange! },
-          created_at: new Date().toISOString(),
-        },
-      ]);
       setComposerStatusChange(null);
     }
 
@@ -716,13 +768,14 @@ export function CardDetailsModal({
   }
 
   async function handleUnlinkThread(threadId: string) {
+    const thread = emailThreads.find((t) => t.id === threadId);
     setEmailThreads((prev) => prev.filter((t) => t.id !== threadId));
     const { error } = await deleteEmailThread(threadId);
     if (error) {
-      // Re-fetch on error
       listEmailThreadsForNote(noteId).then(({ data }) => setEmailThreads(data));
       onError("Failed to unlink email thread");
     } else {
+      pushLocalEvent(`Email unlinked${thread?.subject ? `: "${thread.subject}"` : ""}`);
       onEmailThreadsChanged?.();
     }
   }
@@ -772,17 +825,22 @@ export function CardDetailsModal({
 
   type FeedEntry =
     | { kind: "comment"; data: CommentRow; ts: string }
-    | { kind: "activity"; data: NoteActivity; ts: string };
+    | { kind: "activity"; data: NoteActivity; ts: string }
+    | { kind: "local"; id: string; text: string; ts: string };
 
   // Newest first
   const feedEntries: FeedEntry[] = [
     ...comments.map((c) => ({ kind: "comment" as const, data: c, ts: c.created_at })),
     ...activity.map((a) => ({ kind: "activity" as const, data: a, ts: a.created_at })),
+    ...localEvents.map((e) => ({ kind: "local" as const, id: e.id, text: e.text, ts: e.ts })),
   ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
   // Boards available for linking: exclude boards the note is already placed on
   // We show all boards; the DB unique constraint will reject duplicates gracefully
   const otherBoards = boards?.filter((b) => b.id !== boardId) ?? [];
+
+  // Feature flag — set to false to revert to the previous layout instantly
+  const NEW_CARD_LAYOUT = true;
 
   // ------------------------------------------------------------------ render
 
@@ -798,7 +856,7 @@ export function CardDetailsModal({
     >
       {/* Panel */}
       <div
-        className={`fixed inset-0 flex flex-col bg-neutral-950 transition-all duration-200 sm:relative sm:inset-auto sm:w-full sm:max-w-3xl sm:rounded-xl sm:border sm:border-neutral-800 sm:shadow-2xl ${
+        className={`fixed inset-0 flex flex-col bg-neutral-950 transition-all duration-200 sm:relative sm:inset-auto sm:w-full ${NEW_CARD_LAYOUT ? "sm:max-w-4xl" : "sm:max-w-3xl"} sm:rounded-xl sm:border sm:border-neutral-800 sm:shadow-2xl ${
           visible ? "opacity-100 sm:scale-100" : "opacity-0 sm:scale-95"
         }`}
         role="dialog"
@@ -878,6 +936,45 @@ export function CardDetailsModal({
             >
               {saveStatus === "saving" ? "Saving…" : "Saved"}
             </span>
+            {/* Kebab menu */}
+            <div className="relative" ref={kebabRef}>
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-neutral-500 hover:text-neutral-200"
+                onClick={() => setShowKebabMenu((v) => !v)}
+                aria-label="More actions"
+              >
+                ···
+              </button>
+              {showKebabMenu && (
+                <div className="absolute right-0 top-full z-40 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 py-1 shadow-xl">
+                  {onLinkToBoard && otherBoards.length > 0 && (
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-neutral-300 hover:bg-neutral-800"
+                      onClick={() => { setShowLinkForm(true); setShowKebabMenu(false); }}
+                    >
+                      🔗 Link to another board…
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-neutral-800 ${archived ? "text-green-400" : "text-neutral-300"}`}
+                    onClick={() => { void handleArchiveToggle(); setShowKebabMenu(false); }}
+                  >
+                    {archived ? "Restore from archive" : "Archive"}
+                  </button>
+                  <div className="my-1 border-t border-neutral-800" />
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 hover:bg-neutral-800"
+                    onClick={() => { void handleDeleteEverywhere(); setShowKebabMenu(false); }}
+                  >
+                    Delete everywhere
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="shrink-0 rounded p-1 text-neutral-400 hover:text-white"
@@ -888,318 +985,528 @@ export function CardDetailsModal({
             </button>
           </div>
 
-          {/* Row 2: labels */}
-          <div className="flex flex-wrap items-center gap-1.5 pb-2">
-            {labelsLoading ? (
-              <span className="text-[11px] text-neutral-700">…</span>
-            ) : (
-              <>
-                {noteLabels.map((label) => (
-                  <span
-                    key={label.id}
-                    className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
-                    style={{ backgroundColor: label.color }}
-                  >
-                    {label.name}
+          {NEW_CARD_LAYOUT ? (
+            /* ── NEW: single meta row — Labels · Status · Due · Event ── */
+            <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-neutral-800/50 pb-2.5 pt-2 text-[11px]">
+                {/* Labels inline */}
+                {labelsLoading ? (
+                  <span className="text-neutral-700">…</span>
+                ) : (
+                  <>
+                    {noteLabels.map((label) => (
+                      <span
+                        key={label.id}
+                        className="flex items-center gap-0.5 rounded-full px-2 py-0.5 font-medium text-white"
+                        style={{ backgroundColor: label.color }}
+                      >
+                        {label.name}
+                        <button
+                          type="button"
+                          className="ml-0.5 opacity-60 hover:opacity-100"
+                          onClick={() => handleDetachLabel(label.id)}
+                          aria-label={`Remove ${label.name}`}
+                        >×</button>
+                      </span>
+                    ))}
                     <button
                       type="button"
-                      className="ml-0.5 opacity-60 hover:opacity-100"
-                      onClick={() => handleDetachLabel(label.id)}
-                      aria-label={`Remove ${label.name}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-                <button
-                  type="button"
-                  className="rounded-full border border-dashed border-neutral-800 px-2 py-0.5 text-[11px] text-neutral-700 transition-colors hover:border-neutral-600 hover:text-neutral-500"
-                  onClick={() => setShowPicker((v) => !v)}
-                >
-                  + Label
-                </button>
-              </>
-            )}
-          </div>
+                      className="rounded-full border border-dashed border-neutral-800 px-2 py-0.5 text-neutral-700 transition-colors hover:border-neutral-600 hover:text-neutral-500"
+                      onClick={() => setShowPicker((v) => !v)}
+                    >+ Label</button>
+                  </>
+                )}
 
-          {/* Label picker — drops below header */}
-          {showPicker && (
-            <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
-              <div className="space-y-3">
-                {unattachedLabels.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-neutral-500">Add existing</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {unattachedLabels.map((label) => (
+                {/* Divider */}
+                <span className="h-3.5 w-px shrink-0 bg-neutral-800" />
+
+                {/* Status */}
+                <div className="flex items-center gap-1 text-neutral-600">
+                  {status && <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dotClass}`} />}
+                  <select
+                    className="cursor-pointer bg-transparent text-neutral-500 outline-none"
+                    value={status ?? ""}
+                    onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}
+                  >
+                    <option value="">Status</option>
+                    {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
+                      <option key={s} value={s}>{STATUS_META[s].label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dates — Due + Event grouped */}
+                {(() => {
+                  const hasDue = Boolean(dueDate);
+                  const hasEvent = Boolean(eventStart || eventEnd);
+                  const fmtDate = (dt: string) => new Date(dt).toLocaleString(undefined, { month: "short", day: "numeric" });
+                  function handleRangeChange({ from, to }: DateRange) {
+                    let newStart = "";
+                    let newEnd = "";
+                    if (from) {
+                      const ex = eventStart ? new Date(eventStart) : null;
+                      from.setHours(ex?.getHours() ?? 9, ex?.getMinutes() ?? 0, 0, 0);
+                      newStart = toDatetimeLocal(from.toISOString());
+                      handleEventStartChange(newStart);
+                    } else { handleEventStartChange(""); }
+                    if (to) {
+                      const ex = eventEnd ? new Date(eventEnd) : null;
+                      to.setHours(ex?.getHours() ?? 17, ex?.getMinutes() ?? 0, 0, 0);
+                      newEnd = toDatetimeLocal(to.toISOString());
+                      handleEventEndChange(newEnd);
+                    } else { handleEventEndChange(""); }
+                    if (newStart || newEnd) handleEventRangeSet(newStart, newEnd);
+                  }
+                  return (
+                    <div className="relative flex items-center gap-1.5 text-neutral-600">
+                      <span>Dates</span>
+                      <input ref={dueDateInputRef} type="datetime-local" className="sr-only" value={dueDate} onChange={(e) => handleDueDateChange(e.target.value)} tabIndex={-1} />
+                      {/* Due sub-chip */}
+                      <button type="button" onClick={() => dueDateInputRef.current?.showPicker()}
+                        className={`rounded-full px-2 py-0.5 transition-colors ${hasDue ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600" : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"}`}>
+                        {hasDue ? fmtDate(dueDate) : "Due"}
+                      </button>
+                      {hasDue && <button type="button" className="text-neutral-700 hover:text-neutral-400" onClick={() => handleDueDateChange("")}>×</button>}
+                      {/* Event sub-chip */}
+                      <button type="button" onClick={() => setShowEventPicker((v) => !v)}
+                        className={`rounded-full px-2 py-0.5 transition-colors ${hasEvent ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600" : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"}`}>
+                        {hasEvent ? `${eventStart ? fmtDate(eventStart) : "?"} – ${eventEnd ? fmtDate(eventEnd) : "?"}` : "Event"}
+                      </button>
+                      {hasEvent && (
+                        <button type="button" className="text-neutral-700 hover:text-neutral-400"
+                          onClick={handleEventRangeClear}>×</button>
+                      )}
+                      {showEventPicker && (
+                        <div className="absolute left-0 top-full z-30 mt-1">
+                          <DateRangePicker
+                            value={{ from: eventStart ? new Date(eventStart) : null, to: eventEnd ? new Date(eventEnd) : null }}
+                            onChange={handleRangeChange}
+                            onClose={() => setShowEventPicker(false)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Label picker — drops below header (shared by both layouts) */}
+              {showPicker && (
+                <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
+                  <div className="space-y-3">
+                    {unattachedLabels.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-neutral-500">Add existing</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {unattachedLabels.map((label) => (
+                            <button
+                              key={label.id}
+                              type="button"
+                              className="rounded-full px-2.5 py-0.5 text-xs font-medium text-white opacity-90 hover:opacity-100"
+                              style={{ backgroundColor: label.color }}
+                              onClick={() => { handleAttachLabel(label.id); setShowPicker(false); }}
+                            >
+                              {label.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-neutral-500">Create new</p>
+                      <div className="mb-1.5 flex flex-wrap gap-1.5">
+                        {LABEL_PALETTE.map(({ hex, label }) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => setNewLabelColor(hex)}
+                            className={`h-5 w-5 rounded-full transition-all duration-100 ${
+                              newLabelColor === hex
+                                ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-950"
+                                : "opacity-60 hover:scale-105 hover:opacity-100"
+                            }`}
+                            style={{ backgroundColor: hex }}
+                            title={label}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-600"
+                          placeholder="Label name"
+                          value={newLabelName}
+                          onChange={(e) => setNewLabelName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleCreateLabel(); }}
+                        />
                         <button
-                          key={label.id}
                           type="button"
-                          className="rounded-full px-2.5 py-0.5 text-xs font-medium text-white opacity-90 hover:opacity-100"
-                          style={{ backgroundColor: label.color }}
-                          onClick={() => { handleAttachLabel(label.id); setShowPicker(false); }}
+                          className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                          onClick={handleCreateLabel}
+                          disabled={creatingLabel || !newLabelName.trim()}
                         >
-                          {label.name}
+                          {creatingLabel ? "…" : "Create"}
                         </button>
-                      ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* ── OLD: separate label row + timeline row ── */
+            <>
+              {/* Row 2: labels */}
+              <div className="flex flex-wrap items-center gap-1.5 pb-2">
+                {labelsLoading ? (
+                  <span className="text-[11px] text-neutral-700">…</span>
+                ) : (
+                  <>
+                    {noteLabels.map((label) => (
+                      <span
+                        key={label.id}
+                        className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                        style={{ backgroundColor: label.color }}
+                      >
+                        {label.name}
+                        <button
+                          type="button"
+                          className="ml-0.5 opacity-60 hover:opacity-100"
+                          onClick={() => handleDetachLabel(label.id)}
+                          aria-label={`Remove ${label.name}`}
+                        >×</button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      className="rounded-full border border-dashed border-neutral-800 px-2 py-0.5 text-[11px] text-neutral-700 transition-colors hover:border-neutral-600 hover:text-neutral-500"
+                      onClick={() => setShowPicker((v) => !v)}
+                    >+ Label</button>
+                  </>
+                )}
+              </div>
+
+              {/* Label picker — drops below header */}
+              {showPicker && (
+                <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
+                  <div className="space-y-3">
+                    {unattachedLabels.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-neutral-500">Add existing</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {unattachedLabels.map((label) => (
+                            <button
+                              key={label.id}
+                              type="button"
+                              className="rounded-full px-2.5 py-0.5 text-xs font-medium text-white opacity-90 hover:opacity-100"
+                              style={{ backgroundColor: label.color }}
+                              onClick={() => { handleAttachLabel(label.id); setShowPicker(false); }}
+                            >{label.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-neutral-500">Create new</p>
+                      <div className="mb-1.5 flex flex-wrap gap-1.5">
+                        {LABEL_PALETTE.map(({ hex, label }) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => setNewLabelColor(hex)}
+                            className={`h-5 w-5 rounded-full transition-all duration-100 ${
+                              newLabelColor === hex
+                                ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-950"
+                                : "opacity-60 hover:scale-105 hover:opacity-100"
+                            }`}
+                            style={{ backgroundColor: hex }}
+                            title={label}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-600"
+                          placeholder="Label name"
+                          value={newLabelName}
+                          onChange={(e) => setNewLabelName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleCreateLabel(); }}
+                        />
+                        <button
+                          type="button"
+                          className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                          onClick={handleCreateLabel}
+                          disabled={creatingLabel || !newLabelName.trim()}
+                        >{creatingLabel ? "…" : "Create"}</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Row 3: timeline — Due · Event · Status */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-neutral-800/50 py-2 text-[11px] text-neutral-600">
+                <div className="flex items-center gap-1.5">
+                  <span>Due</span>
+                  <input ref={dueDateInputRef} type="datetime-local" className="sr-only" value={dueDate} onChange={(e) => handleDueDateChange(e.target.value)} tabIndex={-1} />
+                  <button type="button" onClick={() => dueDateInputRef.current?.showPicker()}
+                    className={`rounded-full px-2 py-0.5 transition-colors ${dueDate ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600" : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"}`}>
+                    {dueDate ? new Date(dueDate).toLocaleString(undefined, { month: "short", day: "numeric" }) : "Set"}
+                  </button>
+                  {dueDate && <button type="button" className="text-neutral-700 hover:text-neutral-400" onClick={() => handleDueDateChange("")}>×</button>}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span>Status</span>
+                  {status && <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dotClass}`} />}
+                  <select className="cursor-pointer bg-transparent text-[11px] text-neutral-500 outline-none" value={status ?? ""} onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}>
+                    <option value="">—</option>
+                    {STATUS_VALUES.filter((s) => s !== "done").map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {NEW_CARD_LAYOUT ? (
+          /* ── NEW: left = info + personal layer; right = activity ── */
+          <div className="flex flex-1 overflow-hidden">
+
+            {/* ── LEFT COLUMN ── */}
+            <div className="min-w-0 flex-1 overflow-y-auto">
+              <div className="space-y-6 px-6 py-5">
+
+                {/* About / description — content-first, no border box */}
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-600">About</p>
+                  <AutoTextarea
+                    className="w-full bg-transparent text-sm leading-relaxed text-neutral-200 outline-none placeholder:text-neutral-600"
+                    placeholder="Add a description…"
+                    value={description}
+                    onChange={(e) => handleDescriptionChange(e.target.value)}
+                  />
+                </div>
+
+                {/* My layer — personal, collapsible */}
+                <div className="rounded-xl bg-neutral-900/40 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setMyLayerOpen((v) => !v)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-600 hover:text-neutral-400"
+                  >
+                    <span>My layer</span>
+                    <div className="flex items-center gap-2">
+                      {!myLayerOpen && (
+                        <span className="text-[10px] font-normal normal-case tracking-normal text-neutral-700">
+                          {[
+                            isInActions && "In Actions",
+                            personalReminder.trim() && "note",
+                            emailThreads.length > 0 && `${emailThreads.length} email${emailThreads.length !== 1 ? "s" : ""}`,
+                          ].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                      <span className="text-neutral-700">{myLayerOpen ? "▾" : "▸"}</span>
+                    </div>
+                  </button>
+
+                  {myLayerOpen && (
+                    <div className="space-y-4 border-t border-neutral-800/40 px-4 pb-4 pt-3">
+
+                      {/* My actions */}
+                      <div>
+                        <p className="mb-2 text-[11px] text-neutral-600">My actions</p>
+                        <div className="flex items-center gap-3">
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isInActions}
+                              onChange={(e) => onToggleInActions(noteId, e.target.checked)}
+                              className="h-3.5 w-3.5 rounded accent-indigo-500"
+                            />
+                            <span className="text-xs text-neutral-400">Track in My Actions</span>
+                          </label>
+                          {isInActions && (
+                            <Link href="/actions" className="text-[11px] text-indigo-400 transition-colors hover:text-indigo-300">
+                              View →
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Notes to self — auto-grows, never clips */}
+                      <div>
+                        <p className="mb-1.5 text-[11px] text-neutral-600">Notes to self</p>
+                        <AutoTextarea
+                          className="w-full rounded-lg bg-neutral-800/40 px-3 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:bg-neutral-800/60 focus:ring-1 focus:ring-neutral-700/50"
+                          placeholder="Private notes…"
+                          value={personalReminder}
+                          onChange={(e) => handlePersonalReminderChange(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Linked emails */}
+                      <div ref={emailsRef}>
+                        <p className="mb-1.5 text-[11px] text-neutral-600">
+                          Linked emails{emailThreads.length > 0 ? ` (${emailThreads.length})` : ""}
+                        </p>
+                        {emailThreadsLoading ? (
+                          <p className="text-[11px] text-neutral-700">Loading…</p>
+                        ) : emailThreads.length === 0 ? (
+                          <p className="text-[11px] text-neutral-700">No linked emails</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {emailThreads.map((thread) => {
+                              const threadAttachments = attachmentMap[thread.id];
+                              return (
+                                <div key={thread.id} className="rounded-lg bg-neutral-800/30 px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
+                                      ✉ {thread.subject ?? "Email thread"}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
+                                      onClick={() => void handleOpenThread(thread)}
+                                      className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50"
+                                    >
+                                      {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="shrink-0 text-[11px] text-neutral-700 hover:text-red-400"
+                                      onClick={() => handleUnlinkThread(thread.id)}
+                                    >×</button>
+                                  </div>
+                                  {emailOpenError?.threadId === thread.id && (
+                                    <p className="mt-1 text-[10px] text-red-400">{emailOpenError.msg}</p>
+                                  )}
+                                  {threadAttachments && threadAttachments.length > 0 && (
+                                    <div className="mt-1.5 flex flex-wrap gap-1">
+                                      {threadAttachments.map((att) => (
+                                        <span key={att.id} className="max-w-[120px] truncate rounded border border-neutral-700 bg-neutral-800/60 px-1.5 py-0.5 text-[10px] text-neutral-500">
+                                          📎 {att.file_name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Context — compact chip row: Attachments + Links */}
+                <div>
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-neutral-600">Context</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachments((v) => !v)}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${showAttachments ? "bg-neutral-800 text-neutral-200" : "bg-neutral-900/60 text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-300"}`}
+                    >
+                      <span>📎</span>
+                      <span>Attachments</span>
+                      <span className="text-neutral-700">0</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowLinks((v) => !v)}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${showLinks ? "bg-neutral-800 text-neutral-200" : "bg-neutral-900/60 text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-300"}`}
+                    >
+                      <span>🔗</span>
+                      <span>Links</span>
+                      <span className="text-neutral-700">0</span>
+                    </button>
+                  </div>
+
+                  {/* Attachments expand */}
+                  {showAttachments && (
+                    <div className="mt-2 rounded-xl bg-neutral-900/40 px-4 py-3">
+                      <p className="text-[11px] text-neutral-700">File attachments coming soon.</p>
+                    </div>
+                  )}
+
+                  {/* Links expand */}
+                  {showLinks && (
+                    <div className="mt-2 rounded-xl bg-neutral-900/40 px-4 py-3">
+                      <p className="text-[11px] text-neutral-700">Link attachments coming soon.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Link-to-board form (opened from kebab menu) */}
+                {showLinkForm && onLinkToBoard && (
+                  <div className="rounded-xl bg-neutral-900/40 p-4 shadow-sm">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-xs font-medium text-neutral-400">Link to board</p>
+                      <button type="button" className="text-xs text-neutral-600 hover:text-neutral-300" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>✕</button>
+                    </div>
+                    <div className="space-y-2">
+                      <select className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkBoardId} onChange={(e) => handleLinkBoardChange(e.target.value)}>
+                        <option value="">Select board…</option>
+                        {otherBoards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                      {linkBoardId && (
+                        linkColumnsLoading ? (
+                          <p className="text-xs text-neutral-600">Loading columns…</p>
+                        ) : linkColumns.length === 0 ? (
+                          <p className="text-xs text-neutral-500">No columns on this board.</p>
+                        ) : (
+                          <select className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkColumnId} onChange={(e) => setLinkColumnId(e.target.value)}>
+                            {linkColumns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        )
+                      )}
+                      {linkSuccess ? (
+                        <p className="text-xs text-green-500">Linked successfully!</p>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button type="button" className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50" onClick={handleLink} disabled={linking || !linkBoardId || !linkColumnId}>{linking ? "Linking…" : "Link"}</button>
+                          <button type="button" className="rounded-lg px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>Cancel</button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
-                <div className="space-y-1.5">
-                  <p className="text-xs text-neutral-500">Create new</p>
-                  <div className="mb-1.5 flex flex-wrap gap-1.5">
-                    {LABEL_PALETTE.map(({ hex, label }) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        onClick={() => setNewLabelColor(hex)}
-                        className={`h-5 w-5 rounded-full transition-all duration-100 ${
-                          newLabelColor === hex
-                            ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-950"
-                            : "opacity-60 hover:scale-105 hover:opacity-100"
-                        }`}
-                        style={{ backgroundColor: hex }}
-                        title={label}
-                      />
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-600"
-                      placeholder="Label name"
-                      value={newLabelName}
-                      onChange={(e) => setNewLabelName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleCreateLabel(); }}
-                    />
-                    <button
-                      type="button"
-                      className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                      onClick={handleCreateLabel}
-                      disabled={creatingLabel || !newLabelName.trim()}
-                    >
-                      {creatingLabel ? "…" : "Create"}
-                    </button>
-                  </div>
-                </div>
+
               </div>
-            </div>
-          )}
+            </div>{/* end left column */}
 
-          {/* Row 3: timeline — Due · Event · Status */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-neutral-800/50 py-2 text-[11px] text-neutral-600">
-            {/* Due */}
-            <div className="flex items-center gap-1.5">
-              <span>Due</span>
-              <input
-                ref={dueDateInputRef}
-                type="datetime-local"
-                className="sr-only"
-                value={dueDate}
-                onChange={(e) => handleDueDateChange(e.target.value)}
-                tabIndex={-1}
-              />
-              <button
-                type="button"
-                onClick={() => dueDateInputRef.current?.showPicker()}
-                className={`rounded-full px-2 py-0.5 transition-colors ${
-                  dueDate
-                    ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
-                    : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"
-                }`}
-              >
-                {dueDate
-                  ? new Date(dueDate).toLocaleString(undefined, { month: "short", day: "numeric" })
-                  : "Set"}
-              </button>
-              {dueDate && (
-                <button type="button" className="text-neutral-700 hover:text-neutral-400" onClick={() => handleDueDateChange("")}>
-                  ×
-                </button>
-              )}
-            </div>
-
-            {/* Event */}
-            {(() => {
-              const hasEvent = Boolean(eventStart || eventEnd);
-              const fmtDate = (dt: string) =>
-                new Date(dt).toLocaleString(undefined, { month: "short", day: "numeric" });
-              function handleRangeChange({ from, to }: DateRange) {
-                if (from) {
-                  const ex = eventStart ? new Date(eventStart) : null;
-                  from.setHours(ex?.getHours() ?? 9, ex?.getMinutes() ?? 0, 0, 0);
-                  handleEventStartChange(toDatetimeLocal(from.toISOString()));
-                } else { handleEventStartChange(""); }
-                if (to) {
-                  const ex = eventEnd ? new Date(eventEnd) : null;
-                  to.setHours(ex?.getHours() ?? 17, ex?.getMinutes() ?? 0, 0, 0);
-                  handleEventEndChange(toDatetimeLocal(to.toISOString()));
-                } else { handleEventEndChange(""); }
-              }
-              return (
-                <div className="relative flex items-center gap-1.5">
-                  <span>Event</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowEventPicker((v) => !v)}
-                    className={`rounded-full px-2 py-0.5 transition-colors ${
-                      hasEvent
-                        ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600"
-                        : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"
-                    }`}
-                  >
-                    {hasEvent ? `${eventStart ? fmtDate(eventStart) : "?"} – ${eventEnd ? fmtDate(eventEnd) : "?"}` : "Set"}
-                  </button>
-                  {hasEvent && (
-                    <button type="button" className="text-neutral-700 hover:text-neutral-400"
-                      onClick={() => { handleEventStartChange(""); handleEventEndChange(""); setShowEventPicker(false); }}>
-                      ×
-                    </button>
-                  )}
-                  {showEventPicker && (
-                    <div className="absolute left-0 top-full z-30 mt-1">
-                      <DateRangePicker
-                        value={{ from: eventStart ? new Date(eventStart) : null, to: eventEnd ? new Date(eventEnd) : null }}
-                        onChange={handleRangeChange}
-                        onClose={() => setShowEventPicker(false)}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Status */}
-            <div className="flex items-center gap-1.5">
-              <span>Status</span>
-              {status && <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dotClass}`} />}
-              <select
-                className="cursor-pointer bg-transparent text-[11px] text-neutral-500 outline-none"
-                value={status ?? ""}
-                onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}
-              >
-                <option value="">—</option>
-                {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
-                  <option key={s} value={s}>{STATUS_META[s].label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Body — two columns on md+ */}
-        <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-          {/* Main scroll */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="space-y-4 p-5">
-              {/* Description */}
-              <AutoTextarea
-                className="w-full bg-transparent text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
-                placeholder="Add a description…"
-                value={description}
-                onChange={(e) => handleDescriptionChange(e.target.value)}
-              />
-
-              {/* Context — Emails · Attachments */}
-              <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30">
-                <div className="p-3" ref={emailsRef}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Emails</span>
-                  </div>
-                  {emailThreadsLoading ? (
-                    <p className="text-[11px] text-neutral-700">Loading…</p>
-                  ) : emailThreads.length === 0 ? (
-                    <p className="text-[11px] text-neutral-700">No linked emails yet</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {emailThreads.map((thread) => {
-                        const threadAttachments = attachmentMap[thread.id];
-                        return (
-                          <div key={thread.id} className="rounded border border-neutral-800/50 px-2 py-1.5">
-                            <div className="flex items-center gap-1">
-                              <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
-                                ✉ {thread.subject ?? "Email thread"}
-                              </p>
-                              <button
-                                type="button"
-                                disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
-                                onClick={() => void handleOpenThread(thread)}
-                                className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50"
-                              >
-                                {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
-                              </button>
-                              <button
-                                type="button"
-                                className="shrink-0 text-[11px] text-neutral-700 transition-colors hover:text-red-400"
-                                onClick={() => handleUnlinkThread(thread.id)}
-                              >
-                                ×
-                              </button>
-                            </div>
-                            {emailOpenError?.threadId === thread.id && (
-                              <p className="mt-0.5 text-[10px] text-red-400">{emailOpenError.msg}</p>
-                            )}
-                            {threadAttachments && threadAttachments.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {threadAttachments.map((att) => (
-                                  <span key={att.id} className="max-w-[100px] truncate rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-[10px] text-neutral-500">
-                                    📎 {att.file_name}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                <div className="border-t border-neutral-800/60 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Attachments</span>
-                    <button
-                      type="button"
-                      className="text-[11px] text-neutral-700 hover:text-neutral-400"
-                      onClick={() => alert("File attachments coming soon")}
-                    >
-                      + Add
-                    </button>
-                  </div>
-                </div>
+            {/* ── RIGHT RAIL — Activity only ── */}
+            <div className="flex w-72 flex-shrink-0 flex-col border-l border-neutral-800/40 bg-neutral-900/20">
+              <div className="border-b border-neutral-800/40 px-4 py-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">Activity</p>
               </div>
 
-              {/* Updates — always shown */}
-              <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30">
-                <div className="border-b border-neutral-800/60 px-3 pb-2 pt-3">
-                  <span className="text-xs text-neutral-500">Updates</span>
-                </div>
-                {collabLoading ? (
-                  <p className="p-3 text-xs text-neutral-600">Loading…</p>
-                ) : collabAuthed === false ? (
-                  <div className="flex items-center gap-1.5 p-3">
-                    <p className="text-xs text-neutral-600">Sign in to post updates.</p>
-                    <Link href="/login" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">
-                      Sign in →
-                    </Link>
+              {/* Composer */}
+              <div className="border-b border-neutral-800/30 px-4 py-3">
+                {collabAuthed === false ? (
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs text-neutral-600">Sign in to comment.</p>
+                    <Link href="/login" className="text-xs text-indigo-400 hover:text-indigo-300">Sign in →</Link>
                   </div>
                 ) : (
-                  <div className="space-y-3 p-3">
-                    {/* Composer */}
-                    <div className="overflow-hidden rounded-lg border border-neutral-800 transition-colors focus-within:border-neutral-700">
-                      <AutoTextarea
-                        className="w-full bg-transparent px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
-                        placeholder="Write a comment…"
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            void handleSubmitComposer();
-                          }
-                        }}
-                        disabled={addingComment}
-                      />
-                      <div className="flex items-center gap-2 border-t border-neutral-800/60 px-2 py-1.5">
+                  <div className="rounded-lg bg-neutral-800/40 px-3 py-2 transition-colors focus-within:bg-neutral-800/60 focus-within:ring-1 focus-within:ring-neutral-700/40">
+                    <AutoTextarea
+                      className="w-full bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-600"
+                      placeholder="Write a comment…"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleSubmitComposer();
+                        }
+                      }}
+                      disabled={addingComment}
+                    />
+                    {(newComment.trim() || composerStatusChange) && (
+                      <div className="mt-1.5 flex items-center gap-2">
                         <select
-                          className="bg-transparent px-1 py-0.5 text-xs text-neutral-600 outline-none"
+                          className="bg-transparent text-[11px] text-neutral-600 outline-none"
                           value={composerStatusChange ?? ""}
                           onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}
                         >
@@ -1210,199 +1517,196 @@ export function CardDetailsModal({
                         </select>
                         <button
                           type="button"
-                          className="ml-auto rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+                          className="ml-auto rounded-md bg-indigo-600 px-2.5 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
                           onClick={handleSubmitComposer}
                           disabled={addingComment || (!newComment.trim() && !composerStatusChange)}
                         >
                           {addingComment ? "…" : "Send"}
                         </button>
                       </div>
-                    </div>
-                    {/* Feed — newest first */}
-                    {feedEntries.length > 0 && (
-                      <div className="space-y-1">
-                        {feedEntries.map((entry) => {
-                          if (entry.kind === "comment") {
-                            const c = entry.data;
-                            return (
-                              <div key={c.id} className="group flex items-start gap-2 py-1">
-                                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-neutral-800">
-                                  <span className="text-[10px] text-neutral-500">✦</span>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="break-words text-sm text-neutral-200">{c.content}</p>
-                                  <p className="mt-0.5 text-[10px] text-neutral-600">{relativeTime(c.created_at)}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="mt-1 shrink-0 text-xs text-neutral-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-                                  onClick={() => handleDeleteComment(c.id)}
-                                  aria-label="Delete comment"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            );
-                          }
-                          const a = entry.data;
-                          return (
-                            <p key={a.id} className="py-0.5 text-[11px] text-neutral-600">
-                              {formatActivity(a)} · {relativeTime(a.created_at)}
-                            </p>
-                          );
-                        })}
-                      </div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Bottom actions */}
-              <div className="space-y-3 border-t border-neutral-800 pt-4">
-                {onLinkToBoard && otherBoards.length > 0 && (
-                  <>
-                    {!showLinkForm ? (
-                      <button
-                        type="button"
-                        className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200"
-                        onClick={() => setShowLinkForm(true)}
-                      >
-                        🔗 Link to another board…
-                      </button>
-                    ) : (
-                      <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-                        <p className="text-xs font-medium text-neutral-400">Link to board</p>
-                        <select
-                          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
-                          value={linkBoardId}
-                          onChange={(e) => handleLinkBoardChange(e.target.value)}
-                        >
-                          <option value="">Select board…</option>
-                          {otherBoards.map((b) => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
-                          ))}
-                        </select>
-                        {linkBoardId && (
-                          <>
-                            {linkColumnsLoading ? (
-                              <p className="text-xs text-neutral-600">Loading columns…</p>
-                            ) : linkColumns.length === 0 ? (
-                              <p className="text-xs text-neutral-500">No columns on this board.</p>
-                            ) : (
-                              <select
-                                className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600"
-                                value={linkColumnId}
-                                onChange={(e) => setLinkColumnId(e.target.value)}
-                              >
-                                {linkColumns.map((c) => (
-                                  <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                              </select>
-                            )}
-                          </>
-                        )}
-                        {linkSuccess ? (
-                          <p className="text-xs text-green-500">Linked successfully!</p>
-                        ) : (
-                          <div className="flex gap-2">
+              {/* Feed — newest first, scrollable */}
+              <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+                {collabLoading ? (
+                  <p className="px-2 py-3 text-[11px] text-neutral-700">Loading…</p>
+                ) : feedEntries.length === 0 ? (
+                  <p className="px-2 py-3 text-[11px] text-neutral-700">No activity yet.</p>
+                ) : (
+                  <div className="space-y-0.5">
+                    {feedEntries.map((entry) => {
+                      if (entry.kind === "comment") {
+                        const c = entry.data;
+                        return (
+                          <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-neutral-800/30">
+                            <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-900/50">
+                              <span className="text-[8px] text-indigo-400">✦</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="break-words text-xs text-neutral-200">{c.content}</p>
+                              <p className="mt-0.5 text-[10px] text-neutral-700">{relativeTime(c.created_at)}</p>
+                            </div>
                             <button
                               type="button"
-                              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
-                              onClick={handleLink}
-                              disabled={linking || !linkBoardId || !linkColumnId}
-                            >
-                              {linking ? "Linking…" : "Link"}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
-                              onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}
-                            >
-                              Cancel
-                            </button>
+                              className="mt-0.5 shrink-0 text-[10px] text-neutral-700 opacity-0 hover:text-red-400 group-hover:opacity-100"
+                              onClick={() => handleDeleteComment(c.id)}
+                              aria-label="Delete"
+                            >✕</button>
                           </div>
-                        )}
+                        );
+                      }
+                      if (entry.kind === "local") {
+                        return (
+                          <p key={entry.id} className="px-2 py-1 text-[11px] italic text-neutral-700">
+                            {entry.text} · just now
+                          </p>
+                        );
+                      }
+                      const a = entry.data;
+                      return (
+                        <p key={a.id} className="px-2 py-1 text-[11px] text-neutral-700">
+                          {formatActivity(a)} · {relativeTime(a.created_at)}
+                        </p>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>{/* end right rail */}
+          </div>
+        ) : (
+          /* ── OLD body layout (revert by setting NEW_CARD_LAYOUT = false) ── */
+          <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+            <div className="flex-1 overflow-y-auto">
+              <div className="space-y-4 p-5">
+                <AutoTextarea
+                  className="w-full bg-transparent text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
+                  placeholder="Add a description…"
+                  value={description}
+                  onChange={(e) => handleDescriptionChange(e.target.value)}
+                />
+                <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30" ref={emailsRef}>
+                  <div className="p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs text-neutral-500">Emails</span>
+                    </div>
+                    {emailThreadsLoading ? (
+                      <p className="text-[11px] text-neutral-700">Loading…</p>
+                    ) : emailThreads.length === 0 ? (
+                      <p className="text-[11px] text-neutral-700">No linked emails yet</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {emailThreads.map((thread) => {
+                          const threadAttachments = attachmentMap[thread.id];
+                          return (
+                            <div key={thread.id} className="rounded border border-neutral-800/50 px-2 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">✉ {thread.subject ?? "Email thread"}</p>
+                                <button type="button" disabled={connectingThreadId !== null || emailSignInRedirecting !== null} onClick={() => void handleOpenThread(thread)} className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50">
+                                  {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
+                                </button>
+                                <button type="button" className="shrink-0 text-[11px] text-neutral-700 transition-colors hover:text-red-400" onClick={() => handleUnlinkThread(thread.id)}>×</button>
+                              </div>
+                              {emailOpenError?.threadId === thread.id && <p className="mt-0.5 text-[10px] text-red-400">{emailOpenError.msg}</p>}
+                              {threadAttachments && threadAttachments.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {threadAttachments.map((att) => <span key={att.id} className="max-w-[100px] truncate rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-[10px] text-neutral-500">📎 {att.file_name}</span>)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
-                  </>
-                )}
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      archived
-                        ? "border-green-700 text-green-400 hover:bg-green-900/20"
-                        : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
-                    }`}
-                    onClick={handleArchiveToggle}
-                  >
-                    {archived ? "Restore from Archive" : "Archive Card"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs text-neutral-700 transition-colors hover:text-red-400"
-                    onClick={handleDeleteEverywhere}
-                  >
-                    Delete everywhere
-                  </button>
+                  </div>
+                  <div className="border-t border-neutral-800/60 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-neutral-500">Attachments</span>
+                      <button type="button" className="text-[11px] text-neutral-700 hover:text-neutral-400" onClick={() => alert("File attachments coming soon")}>+ Add</button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>{/* end main scroll */}
-
-          {/* Workspace panel */}
-          <div
-            className={`flex-shrink-0 border-t border-neutral-800 transition-all duration-200 md:border-l md:border-t-0 ${
-              panelOpen ? "md:w-64" : "md:w-9"
-            }`}
-          >
-            <div className="flex items-center border-b border-neutral-800 px-2.5 py-2">
-              <button
-                type="button"
-                onClick={togglePanel}
-                className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
-              >
-                {panelOpen ? "Workspace ›" : "‹"}
-              </button>
-            </div>
-
-            {panelOpen && (
-              <div className="space-y-4 p-3">
-                {/* My Actions */}
-                <div className="space-y-1">
-                  <label className="flex cursor-pointer items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={isInActions}
-                      onChange={(e) => onToggleInActions(noteId, e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-neutral-700 accent-indigo-500"
-                    />
-                    <span className="text-xs text-neutral-400">Add to My Actions</span>
-                  </label>
-                  {isInActions && (
-                    <Link
-                      href="/actions"
-                      className="block text-[11px] text-indigo-400 transition-colors hover:text-indigo-300"
-                    >
-                      View in Actions →
-                    </Link>
+                <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30">
+                  <div className="border-b border-neutral-800/60 px-3 pb-2 pt-3">
+                    <span className="text-xs text-neutral-500">Updates</span>
+                  </div>
+                  {collabLoading ? <p className="p-3 text-xs text-neutral-600">Loading…</p> : collabAuthed === false ? (
+                    <div className="flex items-center gap-1.5 p-3">
+                      <p className="text-xs text-neutral-600">Sign in to post updates.</p>
+                      <Link href="/login" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">Sign in →</Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 p-3">
+                      <div className="overflow-hidden rounded-lg border border-neutral-800 transition-colors focus-within:border-neutral-700">
+                        <AutoTextarea className="w-full bg-transparent px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600" placeholder="Write a comment…" value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSubmitComposer(); } }} disabled={addingComment} />
+                        <div className="flex items-center gap-2 border-t border-neutral-800/60 px-2 py-1.5">
+                          <select className="bg-transparent px-1 py-0.5 text-xs text-neutral-600 outline-none" value={composerStatusChange ?? ""} onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}>
+                            <option value="">Status…</option>
+                            {STATUS_VALUES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+                          </select>
+                          <button type="button" className="ml-auto rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50" onClick={handleSubmitComposer} disabled={addingComment || (!newComment.trim() && !composerStatusChange)}>{addingComment ? "…" : "Send"}</button>
+                        </div>
+                      </div>
+                      {feedEntries.length > 0 && (
+                        <div className="space-y-1">
+                          {feedEntries.map((entry) => {
+                            if (entry.kind === "comment") {
+                              const c = entry.data;
+                              return (
+                                <div key={c.id} className="group flex items-start gap-2 py-1">
+                                  <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-neutral-800"><span className="text-[10px] text-neutral-500">✦</span></div>
+                                  <div className="min-w-0 flex-1"><p className="break-words text-sm text-neutral-200">{c.content}</p><p className="mt-0.5 text-[10px] text-neutral-600">{relativeTime(c.created_at)}</p></div>
+                                  <button type="button" className="mt-1 shrink-0 text-xs text-neutral-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100" onClick={() => handleDeleteComment(c.id)} aria-label="Delete comment">✕</button>
+                                </div>
+                              );
+                            }
+                            if (entry.kind === "local") {
+                              return <p key={entry.id} className="py-0.5 text-[11px] italic text-neutral-700">{entry.text} · just now</p>;
+                            }
+                            const a = entry.data;
+                            return <p key={a.id} className="py-0.5 text-[11px] text-neutral-600">{formatActivity(a)} · {relativeTime(a.created_at)}</p>;
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-
-                {/* Personal Notes */}
-                <div className="space-y-1.5">
-                  <p className="text-xs text-neutral-500">Personal Notes</p>
-                  <AutoTextarea
-                    className="w-full rounded-md border border-neutral-800/60 bg-transparent px-2.5 py-1.5 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-700"
-                    placeholder="Private note…"
-                    value={personalReminder}
-                    onChange={(e) => handlePersonalReminderChange(e.target.value)}
-                  />
+                <div className="space-y-3 border-t border-neutral-800 pt-4">
+                  {onLinkToBoard && otherBoards.length > 0 && (
+                    <>{!showLinkForm ? <button type="button" className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200" onClick={() => setShowLinkForm(true)}>🔗 Link to another board…</button> : <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3"><p className="text-xs font-medium text-neutral-400">Link to board</p><select className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkBoardId} onChange={(e) => handleLinkBoardChange(e.target.value)}><option value="">Select board…</option>{otherBoards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>{linkBoardId && (<>{linkColumnsLoading ? <p className="text-xs text-neutral-600">Loading columns…</p> : linkColumns.length === 0 ? <p className="text-xs text-neutral-500">No columns on this board.</p> : <select className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkColumnId} onChange={(e) => setLinkColumnId(e.target.value)}>{linkColumns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}</>)}{linkSuccess ? <p className="text-xs text-green-500">Linked successfully!</p> : <div className="flex gap-2"><button type="button" className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50" onClick={handleLink} disabled={linking || !linkBoardId || !linkColumnId}>{linking ? "Linking…" : "Link"}</button><button type="button" className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>Cancel</button></div>}</div>}</>
+                  )}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${archived ? "border-green-700 text-green-400 hover:bg-green-900/20" : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"}`} onClick={handleArchiveToggle}>{archived ? "Restore from Archive" : "Archive Card"}</button>
+                    <button type="button" className="text-xs text-neutral-700 transition-colors hover:text-red-400" onClick={handleDeleteEverywhere}>Delete everywhere</button>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>{/* end Workspace panel */}
-        </div>{/* end body */}
+            </div>
+            <div className={`flex-shrink-0 border-t border-neutral-800 transition-all duration-200 md:border-l md:border-t-0 ${panelOpen ? "md:w-64" : "md:w-9"}`}>
+              <div className="flex items-center border-b border-neutral-800 px-2.5 py-2">
+                <button type="button" onClick={togglePanel} className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400">{panelOpen ? "Workspace ›" : "‹"}</button>
+              </div>
+              {panelOpen && (
+                <div className="space-y-4 p-3">
+                  <div className="space-y-1">
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={isInActions} onChange={(e) => onToggleInActions(noteId, e.target.checked)} className="h-3.5 w-3.5 rounded border-neutral-700 accent-indigo-500" />
+                      <span className="text-xs text-neutral-400">Add to My Actions</span>
+                    </label>
+                    {isInActions && <Link href="/actions" className="block text-[11px] text-indigo-400 transition-colors hover:text-indigo-300">View in Actions →</Link>}
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-neutral-500">Personal Notes</p>
+                    <AutoTextarea className="w-full rounded-md border border-neutral-800/60 bg-transparent px-2.5 py-1.5 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-700" placeholder="Private note…" value={personalReminder} onChange={(e) => handlePersonalReminderChange(e.target.value)} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}{/* end body */}
       </div>{/* end panel */}
     </div>
   );
