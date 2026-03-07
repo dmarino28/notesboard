@@ -37,6 +37,7 @@ import {
 import { acquireMailToken } from "@/lib/msalConfig";
 import { LABEL_PALETTE } from "@/lib/palette";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { AttachmentPreviewModal } from "@/components/AttachmentPreviewModal";
 import type { DateRange } from "@/components/DateRangePicker";
 import {
   NoteActivity,
@@ -221,6 +222,7 @@ export function CardDetailsModal({
   // --- Note attachments ---
   const [noteAttachments, setNoteAttachments] = useState<NoteAttachmentRow[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<NoteAttachmentRow | null>(null);
 
   // --- Note links ---
   const [noteLinks, setNoteLinks] = useState<NoteLinkRow[]>([]);
@@ -356,6 +358,7 @@ export function CardDetailsModal({
     setShowAttachments(false);
     setShowLinks(false);
     setNoteAttachments([]);
+    setPreviewAttachment(null);
     setNoteLinks([]);
     setNewLinkUrl("");
     setNewLinkTitle("");
@@ -529,7 +532,10 @@ export function CardDetailsModal({
     const { data, error } = await uploadNoteAttachment(noteId, file);
     setUploadingFile(false);
     if (error) { onError(`Upload failed: ${error}`); return; }
-    if (data) setNoteAttachments((prev) => [...prev, data]);
+    if (data) {
+      setNoteAttachments((prev) => [...prev, data]);
+      pushLocalEvent(`Attached "${file.name}"`);
+    }
   }
 
   async function handleDeleteAttachment(att: NoteAttachmentRow) {
@@ -538,29 +544,38 @@ export function CardDetailsModal({
     if (error) {
       setNoteAttachments((prev) => [...prev, att]);
       onError("Failed to delete attachment");
+    } else {
+      pushLocalEvent(`Removed attachment "${att.file_name}"`);
     }
-  }
-
-  async function handleOpenAttachment(att: NoteAttachmentRow) {
-    const res = await fetch(`/api/notes/${noteId}/attachment-url?id=${encodeURIComponent(att.id)}`);
-    if (!res.ok) { onError("Could not get download URL"); return; }
-    const { signedUrl } = (await res.json()) as { signedUrl: string };
-    window.open(signedUrl, "_blank", "noopener,noreferrer");
   }
 
   // ------------------------------------------------------------------ links
 
   async function handleAddLink() {
-    const url = newLinkUrl.trim();
-    if (!url) return;
+    const raw = newLinkUrl.trim();
+    if (!raw) return;
+
+    // Normalize: prepend https:// if no protocol is present
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+    // Validate: must parse as a URL with a real hostname
+    try {
+      const parsed = new URL(url);
+      if (!parsed.hostname || !parsed.hostname.includes(".")) throw new Error();
+    } catch {
+      onError("Please enter a valid URL (e.g. https://example.com)");
+      return;
+    }
+
     setAddingLinkRow(true);
     const { data, error } = await addNoteLink(noteId, url, newLinkTitle.trim() || null);
     setAddingLinkRow(false);
-    if (error) { onError("Failed to add link"); return; }
+    if (error) { onError(`Failed to add link: ${error}`); return; }
     if (data) {
       setNoteLinks((prev) => [...prev, data]);
       setNewLinkUrl("");
       setNewLinkTitle("");
+      pushLocalEvent(`Added link${data.title ? ` "${data.title}"` : ` ${linkHostname(url)}`}`);
     }
   }
 
@@ -571,6 +586,8 @@ export function CardDetailsModal({
     if (error) {
       if (removed) setNoteLinks((prev) => [...prev, removed]);
       onError("Failed to delete link");
+    } else if (removed) {
+      pushLocalEvent(`Removed link "${removed.title || linkHostname(removed.url)}"`);
     }
   }
 
@@ -1533,34 +1550,35 @@ export function CardDetailsModal({
 
                   {/* Attachments panel */}
                   {showAttachments && (
-                    <div className="mt-2 space-y-1 rounded-xl bg-neutral-900/40 px-4 py-3">
-                      {noteAttachments.map((att) => (
-                        <div key={att.id} className="flex items-center gap-2">
-                          <span className="shrink-0 text-[12px] text-neutral-600">📎</span>
-                          <button
-                            type="button"
-                            onClick={() => void handleOpenAttachment(att)}
-                            className="min-w-0 flex-1 truncate text-left text-[11px] text-neutral-300 hover:text-neutral-100"
-                          >
-                            {att.file_name}
-                          </button>
-                          {att.file_size != null && (
-                            <span className="shrink-0 text-[10px] text-neutral-700">
-                              {fmtFileSize(att.file_size)}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteAttachment(att)}
-                            className="shrink-0 text-[11px] text-neutral-700 hover:text-red-400"
-                            aria-label="Remove attachment"
-                          >×</button>
-                        </div>
-                      ))}
+                    <div className="mt-2 space-y-0.5 rounded-xl bg-neutral-900/40 px-3 py-2.5">
+                      {noteAttachments.map((att) => {
+                        const ft = fileTypeLabel(att.mime_type, att.file_name);
+                        return (
+                          <div key={att.id} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-neutral-800/40">
+                            <span className={`w-7 shrink-0 text-center font-mono text-[9px] font-bold tracking-wider ${ft.color}`}>{ft.abbr}</span>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAttachment(att)}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <span className="block truncate text-[11px] font-medium text-neutral-300 transition-colors group-hover:text-neutral-100">{att.file_name}</span>
+                              {att.file_size != null && (
+                                <span className="block text-[10px] text-neutral-700">{fmtFileSize(att.file_size)}</span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteAttachment(att)}
+                              className="shrink-0 text-[11px] text-neutral-800 opacity-0 transition-all hover:text-red-400 group-hover:opacity-100"
+                              aria-label="Remove attachment"
+                            >×</button>
+                          </div>
+                        );
+                      })}
                       {uploadingFile && (
-                        <p className="text-[11px] text-neutral-600">Uploading…</p>
+                        <p className="px-1.5 text-[11px] text-neutral-600">Uploading…</p>
                       )}
-                      <label className="mt-1 flex cursor-pointer items-center gap-1">
+                      <label className="mt-0.5 flex cursor-pointer items-center gap-1 px-1.5 py-1">
                         <input
                           type="file"
                           className="sr-only"
@@ -1571,7 +1589,7 @@ export function CardDetailsModal({
                             e.target.value = "";
                           }}
                         />
-                        <span className="text-[11px] text-neutral-600 hover:text-neutral-400">
+                        <span className="text-[11px] text-neutral-700 transition-colors hover:text-neutral-400">
                           + Add file
                         </span>
                       </label>
@@ -1580,25 +1598,33 @@ export function CardDetailsModal({
 
                   {/* Links panel */}
                   {showLinks && (
-                    <div className="mt-2 space-y-1 rounded-xl bg-neutral-900/40 px-4 py-3">
-                      {noteLinks.map((link) => (
-                        <div key={link.id} className="flex items-center gap-2">
-                          <span className="shrink-0 text-[12px] text-neutral-600">🔗</span>
-                          <button
-                            type="button"
-                            onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
-                            className="min-w-0 flex-1 truncate text-left text-[11px] text-indigo-400 hover:text-indigo-300"
-                          >
-                            {link.title || link.url}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteLink(link.id)}
-                            className="shrink-0 text-[11px] text-neutral-700 hover:text-red-400"
-                            aria-label="Remove link"
-                          >×</button>
-                        </div>
-                      ))}
+                    <div className="mt-2 space-y-0.5 rounded-xl bg-neutral-900/40 px-3 py-2.5">
+                      {noteLinks.map((link) => {
+                        const provider = detectProvider(link.url);
+                        const host = linkHostname(link.url);
+                        const label = link.title || host;
+                        const sub = link.title ? (provider ?? host) : provider;
+                        return (
+                          <div key={link.id} className="group -mx-1.5 flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-neutral-800/40">
+                            <button
+                              type="button"
+                              onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <span className="block truncate text-[11px] font-medium text-indigo-400 transition-colors group-hover:text-indigo-300">{label}</span>
+                              {sub && (
+                                <span className="block truncate text-[10px] text-neutral-600">{sub}</span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteLink(link.id)}
+                              className="shrink-0 text-[11px] text-neutral-800 opacity-0 transition-all hover:text-red-400 group-hover:opacity-100"
+                              aria-label="Remove link"
+                            >×</button>
+                          </div>
+                        );
+                      })}
                       {/* Add link form */}
                       <div className="flex items-center gap-1.5 pt-1">
                         <input
@@ -1899,6 +1925,13 @@ export function CardDetailsModal({
           </div>
         )}{/* end body */}
       </div>{/* end panel */}
+      {previewAttachment && (
+        <AttachmentPreviewModal
+          attachment={previewAttachment}
+          noteId={noteId}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2024,6 +2057,45 @@ function fmtFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileTypeLabel(mime: string | null, fileName: string): { abbr: string; color: string } {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (mime?.startsWith("image/") || ["jpg","jpeg","png","gif","svg","webp","avif"].includes(ext))
+    return { abbr: "IMG", color: "text-green-500" };
+  if (mime === "application/pdf" || ext === "pdf")
+    return { abbr: "PDF", color: "text-red-400" };
+  if (["doc","docx"].includes(ext) || mime?.includes("wordprocessingml"))
+    return { abbr: "DOC", color: "text-blue-400" };
+  if (["xls","xlsx"].includes(ext) || mime?.includes("spreadsheetml"))
+    return { abbr: "XLS", color: "text-emerald-400" };
+  if (["ppt","pptx"].includes(ext) || mime?.includes("presentationml"))
+    return { abbr: "PPT", color: "text-orange-400" };
+  if (["txt","md"].includes(ext) || mime === "text/plain")
+    return { abbr: "TXT", color: "text-neutral-400" };
+  if (["zip","gz","tar","rar","7z"].includes(ext))
+    return { abbr: "ZIP", color: "text-purple-400" };
+  if (["mp4","mov","avi","webm"].includes(ext) || mime?.startsWith("video/"))
+    return { abbr: "VID", color: "text-yellow-400" };
+  if (["mp3","wav","m4a","ogg"].includes(ext) || mime?.startsWith("audio/"))
+    return { abbr: "AUD", color: "text-pink-400" };
+  return { abbr: "FILE", color: "text-neutral-500" };
+}
+
+function detectProvider(url: string): string | null {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host === "drive.google.com" || host === "docs.google.com" || host === "sheets.google.com" || host === "slides.google.com") return "Google Drive";
+    if (host.includes("box.com")) return "Box";
+    if (host.includes("sharepoint.com") || host.includes("1drv.ms")) return "SharePoint";
+    if (host.includes("dropbox.com")) return "Dropbox";
+    return null;
+  } catch { return null; }
+}
+
+function linkHostname(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ""); }
+  catch { return url; }
 }
 
 function AutoTextarea({

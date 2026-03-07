@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedSupabase } from "@/lib/supabaseAuthed";
-import { createServiceRoleClient } from "@/lib/supabaseServer";
 
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 60; // 1 hour
 const BUCKET = "note-attachments";
@@ -17,8 +16,8 @@ const BUCKET = "note-attachments";
  *      lookup returns nothing and we 404.
  *   3. We additionally verify the row belongs to the noteId in the URL path
  *      to prevent ID-substitution attacks.
- *   4. Only after both checks pass do we use the service role client to
- *      generate the signed URL (which bypasses storage SELECT RLS).
+ *   4. Only after both checks pass do we use the caller's client to generate
+ *      the signed URL (requires storage SELECT policy migration 000013).
  */
 export async function GET(
   req: NextRequest,
@@ -50,9 +49,11 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Generate signed URL via service role (bypasses storage SELECT policy).
-  const adminClient = createServiceRoleClient();
-  const { data: signedData, error: signedError } = await adminClient.storage
+  // Generate signed URL using the caller's authenticated client.
+  // Requires the storage SELECT policy "note_attachments_storage_select" to exist
+  // (migration 000013). The SELECT policy allows authenticated users to call
+  // createSignedUrl — it does NOT enable direct object downloads.
+  const { data: signedData, error: signedError } = await client.storage
     .from(BUCKET)
     .createSignedUrl(
       (row as { storage_path: string }).storage_path,
