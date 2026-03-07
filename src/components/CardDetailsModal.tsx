@@ -22,6 +22,18 @@ import {
   deleteEmailThread,
   listAttachmentsForThread,
 } from "@/lib/emailThreads";
+import {
+  NoteLinkRow,
+  listNoteLinks,
+  addNoteLink,
+  deleteNoteLink,
+} from "@/lib/noteLinks";
+import {
+  NoteAttachmentRow,
+  listNoteAttachments,
+  uploadNoteAttachment,
+  deleteNoteAttachment,
+} from "@/lib/noteAttachments";
 import { acquireMailToken } from "@/lib/msalConfig";
 import { LABEL_PALETTE } from "@/lib/palette";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -206,6 +218,16 @@ export function CardDetailsModal({
   const [showAttachments, setShowAttachments] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
 
+  // --- Note attachments ---
+  const [noteAttachments, setNoteAttachments] = useState<NoteAttachmentRow[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  // --- Note links ---
+  const [noteLinks, setNoteLinks] = useState<NoteLinkRow[]>([]);
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [newLinkTitle, setNewLinkTitle] = useState("");
+  const [addingLinkRow, setAddingLinkRow] = useState(false);
+
   // --- Event range picker ---
   const [showEventPicker, setShowEventPicker] = useState(false);
 
@@ -242,6 +264,12 @@ export function CardDetailsModal({
       setEmailThreads(data);
       setEmailThreadsLoading(false);
       if (data.length > 0) setMyLayerOpen(true);
+      // Eagerly load attachments for all linked threads
+      data.forEach((t) => {
+        listAttachmentsForThread(t.id).then(({ data: atts }) => {
+          setAttachmentMap((prev) => ({ ...prev, [t.id]: atts }));
+        });
+      });
     });
     listCollab(noteId).then((data) => {
       if (data === null) {
@@ -249,10 +277,13 @@ export function CardDetailsModal({
       } else {
         setCollabAuthed(true);
         setActivity(data.activity);
+        setLocalEvents([]);
         setCollabUserId(data.currentUserId ?? null);
       }
       setCollabLoading(false);
     });
+    listNoteAttachments(noteId).then(({ data }) => setNoteAttachments(data));
+    listNoteLinks(noteId).then(({ data }) => setNoteLinks(data));
   }, [noteId]);
 
   // ESC to close
@@ -285,6 +316,19 @@ export function CardDetailsModal({
     return () => document.removeEventListener("mousedown", onDown);
   }, [showKebabMenu]);
 
+  // Close kebab on Escape — capture phase so it runs before the modal's bubble-phase handler
+  useEffect(() => {
+    if (!showKebabMenu) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setShowKebabMenu(false);
+      }
+    }
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [showKebabMenu]);
+
   // Re-sync fields when a different card is opened (noteId changes)
   useEffect(() => {
     setTitle(note.content);
@@ -311,6 +355,10 @@ export function CardDetailsModal({
     setCollabUserId(null);
     setShowAttachments(false);
     setShowLinks(false);
+    setNoteAttachments([]);
+    setNoteLinks([]);
+    setNewLinkUrl("");
+    setNewLinkTitle("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
@@ -472,6 +520,58 @@ export function CardDetailsModal({
   function handlePersonalReminderChange(v: string) {
     setPersonalReminder(v);
     localStorage.setItem(`nb_reminder_${noteId}`, v);
+  }
+
+  // ------------------------------------------------------------------ attachments
+
+  async function handleUploadFile(file: File) {
+    setUploadingFile(true);
+    const { data, error } = await uploadNoteAttachment(noteId, file);
+    setUploadingFile(false);
+    if (error) { onError(`Upload failed: ${error}`); return; }
+    if (data) setNoteAttachments((prev) => [...prev, data]);
+  }
+
+  async function handleDeleteAttachment(att: NoteAttachmentRow) {
+    setNoteAttachments((prev) => prev.filter((a) => a.id !== att.id));
+    const { error } = await deleteNoteAttachment(att.id, att.storage_path);
+    if (error) {
+      setNoteAttachments((prev) => [...prev, att]);
+      onError("Failed to delete attachment");
+    }
+  }
+
+  async function handleOpenAttachment(att: NoteAttachmentRow) {
+    const res = await fetch(`/api/notes/${noteId}/attachment-url?id=${encodeURIComponent(att.id)}`);
+    if (!res.ok) { onError("Could not get download URL"); return; }
+    const { signedUrl } = (await res.json()) as { signedUrl: string };
+    window.open(signedUrl, "_blank", "noopener,noreferrer");
+  }
+
+  // ------------------------------------------------------------------ links
+
+  async function handleAddLink() {
+    const url = newLinkUrl.trim();
+    if (!url) return;
+    setAddingLinkRow(true);
+    const { data, error } = await addNoteLink(noteId, url, newLinkTitle.trim() || null);
+    setAddingLinkRow(false);
+    if (error) { onError("Failed to add link"); return; }
+    if (data) {
+      setNoteLinks((prev) => [...prev, data]);
+      setNewLinkUrl("");
+      setNewLinkTitle("");
+    }
+  }
+
+  async function handleDeleteLink(id: string) {
+    const removed = noteLinks.find((l) => l.id === id);
+    setNoteLinks((prev) => prev.filter((l) => l.id !== id));
+    const { error } = await deleteNoteLink(id);
+    if (error) {
+      if (removed) setNoteLinks((prev) => [...prev, removed]);
+      onError("Failed to delete link");
+    }
   }
 
   // ------------------------------------------------------------------ composer submit
@@ -1090,6 +1190,11 @@ export function CardDetailsModal({
                 })()}
               </div>
 
+              {/* Event range validation error */}
+              {eventRangeError && (
+                <p className="pb-1.5 text-[11px] text-red-400">{eventRangeError}</p>
+              )}
+
               {/* Label picker — drops below header (shared by both layouts) */}
               {showPicker && (
                 <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
@@ -1277,7 +1382,7 @@ export function CardDetailsModal({
 
                 {/* About / description — content-first, no border box */}
                 <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-600">About</p>
+                  <p className="mb-1.5 text-[11px] font-medium text-neutral-600">About</p>
                   <AutoTextarea
                     className="w-full bg-transparent text-sm leading-relaxed text-neutral-200 outline-none placeholder:text-neutral-600"
                     placeholder="Add a description…"
@@ -1291,7 +1396,7 @@ export function CardDetailsModal({
                   <button
                     type="button"
                     onClick={() => setMyLayerOpen((v) => !v)}
-                    className="flex w-full items-center justify-between px-4 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-600 hover:text-neutral-400"
+                    className="flex w-full items-center justify-between px-4 py-3 text-[11px] font-medium text-neutral-600 hover:text-neutral-400"
                   >
                     <span>My layer</span>
                     <div className="flex items-center gap-2">
@@ -1398,9 +1503,9 @@ export function CardDetailsModal({
                   )}
                 </div>
 
-                {/* Context — compact chip row: Attachments + Links */}
+                {/* Context — Attachments + Links */}
                 <div>
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-neutral-600">Context</p>
+                  <p className="mb-2 text-[11px] font-medium text-neutral-600">Context</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1409,7 +1514,9 @@ export function CardDetailsModal({
                     >
                       <span>📎</span>
                       <span>Attachments</span>
-                      <span className="text-neutral-700">0</span>
+                      {noteAttachments.length > 0 && (
+                        <span className="text-neutral-500">{noteAttachments.length}</span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -1418,21 +1525,105 @@ export function CardDetailsModal({
                     >
                       <span>🔗</span>
                       <span>Links</span>
-                      <span className="text-neutral-700">0</span>
+                      {noteLinks.length > 0 && (
+                        <span className="text-neutral-500">{noteLinks.length}</span>
+                      )}
                     </button>
                   </div>
 
-                  {/* Attachments expand */}
+                  {/* Attachments panel */}
                   {showAttachments && (
-                    <div className="mt-2 rounded-xl bg-neutral-900/40 px-4 py-3">
-                      <p className="text-[11px] text-neutral-700">File attachments coming soon.</p>
+                    <div className="mt-2 space-y-1 rounded-xl bg-neutral-900/40 px-4 py-3">
+                      {noteAttachments.map((att) => (
+                        <div key={att.id} className="flex items-center gap-2">
+                          <span className="shrink-0 text-[12px] text-neutral-600">📎</span>
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenAttachment(att)}
+                            className="min-w-0 flex-1 truncate text-left text-[11px] text-neutral-300 hover:text-neutral-100"
+                          >
+                            {att.file_name}
+                          </button>
+                          {att.file_size != null && (
+                            <span className="shrink-0 text-[10px] text-neutral-700">
+                              {fmtFileSize(att.file_size)}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteAttachment(att)}
+                            className="shrink-0 text-[11px] text-neutral-700 hover:text-red-400"
+                            aria-label="Remove attachment"
+                          >×</button>
+                        </div>
+                      ))}
+                      {uploadingFile && (
+                        <p className="text-[11px] text-neutral-600">Uploading…</p>
+                      )}
+                      <label className="mt-1 flex cursor-pointer items-center gap-1">
+                        <input
+                          type="file"
+                          className="sr-only"
+                          disabled={uploadingFile}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) void handleUploadFile(file);
+                            e.target.value = "";
+                          }}
+                        />
+                        <span className="text-[11px] text-neutral-600 hover:text-neutral-400">
+                          + Add file
+                        </span>
+                      </label>
                     </div>
                   )}
 
-                  {/* Links expand */}
+                  {/* Links panel */}
                   {showLinks && (
-                    <div className="mt-2 rounded-xl bg-neutral-900/40 px-4 py-3">
-                      <p className="text-[11px] text-neutral-700">Link attachments coming soon.</p>
+                    <div className="mt-2 space-y-1 rounded-xl bg-neutral-900/40 px-4 py-3">
+                      {noteLinks.map((link) => (
+                        <div key={link.id} className="flex items-center gap-2">
+                          <span className="shrink-0 text-[12px] text-neutral-600">🔗</span>
+                          <button
+                            type="button"
+                            onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                            className="min-w-0 flex-1 truncate text-left text-[11px] text-indigo-400 hover:text-indigo-300"
+                          >
+                            {link.title || link.url}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteLink(link.id)}
+                            className="shrink-0 text-[11px] text-neutral-700 hover:text-red-400"
+                            aria-label="Remove link"
+                          >×</button>
+                        </div>
+                      ))}
+                      {/* Add link form */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          className="min-w-0 flex-1 rounded-lg bg-neutral-800/60 px-2 py-1 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-600 focus:ring-1 focus:ring-neutral-700"
+                          placeholder="https://…"
+                          value={newLinkUrl}
+                          onChange={(e) => setNewLinkUrl(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") void handleAddLink(); }}
+                        />
+                        <input
+                          className="w-24 shrink-0 rounded-lg bg-neutral-800/60 px-2 py-1 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-600 focus:ring-1 focus:ring-neutral-700"
+                          placeholder="Label (opt)"
+                          value={newLinkTitle}
+                          onChange={(e) => setNewLinkTitle(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") void handleAddLink(); }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleAddLink()}
+                          disabled={addingLinkRow || !newLinkUrl.trim()}
+                          className="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                        >
+                          {addingLinkRow ? "…" : "Add"}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1478,7 +1669,7 @@ export function CardDetailsModal({
             {/* ── RIGHT RAIL — Activity only ── */}
             <div className="flex w-72 flex-shrink-0 flex-col border-l border-neutral-800/40 bg-neutral-900/20">
               <div className="border-b border-neutral-800/40 px-4 py-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">Activity</p>
+                <p className="text-[11px] font-medium text-neutral-600">Activity</p>
               </div>
 
               {/* Composer */}
@@ -1511,7 +1702,7 @@ export function CardDetailsModal({
                           onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}
                         >
                           <option value="">Status…</option>
-                          {STATUS_VALUES.map((s) => (
+                          {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
                             <option key={s} value={s}>{STATUS_META[s].label}</option>
                           ))}
                         </select>
@@ -1804,6 +1995,7 @@ function formatActivity(a: NoteActivity): string {
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60_000);
+  if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
@@ -1826,6 +2018,12 @@ function formatDisplayDate(value: string): string {
   const year = d.getFullYear();
   const time = d.toLocaleString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
   return `${month} ${day}, ${year} ${time}`;
+}
+
+function fmtFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function AutoTextarea({
