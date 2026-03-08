@@ -1105,7 +1105,7 @@ export function CardDetailsModal({
           {NEW_CARD_LAYOUT ? (
             /* ── NEW: single meta row — Labels · Status · Due · Event ── */
             <>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-neutral-800/50 pb-2.5 pt-2 text-[11px]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-800/50 py-2.5 text-[11px]">
                 {/* Labels inline */}
                 {labelsLoading ? (
                   <span className="text-neutral-700">…</span>
@@ -1176,7 +1176,7 @@ export function CardDetailsModal({
                   }
                   return (
                     <div className="relative flex items-center gap-1.5 text-neutral-600">
-                      <span>Dates</span>
+                      <span className="h-3.5 w-px shrink-0 bg-neutral-800" />
                       <input ref={dueDateInputRef} type="datetime-local" className="sr-only" value={dueDate} onChange={(e) => handleDueDateChange(e.target.value)} tabIndex={-1} />
                       {/* Due sub-chip */}
                       <button type="button" onClick={() => dueDateInputRef.current?.showPicker()}
@@ -1395,7 +1395,7 @@ export function CardDetailsModal({
 
             {/* ── LEFT COLUMN ── */}
             <div className="min-w-0 flex-1 overflow-y-auto">
-              <div className="space-y-6 px-6 py-5">
+              <div className="space-y-5 px-5 py-5">
 
                 {/* About / description — content-first, no border box */}
                 <div>
@@ -1431,7 +1431,7 @@ export function CardDetailsModal({
                   </button>
 
                   {myLayerOpen && (
-                    <div className="space-y-4 border-t border-neutral-800/40 px-4 pb-4 pt-3">
+                    <div className="space-y-3.5 border-t border-neutral-800/40 px-4 pb-3.5 pt-3">
 
                       {/* My actions */}
                       <div>
@@ -1578,7 +1578,10 @@ export function CardDetailsModal({
                       {uploadingFile && (
                         <p className="px-1.5 text-[11px] text-neutral-600">Uploading…</p>
                       )}
-                      <label className="mt-0.5 flex cursor-pointer items-center gap-1 px-1.5 py-1">
+                      {noteAttachments.length > 0 && (
+                        <div className="my-0.5 border-t border-neutral-800/30" />
+                      )}
+                      <label className="flex cursor-pointer items-center gap-1 px-1.5 py-1">
                         <input
                           type="file"
                           className="sr-only"
@@ -1605,7 +1608,8 @@ export function CardDetailsModal({
                         const label = link.title || host;
                         const sub = link.title ? (provider ?? host) : provider;
                         return (
-                          <div key={link.id} className="group -mx-1.5 flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-neutral-800/40">
+                          <div key={link.id} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-neutral-800/40">
+                            <span className="w-7 shrink-0 text-center text-[10px] text-neutral-700">↗</span>
                             <button
                               type="button"
                               onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
@@ -1626,7 +1630,10 @@ export function CardDetailsModal({
                         );
                       })}
                       {/* Add link form */}
-                      <div className="flex items-center gap-1.5 pt-1">
+                      {noteLinks.length > 0 && (
+                        <div className="my-0.5 border-t border-neutral-800/30" />
+                      )}
+                      <div className="flex items-center gap-1.5 pt-0.5">
                         <input
                           className="min-w-0 flex-1 rounded-lg bg-neutral-800/60 px-2 py-1 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-600 focus:ring-1 focus:ring-neutral-700"
                           placeholder="https://…"
@@ -1693,22 +1700,22 @@ export function CardDetailsModal({
             </div>{/* end left column */}
 
             {/* ── RIGHT RAIL — Activity only ── */}
-            <div className="flex w-72 flex-shrink-0 flex-col border-l border-neutral-800/40 bg-neutral-900/20">
-              <div className="border-b border-neutral-800/40 px-4 py-3">
-                <p className="text-[11px] font-medium text-neutral-600">Activity</p>
+            <div className="flex w-[272px] flex-shrink-0 flex-col border-l border-neutral-800/40 bg-neutral-900/20">
+              <div className="border-b border-neutral-800/40 px-4 py-2.5">
+                <p className="text-[11px] font-medium text-neutral-500">Activity</p>
               </div>
 
               {/* Composer */}
-              <div className="border-b border-neutral-800/30 px-4 py-3">
+              <div className="border-b border-neutral-800/30 px-4 py-2.5">
                 {collabAuthed === false ? (
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs text-neutral-600">Sign in to comment.</p>
                     <Link href="/login" className="text-xs text-indigo-400 hover:text-indigo-300">Sign in →</Link>
                   </div>
                 ) : (
-                  <div className="rounded-lg bg-neutral-800/40 px-3 py-2 transition-colors focus-within:bg-neutral-800/60 focus-within:ring-1 focus-within:ring-neutral-700/40">
+                  <div className="rounded-lg bg-neutral-800/50 px-3 py-2 transition-colors focus-within:bg-neutral-800/70 focus-within:ring-1 focus-within:ring-neutral-700/50">
                     <AutoTextarea
-                      className="w-full bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-600"
+                      className="w-full bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-700"
                       placeholder="Write a comment…"
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
@@ -1747,23 +1754,23 @@ export function CardDetailsModal({
               </div>
 
               {/* Feed — newest first, scrollable */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
                 {collabLoading ? (
-                  <p className="px-2 py-3 text-[11px] text-neutral-700">Loading…</p>
+                  <p className="px-1 py-3 text-[11px] text-neutral-700">Loading…</p>
                 ) : feedEntries.length === 0 ? (
-                  <p className="px-2 py-3 text-[11px] text-neutral-700">No activity yet.</p>
+                  <p className="px-1 py-3 text-[11px] text-neutral-700">No activity yet.</p>
                 ) : (
-                  <div className="space-y-0.5">
+                  <div className="space-y-px">
                     {feedEntries.map((entry) => {
                       if (entry.kind === "comment") {
                         const c = entry.data;
                         return (
-                          <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-neutral-800/30">
+                          <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-neutral-800/30">
                             <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-900/50">
                               <span className="text-[8px] text-indigo-400">✦</span>
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="break-words text-xs text-neutral-200">{c.content}</p>
+                              <p className="break-words text-xs leading-relaxed text-neutral-200">{c.content}</p>
                               <p className="mt-0.5 text-[10px] text-neutral-700">{relativeTime(c.created_at)}</p>
                             </div>
                             <button
@@ -1777,14 +1784,14 @@ export function CardDetailsModal({
                       }
                       if (entry.kind === "local") {
                         return (
-                          <p key={entry.id} className="px-2 py-1 text-[11px] italic text-neutral-700">
+                          <p key={entry.id} className="px-2 py-1.5 text-[11px] italic text-neutral-700">
                             {entry.text} · just now
                           </p>
                         );
                       }
                       const a = entry.data;
                       return (
-                        <p key={a.id} className="px-2 py-1 text-[11px] text-neutral-700">
+                        <p key={a.id} className="px-2 py-1.5 text-[11px] text-neutral-700">
                           {formatActivity(a)} · {relativeTime(a.created_at)}
                         </p>
                       );

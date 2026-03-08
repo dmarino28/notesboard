@@ -54,9 +54,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 type Props = {
   noteId: string;
   currentThread?: OutlookThread;
+  /** When true, shows a brief "Opened via email thread" banner that auto-dismisses. */
+  autoMatched?: boolean;
 };
 
-export function CardDetailPane({ noteId, currentThread }: Props) {
+export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
   // ── Content + save ────────────────────────────────────────────────────────────
   const [content, setContent]           = useState("");
   const [savedContent, setSavedContent] = useState("");
@@ -81,6 +83,9 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
   // ── Link-current state ────────────────────────────────────────────────────────
   const [linkCurrentState, setLinkCurrentState] = useState<"idle" | "linking" | "done" | "error">("idle");
   const [linkCurrentError, setLinkCurrentError] = useState<string | null>(null);
+
+  // ── Auto-match banner ─────────────────────────────────────────────────────────
+  const [showMatchBanner, setShowMatchBanner] = useState(autoMatched ?? false);
 
   // ── My Action (per-user, personal) ───────────────────────────────────────────
   const [addinActionState, setAddinActionState] = useState<ActionState | null>(null);
@@ -135,6 +140,13 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
     setLinkCurrentState("idle");
     setLinkCurrentError(null);
   }, [noteId]);
+
+  // Auto-dismiss the "opened via email thread" banner after 3 seconds.
+  useEffect(() => {
+    if (!showMatchBanner) return;
+    const t = setTimeout(() => setShowMatchBanner(false), 3_000);
+    return () => clearTimeout(t);
+  }, [showMatchBanner]);
 
   // ── Autosave ──────────────────────────────────────────────────────────────────
   function handleContentChange(newContent: string) {
@@ -303,6 +315,21 @@ export function CardDetailPane({ noteId, currentThread }: Props) {
       {/* ── Scrollable body ──────────────────────────────────────────────── */}
       <div className="nb-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-5 p-4 pb-2">
+
+          {/* Auto-match banner — fades out after 3 s */}
+          {showMatchBanner && (
+            <div className="flex items-center gap-2 rounded-xl border border-sky-800/30 bg-sky-950/20 px-3 py-2">
+              <span className="text-[11px] text-sky-500">✉</span>
+              <p className="flex-1 text-xs text-sky-400">Opened via email thread</p>
+              <button
+                type="button"
+                onClick={() => setShowMatchBanner(false)}
+                className="flex-shrink-0 cursor-pointer text-[10px] text-sky-700 hover:text-sky-500"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Content editor */}
           <section className="space-y-1.5">

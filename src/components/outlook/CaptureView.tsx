@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { type OutlookThread } from "@/lib/outlookContext";
-import { listThreadLinksByConversationId } from "@/lib/emailThreads";
 import { listBoards, type BoardRow } from "@/lib/boards";
 import { listColumns, type ColumnRow } from "@/lib/columns";
-
-type LinkRef = { noteId: string; noteTitle: string; boardId: string };
 
 type Props = {
   thread: OutlookThread | null;
@@ -24,7 +21,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: Props) {
-  const [existingLinks, setExistingLinks] = useState<LinkRef[] | null>(null);
   const [createExpanded, setCreateExpanded] = useState(false);
   const [boards, setBoards] = useState<BoardRow[]>([]);
   const [columns, setColumns] = useState<ColumnRow[]>([]);
@@ -35,18 +31,8 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!thread) {
-      setExistingLinks(null);
-      return;
-    }
-    // Capture in a local const so the async closure retains the non-null type.
-    const t = thread;
-    async function load() {
-      const [links, boardsResult] = await Promise.all([
-        listThreadLinksByConversationId(t.conversationId),
-        listBoards(),
-      ]);
-      setExistingLinks(links);
+    if (!thread) return;
+    listBoards().then((boardsResult) => {
       if (boardsResult.data?.length) {
         const sorted = [
           ...boardsResult.data.filter((b) => b.name === "Landing Pad"),
@@ -55,8 +41,7 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
         setBoards(sorted);
         setSelectedBoardId(sorted[0].id);
       }
-    }
-    load();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread?.conversationId]);
 
@@ -120,14 +105,6 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
         <p className="line-clamp-2 text-sm font-medium leading-snug text-neutral-100">
           {thread.subject || "(no subject)"}
         </p>
-
-        {/* 🔎 Build marker (remove later) */}
-        <div className="mt-1 flex items-center gap-2">
-          <span className="inline-flex items-center rounded-md bg-fuchsia-950/60 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300 ring-1 ring-fuchsia-800/40">
-            POLISH TEST • eaf51b2
-          </span>
-        </div>
-
         {thread.mailbox && (
           <p className="truncate text-xs text-neutral-600">{thread.mailbox}</p>
         )}
@@ -140,24 +117,6 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
       {/* Scrollable body */}
       <div className="nb-scroll flex-1 space-y-3 overflow-y-auto p-4">
-        {/* Link status */}
-        {existingLinks === null ? (
-          <p className="text-xs text-neutral-700">Checking links…</p>
-        ) : existingLinks.length > 0 ? (
-          <div className="space-y-1.5 rounded-xl border border-sky-800/30 bg-sky-950/25 px-3 py-2.5">
-            <p className="text-xs font-semibold text-sky-400">
-              Linked to {existingLinks.length} card{existingLinks.length > 1 ? "s" : ""}
-            </p>
-            <ul className="space-y-0.5">
-              {existingLinks.map((link) => (
-                <li key={link.noteId} className="line-clamp-1 text-xs text-neutral-500">
-                  {link.noteTitle || "(untitled)"}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
         {/* Primary actions */}
         <div className="space-y-2">
           <button

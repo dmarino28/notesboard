@@ -95,13 +95,29 @@ export async function listEmailThreadNoteIds(noteIds: string[]): Promise<Set<str
 }
 
 /**
+ * Shape returned by listThreadLinksByConversationId.
+ * Includes board name and card status so callers can render a chooser
+ * without additional queries.
+ */
+export type ThreadLink = {
+  noteId: string;
+  noteTitle: string;
+  boardId: string;
+  boardName: string;
+  status: string | null;
+};
+
+/**
  * Returns ALL cards that this conversation_id is linked to.
  * A single thread can be linked to multiple cards (many-to-many).
  * Returns an empty array if not linked anywhere.
+ *
+ * Also fetches the note's status and the board name via a FK join so the
+ * caller can render a rich chooser without extra round-trips.
  */
 export async function listThreadLinksByConversationId(
   conversationId: string,
-): Promise<{ noteId: string; noteTitle: string; boardId: string }[]> {
+): Promise<ThreadLink[]> {
   const { data: threadRows } = await supabase
     .from("note_email_threads")
     .select("note_id")
@@ -111,26 +127,50 @@ export async function listThreadLinksByConversationId(
 
   const noteIds = (threadRows as { note_id: string }[]).map((r) => r.note_id);
 
+  type NoteRow = { id: string; content: string; status: string | null };
+  // PostgREST returns the FK-joined boards relation as an array shape in inferred
+  // types even for many-to-one joins; cast via unknown to satisfy the compiler.
+  type PlacementRow = {
+    note_id: string;
+    board_id: string;
+    boards: { name: string } | { name: string }[] | null;
+  };
+
   const [{ data: notes }, { data: placements }] = await Promise.all([
-    supabase.from("notes").select("id, content").in("id", noteIds),
-    supabase.from("note_placements").select("note_id, board_id").in("note_id", noteIds),
+    supabase.from("notes").select("id, content, status").in("id", noteIds),
+    supabase
+      .from("note_placements")
+      .select("note_id, board_id, boards(name)")
+      .in("note_id", noteIds),
   ]);
 
-  const noteMap = new Map<string, string>();
-  for (const n of (notes ?? []) as { id: string; content: string }[]) {
-    noteMap.set(n.id, n.content);
+  const noteMap = new Map<string, { content: string; status: string | null }>();
+  for (const n of (notes ?? []) as NoteRow[]) {
+    noteMap.set(n.id, { content: n.content, status: n.status });
   }
 
-  const boardMap = new Map<string, string>();
-  for (const p of (placements ?? []) as { note_id: string; board_id: string }[]) {
-    if (!boardMap.has(p.note_id)) boardMap.set(p.note_id, p.board_id);
+  const boardMap = new Map<string, { boardId: string; boardName: string }>();
+  for (const p of (placements ?? []) as unknown as PlacementRow[]) {
+    if (!boardMap.has(p.note_id)) {
+      const boardsVal = p.boards;
+      const boardName = Array.isArray(boardsVal)
+        ? (boardsVal[0]?.name ?? "")
+        : (boardsVal?.name ?? "");
+      boardMap.set(p.note_id, { boardId: p.board_id, boardName });
+    }
   }
 
-  return noteIds.map((noteId) => ({
-    noteId,
-    noteTitle: noteMap.get(noteId) ?? "",
-    boardId: boardMap.get(noteId) ?? "",
-  }));
+  return noteIds.map((noteId) => {
+    const note = noteMap.get(noteId);
+    const board = boardMap.get(noteId);
+    return {
+      noteId,
+      noteTitle: note?.content ?? "",
+      boardId: board?.boardId ?? "",
+      boardName: board?.boardName ?? "",
+      status: note?.status ?? null,
+    };
+  });
 }
 
 // ─── Attachments ─────────────────────────────────────────────────────────────
