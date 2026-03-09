@@ -28,28 +28,52 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
   const [selectedColumnId, setSelectedColumnId] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
 
   // ── Board loading ─────────────────────────────────────────────────────────────
-  // Boards are independent of the current thread — load once on mount.
-  // Previously this was co-located with the thread-link query inside a
-  // Promise.all keyed on thread?.conversationId. Now that thread matching is
-  // owned by OutlookAddinShell, CaptureView should just load boards on mount.
   useEffect(() => {
+    console.warn("[CaptureView] >>> MOUNTED — calling listBoards()");
     listBoards().then((boardsResult) => {
+      console.warn("[CaptureView] listBoards() result >>>", {
+        dataLength: boardsResult.data?.length ?? "undefined",
+        error: boardsResult.error ?? "(none)",
+        firstBoard: boardsResult.data?.[0]?.name ?? "(no boards)",
+      });
+      if (boardsResult.error) {
+        console.warn("[CaptureView] BOARD LOAD ERROR:", boardsResult.error);
+        setBoardLoadError(boardsResult.error);
+        return;
+      }
       if (boardsResult.data?.length) {
         const sorted = [
           ...boardsResult.data.filter((b) => b.name === "Landing Pad"),
           ...boardsResult.data.filter((b) => b.name !== "Landing Pad"),
         ];
+        console.warn("[CaptureView] setBoards() — count:", sorted.length, "| first:", sorted[0].name);
         setBoards(sorted);
         setSelectedBoardId(sorted[0].id);
+        console.warn("[CaptureView] setSelectedBoardId →", sorted[0].id, sorted[0].name);
+      } else {
+        console.warn("[CaptureView] listBoards() returned 0 boards and no error — check RLS/auth");
       }
     });
+    return () => {
+      console.warn("[CaptureView] <<< UNMOUNTING");
+    };
   }, []);
 
   useEffect(() => {
-    if (!selectedBoardId) return;
-    listColumns(selectedBoardId).then(({ data }) => {
+    if (!selectedBoardId) {
+      console.warn("[CaptureView] columns effect skipped — selectedBoardId is empty");
+      return;
+    }
+    console.warn("[CaptureView] columns effect firing — boardId:", selectedBoardId);
+    listColumns(selectedBoardId).then(({ data, error }) => {
+      console.warn("[CaptureView] listColumns() result >>>", {
+        dataLength: data?.length ?? "undefined",
+        error: error ?? "(none)",
+        firstColumn: data?.[0]?.name ?? "(no columns)",
+      });
       if (data?.length) {
         setColumns(data);
         setSelectedColumnId(data[0].id);
@@ -148,6 +172,11 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
         {/* Expandable create form */}
         {createExpanded && (
           <div className="space-y-3 rounded-xl border border-white/[0.07] bg-neutral-900/60 p-3">
+            {boardLoadError && (
+              <p className="rounded-lg border border-red-900/40 bg-red-950/30 px-2.5 py-1.5 text-xs text-red-400">
+                Board load error: {boardLoadError}
+              </p>
+            )}
             <div className="space-y-1">
               <FieldLabel>Board</FieldLabel>
               <select
