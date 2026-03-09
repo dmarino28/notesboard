@@ -292,6 +292,16 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
       <div className="min-h-0 flex-1 overflow-hidden">
         {isCardDetail && view.kind === "card-detail" ? (
           <div className="flex h-full flex-col">
+            {/* Flag intelligence banner — shown whenever the open email is flagged */}
+            {showFlagBar && (
+              <FlagBar
+                key={thread?.messageId ?? "none"}
+                followUpDate={itemExtras?.followUpDate ?? null}
+                ctaLabel="→ My Actions"
+                onCta={() => handleFlagAddToActionsExisting(view.noteId)}
+                onIgnore={handleFlagIgnore}
+              />
+            )}
             {/* Banner: current email links to a different card (manual mode only) */}
             {!view.autoMatched && threadCtx.kind === "one" && threadCtx.match.noteId !== view.noteId && (
               <div className="flex flex-shrink-0 items-center gap-2 border-b border-sky-800/30 bg-sky-950/20 px-3 py-2">
