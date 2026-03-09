@@ -11,6 +11,10 @@ type Props = {
   isDevMode: boolean;
   onOpenCard: (noteId: string) => void;
   onStartLinking: () => void;
+  /** When true, the create request includes action_state="needs_action" */
+  captureWithAction?: boolean;
+  /** ISO YYYY-MM-DD — forwarded as personal_due_date when captureWithAction is true */
+  personalDueDate?: string | null;
 };
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -21,7 +25,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: Props) {
+export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking, captureWithAction, personalDueDate }: Props) {
   const [createExpanded, setCreateExpanded] = useState(false);
   const [boards, setBoards] = useState<BoardRow[]>([]);
   const [columns, setColumns] = useState<ColumnRow[]>([]);
@@ -76,21 +80,27 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
         ? { Authorization: `Bearer ${session.access_token}` }
         : {};
 
+      const payload: Record<string, unknown> = {
+        title: thread.subject || "(no subject)",
+        boardId: selectedBoardId,
+        columnId: selectedColumnId,
+        provider: thread.provider,
+        mailbox: thread.mailbox,
+        conversationId: thread.conversationId,
+        messageId: thread.messageId,
+        webLink: thread.webLink,
+        subject: thread.subject,
+        lastActivityAt: new Date().toISOString(),
+      };
+      if (captureWithAction) {
+        payload.action_state = "needs_action";
+        if (personalDueDate) payload.personal_due_date = personalDueDate;
+      }
+
       const res = await fetch("/api/email/create-note-from-thread", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
-        body: JSON.stringify({
-          title: thread.subject || "(no subject)",
-          boardId: selectedBoardId,
-          columnId: selectedColumnId,
-          provider: thread.provider,
-          mailbox: thread.mailbox,
-          conversationId: thread.conversationId,
-          messageId: thread.messageId,
-          webLink: thread.webLink,
-          subject: thread.subject,
-          lastActivityAt: new Date().toISOString(),
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to create card");

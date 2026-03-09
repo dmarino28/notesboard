@@ -10,6 +10,8 @@ type RequestBody = {
   action_mode?: string;
   is_in_actions?: boolean;
   private_tags?: string[];
+  /** ISO YYYY-MM-DD — personal due date stored on note_user_actions, not the shared note */
+  personal_due_date?: string | null;
 };
 
 const VALID_STATES = ["needs_action", "waiting", "done"];
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { note_id, in_my_actions, action_state, action_mode, is_in_actions, private_tags } = body;
+  const { note_id, in_my_actions, action_state, action_mode, is_in_actions, private_tags, personal_due_date } = body;
   if (!note_id) {
     return NextResponse.json({ error: "note_id required" }, { status: 400 });
   }
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest) {
     };
     if (action_mode !== undefined) upsertData.action_mode = action_mode;
     if (private_tags !== undefined) upsertData.private_tags = private_tags;
+    if (personal_due_date !== undefined) upsertData.personal_due_date = personal_due_date ?? null;
 
     // Auto-populate waiting fields when transitioning to 'waiting'
     if (action_state === "waiting") {

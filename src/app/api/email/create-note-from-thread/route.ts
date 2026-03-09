@@ -19,6 +19,13 @@ type RequestBody = {
   lastActivityAt?: string | null;
   unreadCount?: number;
   attachments?: { messageId: string; fileName: string }[];
+  /**
+   * Optional: when set, creates a note_user_actions row for the creating user.
+   * Scoped entirely to the current user — does not touch shared card fields.
+   */
+  action_state?: "needs_action" | "waiting" | "done";
+  /** ISO YYYY-MM-DD — stored as personal_due_date on note_user_actions only */
+  personal_due_date?: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -121,6 +128,28 @@ export async function POST(req: NextRequest) {
     const { error: attErr } = await upsertAttachments(thread.id, body.attachments);
     if (attErr) {
       console.error("Failed to upsert attachments:", attErr);
+    }
+  }
+
+  // 6. Optionally create a personal action row for the creating user (non-fatal).
+  //    This only writes to note_user_actions — no shared card fields are touched.
+  if (body.action_state) {
+    const actionRow: Record<string, unknown> = {
+      user_id: user.id,
+      note_id: note.id,
+      action_state: body.action_state,
+      action_mode: "timed",
+      is_in_actions: true,
+      updated_at: new Date().toISOString(),
+    };
+    if (body.personal_due_date !== undefined) {
+      actionRow.personal_due_date = body.personal_due_date ?? null;
+    }
+    const { error: actionErr } = await client
+      .from("note_user_actions")
+      .upsert(actionRow, { onConflict: "user_id,note_id" });
+    if (actionErr) {
+      console.error("Failed to create note_user_actions:", actionErr);
     }
   }
 

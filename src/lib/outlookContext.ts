@@ -1,3 +1,14 @@
+/**
+ * Supplemental Outlook item state read synchronously alongside the main thread.
+ * All fields are nullable — availability depends on host version and item type.
+ */
+export type OutlookItemExtras = {
+  /** null = unavailable (req set < 1.6, compose mode, or any error) */
+  flagStatus: "flagged" | "complete" | "notFlagged" | null;
+  /** ISO YYYY-MM-DD from flag.dueDateTime, or null if not set */
+  followUpDate: string | null;
+};
+
 export type OutlookThread = {
   conversationId: string;
   messageId: string;
@@ -18,6 +29,45 @@ export type ReadItemResult =
   | { kind: "no_office" }
   | { kind: "error"; message: string }
   | { kind: "ok"; thread: OutlookThread };
+
+/**
+ * Synchronously reads flag state from the currently open Outlook item.
+ *
+ * Requires Mailbox requirement set 1.6+ (Outlook 2016+, OWA, Outlook.com).
+ * Returns null-safe fallback values on any host/version that does not support
+ * item.flag, in compose mode, or on any unexpected error.
+ *
+ * Safe to call after Office.onReady; does not require an async REST token.
+ */
+export function readItemExtras(): OutlookItemExtras {
+  try {
+    // item.flag requires Mailbox 1.6+ and is only present on MessageRead.
+    // Cast through unknown because older @types/office-js doesn't type the flag
+    // property — runtime values of FlagStatus are plain strings ("flagged" etc.).
+    type ItemWithFlag = {
+      flag?: {
+        flagStatus?: string;
+        dueDateTime?: Date | null;
+      } | null;
+    } | null;
+    const item = Office.context.mailbox.item as unknown as ItemWithFlag;
+    if (!item?.flag) return { flagStatus: null, followUpDate: null };
+
+    const s = item.flag.flagStatus;
+    const flagStatus: OutlookItemExtras["flagStatus"] =
+      s === "flagged"    ? "flagged"    :
+      s === "complete"   ? "complete"   :
+      s === "notFlagged" ? "notFlagged" : null;
+
+    const followUpDate = item.flag.dueDateTime
+      ? item.flag.dueDateTime.toISOString().slice(0, 10) // → "YYYY-MM-DD"
+      : null;
+
+    return { flagStatus, followUpDate };
+  } catch {
+    return { flagStatus: null, followUpDate: null };
+  }
+}
 
 // ── Outlook REST web-link helper ──────────────────────────────────────────────
 

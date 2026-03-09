@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type ReadItemResult, type OutlookThread } from "@/lib/outlookContext";
+import {
+  type ReadItemResult,
+  type OutlookThread,
+  type OutlookItemExtras,
+  readItemExtras,
+} from "@/lib/outlookContext";
 import {
   listThreadLinksByConversationId,
   type ThreadLink,
 } from "@/lib/emailThreads";
 import { STATUS_META, STATUS_VALUES, type NoteStatus } from "@/lib/collab";
+import { supabase } from "@/lib/supabase";
 import { BoardBrowserView } from "./BoardBrowserView";
 import { CaptureView } from "./CaptureView";
 import { CardDetailPane } from "./CardDetailPane";
+import { FlagBar } from "./EmailIntelligenceBar";
 import { ThreadMatchChooser } from "./ThreadMatchChooser";
 
 const DEV_THREAD: OutlookThread = {
@@ -43,6 +50,8 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
   const [view, setView] = useState<ViewState>({ kind: "list", tab: "capture" });
   const [linkingCtx, setLinkingCtx] = useState<OutlookThread | null>(null);
   const [threadCtx, setThreadCtx] = useState<ThreadCtxState>({ kind: "idle" });
+  const [itemExtras, setItemExtras] = useState<OutlookItemExtras | null>(null);
+  const [flagIgnoredMessageId, setFlagIgnoredMessageId] = useState<string | null>(null);
 
   // ── Thread context lookup ──────────────────────────────────────────────────
   // Runs whenever the open email changes (conversationId key).
@@ -112,6 +121,15 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread?.conversationId]);
 
+  // ── Flag state detection ───────────────────────────────────────────────────
+  // Re-reads Outlook flag state whenever the open message changes.
+  // readItemExtras() is synchronous and try/catch-safe (returns null values
+  // when Office.js is unavailable or the item doesn't support flag).
+  useEffect(() => {
+    setFlagIgnoredMessageId(null);
+    setItemExtras(readItemExtras());
+  }, [thread?.messageId]);
+
   // ── Navigation ────────────────────────────────────────────────────────────
   function openCard(noteId: string, autoMatched = false) {
     const returnTab: Tab = view.kind === "list" ? view.tab : "browse";
@@ -145,6 +163,38 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
   function handleTabChange(newTab: Tab) {
     if (linkingCtx && newTab !== "browse") setLinkingCtx(null);
     setView({ kind: "list", tab: newTab });
+  }
+
+  // ── Flag intelligence ──────────────────────────────────────────────────────
+
+  const showFlagBar =
+    !!itemExtras &&
+    itemExtras.flagStatus === "flagged" &&
+    thread?.messageId !== flagIgnoredMessageId;
+
+  function handleFlagIgnore() {
+    setFlagIgnoredMessageId(thread?.messageId ?? null);
+  }
+
+  async function handleFlagAddToActionsExisting(noteId: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const authHeader: Record<string, string> = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+    const payload: Record<string, unknown> = {
+      note_id: noteId,
+      action_state: "needs_action",
+    };
+    if (itemExtras?.followUpDate) {
+      payload.personal_due_date = itemExtras.followUpDate;
+    }
+    const res = await fetch("/api/actions/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { error?: string };
+    if (!res.ok) throw new Error(json.error ?? "Failed to add");
   }
 
   const isCardDetail = view.kind === "card-detail";
@@ -206,6 +256,8 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
         isDevMode={isDevMode}
         onOpenCard={openCard}
         onStartLinking={startLinking}
+        captureWithAction={showFlagBar}
+        personalDueDate={itemExtras?.followUpDate ?? null}
       />
     );
   }
@@ -264,7 +316,31 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
             </div>
           </div>
         ) : activeTab === "capture" ? (
-          renderCaptureBody()
+          showFlagBar && threadCtx.kind !== "loading" ? (
+            <div className="flex h-full flex-col">
+              <FlagBar
+                key={thread?.messageId ?? "none"}
+                followUpDate={itemExtras?.followUpDate ?? null}
+                bodyText={
+                  threadCtx.kind === "none" || threadCtx.kind === "idle"
+                    ? "adds to My Actions on capture"
+                    : undefined
+                }
+                ctaLabel={threadCtx.kind === "one" ? "→ My Actions" : undefined}
+                onCta={
+                  threadCtx.kind === "one"
+                    ? () => handleFlagAddToActionsExisting(threadCtx.match.noteId)
+                    : undefined
+                }
+                onIgnore={handleFlagIgnore}
+              />
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {renderCaptureBody()}
+              </div>
+            </div>
+          ) : (
+            renderCaptureBody()
+          )
         ) : (
           <BoardBrowserView
             onOpenCard={openCard}
