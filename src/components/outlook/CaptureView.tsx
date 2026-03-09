@@ -29,9 +29,12 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // ── Init ─────────────────────────────────────────────────────────────────────
+  // ── Board loading ─────────────────────────────────────────────────────────────
+  // Boards are independent of the current thread — load once on mount.
+  // Previously this was co-located with the thread-link query inside a
+  // Promise.all keyed on thread?.conversationId. Now that thread matching is
+  // owned by OutlookAddinShell, CaptureView should just load boards on mount.
   useEffect(() => {
-    if (!thread) return;
     listBoards().then((boardsResult) => {
       if (boardsResult.data?.length) {
         const sorted = [
@@ -42,8 +45,7 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
         setSelectedBoardId(sorted[0].id);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread?.conversationId]);
+  }, []);
 
   useEffect(() => {
     if (!selectedBoardId) return;
