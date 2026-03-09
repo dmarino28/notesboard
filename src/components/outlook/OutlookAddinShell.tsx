@@ -50,36 +50,26 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
   // For a single match on the capture tab, also auto-navigates to the card.
   useEffect(() => {
     if (!thread) {
-      console.warn("[OutlookAddinShell] thread is null → threadCtx: idle");
       setThreadCtx({ kind: "idle" });
       return;
     }
-    console.warn("[OutlookAddinShell] thread changed → threadCtx: loading | convId:", thread.conversationId);
     setThreadCtx({ kind: "loading" });
     let cancelled = false;
 
     listThreadLinksByConversationId(thread.conversationId).then((matches) => {
-      if (cancelled) {
-        console.warn("[OutlookAddinShell] lookup cancelled (thread changed again)");
-        return;
-      }
-
-      console.warn("[OutlookAddinShell] lookup resolved | matches:", matches.length, matches.map(m => m.noteTitle));
+      if (cancelled) return;
 
       if (matches.length === 0) {
-        console.warn("[OutlookAddinShell] threadCtx → none (no linked cards) → CaptureView should render");
         setThreadCtx({ kind: "none" });
         return;
       }
 
       if (matches.length === 1) {
-        console.warn("[OutlookAddinShell] threadCtx → one | noteId:", matches[0].noteId, "| auto-navigating if on capture tab");
         setThreadCtx({ kind: "one", match: matches[0] });
         // Auto-navigate only when the user is on the capture tab.
         // Batched with setThreadCtx — no intermediate render.
         setView((currentView) => {
           if (currentView.kind === "list" && currentView.tab === "capture") {
-            console.warn("[OutlookAddinShell] auto-navigating to card-detail for noteId:", matches[0].noteId);
             return {
               kind: "card-detail",
               noteId: matches[0].noteId,
@@ -87,13 +77,11 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
               autoMatched: true,
             };
           }
-          console.warn("[OutlookAddinShell] NOT auto-navigating — current view:", currentView.kind);
           return currentView; // don't interrupt browse or card-detail
         });
         return;
       }
 
-      console.warn("[OutlookAddinShell] threadCtx → many | matches:", matches.length);
       setThreadCtx({ kind: "many", matches });
     });
 
@@ -160,13 +148,10 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
   // Determined by threadCtx: loading → spinner, one → single-match view,
   // many → chooser, none/idle → standard capture form.
   function renderCaptureBody() {
-    console.warn("[OutlookAddinShell] renderCaptureBody | threadCtx:", threadCtx.kind, "| view:", view.kind, "| activeTab:", activeTab);
     if (threadCtx.kind === "loading") {
-      console.warn("[OutlookAddinShell] → rendering ThreadLoadingView");
       return <ThreadLoadingView thread={thread} />;
     }
     if (threadCtx.kind === "many") {
-      console.warn("[OutlookAddinShell] → rendering ThreadMatchChooser");
       return (
         <ThreadMatchChooser
           thread={thread}
@@ -177,7 +162,6 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
       );
     }
     if (threadCtx.kind === "one") {
-      console.warn("[OutlookAddinShell] → rendering SingleMatchView (user pressed Back)");
       // User pressed Back from the auto-navigated card — show a lightweight
       // single-match view so they can re-open it or start a fresh capture.
       return (
@@ -190,7 +174,6 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
       );
     }
     // "none" or "idle"
-    console.warn("[OutlookAddinShell] → rendering CaptureView (threadCtx:", threadCtx.kind, ")");
     return (
       <CaptureView
         thread={thread}

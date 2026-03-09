@@ -32,15 +32,8 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
 
   // ── Board loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    console.warn("[CaptureView] >>> MOUNTED — calling listBoards()");
     listBoards().then((boardsResult) => {
-      console.warn("[CaptureView] listBoards() result >>>", {
-        dataLength: boardsResult.data?.length ?? "undefined",
-        error: boardsResult.error ?? "(none)",
-        firstBoard: boardsResult.data?.[0]?.name ?? "(no boards)",
-      });
       if (boardsResult.error) {
-        console.warn("[CaptureView] BOARD LOAD ERROR:", boardsResult.error);
         setBoardLoadError(boardsResult.error);
         return;
       }
@@ -49,31 +42,15 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
           ...boardsResult.data.filter((b) => b.name === "Landing Pad"),
           ...boardsResult.data.filter((b) => b.name !== "Landing Pad"),
         ];
-        console.warn("[CaptureView] setBoards() — count:", sorted.length, "| first:", sorted[0].name);
         setBoards(sorted);
         setSelectedBoardId(sorted[0].id);
-        console.warn("[CaptureView] setSelectedBoardId →", sorted[0].id, sorted[0].name);
-      } else {
-        console.warn("[CaptureView] listBoards() returned 0 boards and no error — check RLS/auth");
       }
     });
-    return () => {
-      console.warn("[CaptureView] <<< UNMOUNTING");
-    };
   }, []);
 
   useEffect(() => {
-    if (!selectedBoardId) {
-      console.warn("[CaptureView] columns effect skipped — selectedBoardId is empty");
-      return;
-    }
-    console.warn("[CaptureView] columns effect firing — boardId:", selectedBoardId);
-    listColumns(selectedBoardId).then(({ data, error }) => {
-      console.warn("[CaptureView] listColumns() result >>>", {
-        dataLength: data?.length ?? "undefined",
-        error: error ?? "(none)",
-        firstColumn: data?.[0]?.name ?? "(no columns)",
-      });
+    if (!selectedBoardId) return;
+    listColumns(selectedBoardId).then(({ data }) => {
       if (data?.length) {
         setColumns(data);
         setSelectedColumnId(data[0].id);
