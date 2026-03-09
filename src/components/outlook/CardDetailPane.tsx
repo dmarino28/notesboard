@@ -78,7 +78,6 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
   const [threads, setThreads]             = useState<EmailThreadRow[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [openError, setOpenError]         = useState<string | null>(null);
-  const [threadOpenMode, setThreadOpenMode] = useState<Record<string, "conversation" | "message">>({});
 
   // ── Link-current state ────────────────────────────────────────────────────────
   const [linkCurrentState, setLinkCurrentState] = useState<"idle" | "linking" | "done" | "error">("idle");
@@ -212,36 +211,39 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
   }
 
   // ── Open thread ───────────────────────────────────────────────────────────────
-  function openThreadInOutlook(thread: EmailThreadRow, mode: "conversation" | "message") {
+  // Prefer displayConversationAsync (mailbox req set 1.9+) for the full thread
+  // view. Fall back to displayMessageForm if the API is unavailable in this host.
+  function openThreadInOutlook(thread: EmailThreadRow) {
     setOpenError(null);
 
-    if (mode === "conversation") {
-      if (!thread.conversation_id) {
-        setOpenError("No conversation ID — cannot open this thread.");
-        return;
-      }
-      console.log("[addin:openThread] conversation", thread.conversation_id);
-      // displayConversationAsync is available in Mailbox requirement set 1.9+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const canOpenConversation = typeof (Office.context.mailbox as any).displayConversationAsync === "function";
+
+    if (canOpenConversation && thread.conversation_id) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (Office.context.mailbox as any).displayConversationAsync(
         thread.conversation_id,
         (result: Office.AsyncResult<void>) => {
           if (result.status === Office.AsyncResultStatus.Failed) {
-            console.error("[addin:openThread] displayConversationAsync failed", result.error);
-            setOpenError(`Could not open conversation: ${result.error.message}`);
+            // API exists but call failed — fall back to message form if possible.
+            if (thread.message_id) {
+              Office.context.mailbox.displayMessageForm(thread.message_id);
+            } else {
+              setOpenError(`Could not open conversation: ${result.error.message}`);
+            }
           }
         },
       );
       return;
     }
 
-    // message mode
-    if (!thread.message_id) {
-      setOpenError("No message ID — cannot open this message.");
+    // Fallback: open the specific message.
+    if (thread.message_id) {
+      Office.context.mailbox.displayMessageForm(thread.message_id);
       return;
     }
-    console.log("[addin:openThread] message", thread.message_id);
-    Office.context.mailbox.displayMessageForm(thread.message_id);
+
+    setOpenError("No message ID available to open this thread.");
   }
 
   // ── Link current email ────────────────────────────────────────────────────────
@@ -457,29 +459,9 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
                         </>
                       )}
                     </div>
-                    {/* Conversation / Message toggle */}
-                    <div className="flex items-center rounded border border-white/[0.07] overflow-hidden w-fit">
-                      {(["conversation", "message"] as const).map((m) => {
-                        const active = (threadOpenMode[t.id] ?? "conversation") === m;
-                        return (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => setThreadOpenMode((prev) => ({ ...prev, [t.id]: m }))}
-                            className={`px-2 py-0.5 text-[10px] capitalize transition-colors cursor-pointer ${
-                              active
-                                ? "bg-white/[0.10] text-neutral-300"
-                                : "text-neutral-600 hover:text-neutral-400"
-                            }`}
-                          >
-                            {m}
-                          </button>
-                        );
-                      })}
-                    </div>
                     <button
                       type="button"
-                      onClick={() => openThreadInOutlook(t, threadOpenMode[t.id] ?? "conversation")}
+                      onClick={() => openThreadInOutlook(t)}
                       className="w-full cursor-pointer rounded-lg bg-neutral-800 px-2.5 py-1.5 text-left text-xs font-medium text-neutral-400 transition-colors duration-150 hover:bg-neutral-700 hover:text-neutral-200 active:bg-neutral-600"
                     >
                       Open in Outlook →

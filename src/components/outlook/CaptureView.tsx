@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { type OutlookThread } from "@/lib/outlookContext";
 import { listBoards, type BoardRow } from "@/lib/boards";
 import { listColumns, type ColumnRow } from "@/lib/columns";
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   thread: OutlookThread | null;
@@ -67,9 +68,17 @@ export function CaptureView({ thread, isDevMode, onOpenCard, onStartLinking }: P
     setCreating(true);
     setCreateError(null);
     try {
+      // The add-in stores its session in localStorage (not document.cookie), so
+      // the browser won't attach an auth cookie automatically. Send the access
+      // token as a Bearer header so getAuthedSupabase() can authenticate the request.
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader: Record<string, string> = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+
       const res = await fetch("/api/email/create-note-from-thread", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           title: thread.subject || "(no subject)",
           boardId: selectedBoardId,
