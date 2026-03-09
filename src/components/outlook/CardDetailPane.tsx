@@ -16,6 +16,8 @@ import {
   cycleActionState,
   type ActionState,
 } from "@/lib/userActions";
+import { listCollab, type CollabData } from "@/lib/collab";
+import { supabase } from "@/lib/supabase";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,9 +58,11 @@ type Props = {
   currentThread?: OutlookThread;
   /** When true, shows a brief "Opened via email thread" banner that auto-dismisses. */
   autoMatched?: boolean;
+  /** Called when the user clicks Done — caller should navigate back. */
+  onDone?: () => void;
 };
 
-export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
+export function CardDetailPane({ noteId, currentThread, autoMatched, onDone }: Props) {
   // ── Content + save ────────────────────────────────────────────────────────────
   const [content, setContent]           = useState("");
   const [savedContent, setSavedContent] = useState("");
@@ -91,6 +95,9 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
   const [addinPersonalDue, setAddinPersonalDue] = useState<string>("");
   const [addinActionSaving, setAddinActionSaving] = useState(false);
 
+  // ── Collab data (updates / activity) ─────────────────────────────────────────
+  const [collabData, setCollabData] = useState<CollabData | null>(null);
+
   // ── Load ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     setSaveStatus("idle");
@@ -118,6 +125,12 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
       setPlacements(placementsResult);
       setThreads(threadsResult.data);
       setThreadsLoading(false);
+
+      // Load collab data with Bearer auth (add-in stores session in localStorage).
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        listCollab(noteId, { bearerToken: session.access_token }).then(setCollabData);
+      }
 
       if (placementsResult.length > 0) {
         const { data: cols } = await listColumns(placementsResult[0].boardId);
@@ -511,6 +524,21 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
             )}
           </section>
 
+          {/* Updates */}
+          {collabData && collabData.updates.length > 0 && (
+            <section className="space-y-2">
+              <SectionLabel>Updates</SectionLabel>
+              <ul className="space-y-1.5">
+                {collabData.updates.slice(0, 3).map((u) => (
+                  <li key={u.id} className="rounded-xl border border-white/[0.07] bg-neutral-900/60 px-3 py-2">
+                    <p className="text-xs leading-relaxed text-neutral-300">{u.content}</p>
+                    <p className="mt-1 text-[10px] text-neutral-600">{relativeTime(u.created_at)}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* Bottom padding so sticky footer doesn't cover last item */}
           <div className="h-2" />
         </div>
@@ -530,14 +558,16 @@ export function CardDetailPane({ noteId, currentThread, autoMatched }: Props) {
           </span>
         </div>
 
-        {/* Manual save button */}
+        {/* Done — always enabled; flushes pending autosave then closes */}
         <button
           type="button"
-          onClick={handleManualSave}
-          disabled={saveStatus === "saving" || (!dirty && saveStatus !== "error")}
-          className="flex-shrink-0 cursor-pointer rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-indigo-500 active:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => {
+            if (dirty || saveStatus === "error") handleManualSave();
+            onDone?.();
+          }}
+          className="flex-shrink-0 cursor-pointer rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-indigo-500 active:bg-indigo-700"
         >
-          {saveStatus === "saving" ? "Saving…" : "Save"}
+          Done
         </button>
       </div>
 

@@ -61,13 +61,18 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
 
       if (matches.length === 0) {
         setThreadCtx({ kind: "none" });
+        // If an auto-matched card is open, go back — no match for the new email.
+        setView((currentView) => {
+          if (currentView.kind === "card-detail" && currentView.autoMatched) {
+            return { kind: "list", tab: currentView.returnTab };
+          }
+          return currentView;
+        });
         return;
       }
 
       if (matches.length === 1) {
         setThreadCtx({ kind: "one", match: matches[0] });
-        // Auto-navigate only when the user is on the capture tab.
-        // Batched with setThreadCtx — no intermediate render.
         setView((currentView) => {
           if (currentView.kind === "list" && currentView.tab === "capture") {
             return {
@@ -77,12 +82,28 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
               autoMatched: true,
             };
           }
-          return currentView; // don't interrupt browse or card-detail
+          // Auto-matched cards follow the email; manually opened cards stay put.
+          if (currentView.kind === "card-detail" && currentView.autoMatched) {
+            return {
+              kind: "card-detail",
+              noteId: matches[0].noteId,
+              returnTab: currentView.returnTab,
+              autoMatched: true,
+            };
+          }
+          return currentView;
         });
         return;
       }
 
       setThreadCtx({ kind: "many", matches });
+      // If an auto-matched card is open, return to capture to show the chooser.
+      setView((currentView) => {
+        if (currentView.kind === "card-detail" && currentView.autoMatched) {
+          return { kind: "list", tab: currentView.returnTab };
+        }
+        return currentView;
+      });
     });
 
     return () => {
@@ -128,6 +149,11 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
 
   const isCardDetail = view.kind === "card-detail";
   const activeTab: Tab = view.kind === "list" ? view.tab : "capture";
+
+  const threadMatchesForBrowse: ThreadLink[] =
+    threadCtx.kind === "many" ? threadCtx.matches :
+    threadCtx.kind === "one"  ? [threadCtx.match] :
+    [];
 
   // ── Error state ───────────────────────────────────────────────────────────
   if (init.kind === "error") {
@@ -213,11 +239,30 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
       {/* Main content area */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {isCardDetail && view.kind === "card-detail" ? (
-          <CardDetailPane
-            noteId={view.noteId}
-            currentThread={thread ?? undefined}
-            autoMatched={view.autoMatched}
-          />
+          <div className="flex h-full flex-col">
+            {/* Banner: current email links to a different card (manual mode only) */}
+            {!view.autoMatched && threadCtx.kind === "one" && threadCtx.match.noteId !== view.noteId && (
+              <div className="flex flex-shrink-0 items-center gap-2 border-b border-sky-800/30 bg-sky-950/20 px-3 py-2">
+                <span className="text-[11px] text-sky-500">✉</span>
+                <p className="flex-1 text-xs text-sky-400">This email links to another card</p>
+                <button
+                  type="button"
+                  onClick={() => openCard(threadCtx.match.noteId)}
+                  className="flex-shrink-0 cursor-pointer rounded-md px-2 py-0.5 text-xs font-medium text-sky-400 transition-colors hover:text-sky-200"
+                >
+                  Open →
+                </button>
+              </div>
+            )}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <CardDetailPane
+                noteId={view.noteId}
+                currentThread={thread ?? undefined}
+                autoMatched={view.autoMatched}
+                onDone={goBack}
+              />
+            </div>
+          </div>
         ) : activeTab === "capture" ? (
           renderCaptureBody()
         ) : (
@@ -226,6 +271,8 @@ export function OutlookAddinShell({ init, currentThread }: Props) {
             linkingThread={linkingCtx}
             onLinkCreated={handleLinkCreated}
             onCancelLinking={cancelLinking}
+            thread={thread}
+            threadMatches={threadMatchesForBrowse}
           />
         )}
       </div>

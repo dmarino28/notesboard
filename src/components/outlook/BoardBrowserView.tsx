@@ -5,14 +5,20 @@ import { type OutlookThread } from "@/lib/outlookContext";
 import { listBoards, type BoardRow } from "@/lib/boards";
 import { listColumns, type ColumnRow } from "@/lib/columns";
 import { listPlacements, type PlacedNoteRow } from "@/lib/placements";
-import { listEmailThreadNoteIds, upsertEmailThreadForNote } from "@/lib/emailThreads";
-import { searchNotes } from "@/lib/noteSearch";
+import { listEmailThreadNoteIds, upsertEmailThreadForNote, type ThreadLink } from "@/lib/emailThreads";
+import { searchNotes, listBrowsableCards, type BrowsableCard } from "@/lib/noteSearch";
+
+type BrowseTab = "thread" | "recent" | "boards";
 
 type Props = {
   onOpenCard: (noteId: string) => void;
   linkingThread?: OutlookThread | null;
   onLinkCreated?: (noteId: string) => void;
   onCancelLinking?: () => void;
+  /** Currently open email thread (from shell). */
+  thread?: OutlookThread | null;
+  /** Cards already linked to the current email (from threadCtx). */
+  threadMatches?: ThreadLink[];
 };
 
 export function BoardBrowserView({
@@ -20,6 +26,8 @@ export function BoardBrowserView({
   linkingThread,
   onLinkCreated,
   onCancelLinking,
+  thread: _thread,
+  threadMatches = [],
 }: Props) {
   const isLinking = Boolean(linkingThread);
 
@@ -37,6 +45,14 @@ export function BoardBrowserView({
   const [searchQuery, setSearchQuery]         = useState("");
   const [searchResults, setSearchResults]     = useState<{ id: string; content: string }[] | null>(null);
   const [searching, setSearching]             = useState(false);
+
+  // ── Browse tabs ───────────────────────────────────────────────────────────────
+  const [browseTab, setBrowseTab] = useState<BrowseTab>(() =>
+    threadMatches.length > 0 ? "thread" : "boards"
+  );
+  const [recentCards, setRecentCards]     = useState<BrowsableCard[]>([]);
+  const [recentLoaded, setRecentLoaded]   = useState(false);
+  const [recentLoading, setRecentLoading] = useState(false);
 
   // ── Linking selection ─────────────────────────────────────────────────────────
   const [selectedForLink, setSelectedForLink]         = useState<string | null>(null);
@@ -85,6 +101,17 @@ export function BoardBrowserView({
       }
     });
   }, [selectedBoardId]);
+
+  // ── Load recent cards (lazy — only when tab is first visited) ────────────────
+  useEffect(() => {
+    if (browseTab !== "recent" || recentLoaded) return;
+    setRecentLoading(true);
+    listBrowsableCards(20).then((cards) => {
+      setRecentCards(cards);
+      setRecentLoaded(true);
+      setRecentLoading(false);
+    });
+  }, [browseTab, recentLoaded]);
 
   // ── Debounced search ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,45 +209,7 @@ export function BoardBrowserView({
         </div>
       )}
 
-      {/* Board selector — scrollable chip row */}
-      <div className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-white/[0.07] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {boards.map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            onClick={() => setSelectedBoardId(b.id)}
-            className={`flex-shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
-              selectedBoardId === b.id
-                ? "bg-neutral-700 text-neutral-100"
-                : "text-neutral-500 hover:bg-white/[0.05] hover:text-neutral-300"
-            }`}
-          >
-            {b.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Column tabs */}
-      {columns.length > 0 && (
-        <div className="flex flex-shrink-0 overflow-x-auto border-b border-white/[0.07] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {columns.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setSelectedColumnId(c.id)}
-              className={`flex-shrink-0 cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors duration-150 ${
-                selectedColumnId === c.id
-                  ? "border-indigo-500 text-indigo-300"
-                  : "border-transparent text-neutral-600 hover:text-neutral-400"
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Search */}
+      {/* Search — always visible at top */}
       <div className="flex-shrink-0 border-b border-white/[0.07] px-3 py-2">
         <input
           type="search"
@@ -234,13 +223,33 @@ export function BoardBrowserView({
         />
       </div>
 
-      {/* Card list */}
-      <div className={`nb-scroll min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`}>
-        {isSearching ? (
-          searching ? (
+      {/* Tab row — hidden while searching */}
+      {!isSearching && (
+        <div className="flex flex-shrink-0 gap-0 border-b border-white/[0.07]">
+          {(["thread", "recent", "boards"] as BrowseTab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setBrowseTab(t)}
+              className={`flex-1 cursor-pointer border-b-2 py-2 text-xs font-medium transition-colors duration-150 ${
+                browseTab === t
+                  ? "border-indigo-500 text-indigo-300"
+                  : "border-transparent text-neutral-600 hover:text-neutral-400"
+              }`}
+            >
+              {t === "thread" ? "Thread" : t === "recent" ? "Recent" : "Boards"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tab content */}
+      {isSearching ? (
+        <div className={`nb-scroll min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`}>
+          {searching ? (
             <p className="pt-2 text-xs text-neutral-700">Searching…</p>
           ) : !searchResults || searchResults.length === 0 ? (
-            <EmptyState>No cards found for "{searchQuery}"</EmptyState>
+            <EmptyState>No cards found for &ldquo;{searchQuery}&rdquo;</EmptyState>
           ) : (
             <CardList
               items={searchResults.map((n) => ({ id: n.id, noteId: n.id, content: n.content, hasEmail: false, multiBoard: false }))}
@@ -248,30 +257,113 @@ export function BoardBrowserView({
               isLinking={isLinking}
               onCardClick={handleCardClick}
             />
-          )
-        ) : (
-          cardsLoading ? (
-            <p className="pt-2 text-xs text-neutral-700">Loading cards…</p>
-          ) : columns.length === 0 ? (
-            <EmptyState>No columns in this board</EmptyState>
-          ) : columnCards.length === 0 ? (
-            <EmptyState>No cards in this column</EmptyState>
+          )}
+        </div>
+      ) : browseTab === "thread" ? (
+        <div className={`nb-scroll min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`}>
+          {threadMatches.length === 0 ? (
+            <EmptyState>No linked cards for this email.</EmptyState>
           ) : (
             <CardList
-              items={columnCards.map((c) => ({
-                id: c.id,
-                noteId: c.note_id,
-                content: c.content,
-                hasEmail: emailNoteIds.has(c.note_id),
-                multiBoard: c.placement_count > 1,
+              items={threadMatches.map((m) => ({
+                id: m.noteId,
+                noteId: m.noteId,
+                content: m.noteTitle || "(untitled)",
+                hasEmail: true,
+                multiBoard: false,
               }))}
               selectedForLink={selectedForLink}
               isLinking={isLinking}
               onCardClick={handleCardClick}
             />
-          )
-        )}
-      </div>
+          )}
+        </div>
+      ) : browseTab === "recent" ? (
+        <div className={`nb-scroll min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`}>
+          {recentLoading ? (
+            <p className="pt-2 text-xs text-neutral-700">Loading…</p>
+          ) : recentCards.length === 0 ? (
+            <EmptyState>No recent cards.</EmptyState>
+          ) : (
+            <CardList
+              items={recentCards.map((c) => ({
+                id: c.noteId,
+                noteId: c.noteId,
+                content: c.content,
+                hasEmail: c.hasEmailThread,
+                multiBoard: c.placementCount > 1,
+              }))}
+              selectedForLink={selectedForLink}
+              isLinking={isLinking}
+              onCardClick={handleCardClick}
+            />
+          )}
+        </div>
+      ) : (
+        /* Boards tab */
+        <>
+          {/* Board selector — scrollable chip row */}
+          <div className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-white/[0.07] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {boards.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => setSelectedBoardId(b.id)}
+                className={`flex-shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
+                  selectedBoardId === b.id
+                    ? "bg-neutral-700 text-neutral-100"
+                    : "text-neutral-500 hover:bg-white/[0.05] hover:text-neutral-300"
+                }`}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Column tabs */}
+          {columns.length > 0 && (
+            <div className="flex flex-shrink-0 overflow-x-auto border-b border-white/[0.07] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {columns.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedColumnId(c.id)}
+                  className={`flex-shrink-0 cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors duration-150 ${
+                    selectedColumnId === c.id
+                      ? "border-indigo-500 text-indigo-300"
+                      : "border-transparent text-neutral-600 hover:text-neutral-400"
+                  }`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className={`nb-scroll min-h-0 flex-1 overflow-y-auto p-3${isLinking && selectedForLink ? " pb-36" : ""}`}>
+            {cardsLoading ? (
+              <p className="pt-2 text-xs text-neutral-700">Loading cards…</p>
+            ) : columns.length === 0 ? (
+              <EmptyState>No columns in this board</EmptyState>
+            ) : columnCards.length === 0 ? (
+              <EmptyState>No cards in this column</EmptyState>
+            ) : (
+              <CardList
+                items={columnCards.map((c) => ({
+                  id: c.id,
+                  noteId: c.note_id,
+                  content: c.content,
+                  hasEmail: emailNoteIds.has(c.note_id),
+                  multiBoard: c.placement_count > 1,
+                }))}
+                selectedForLink={selectedForLink}
+                isLinking={isLinking}
+                onCardClick={handleCardClick}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {/* Linking CTA — sticky bottom */}
       {isLinking && selectedForLink && (
