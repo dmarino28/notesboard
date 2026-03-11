@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { BoardRow, ReleaseScheduleItem } from "@/lib/boards";
 import type { PlacedNoteRow } from "@/lib/placements";
 import { timedLabelForDueDate } from "@/lib/dateUtils";
+import { BoardBriefingPanel } from "@/components/BoardBriefingPanel";
 
 type Props = {
   board: BoardRow;
@@ -788,6 +789,7 @@ export function SnapshotHeader({
     return localStorage.getItem(collapseKey) === "1";
   });
   const [saving, setSaving] = useState(false);
+  const [showBriefing, setShowBriefing] = useState(false);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -856,11 +858,25 @@ export function SnapshotHeader({
           onScheduleChange={(rows) => void onBoardUpdate({ release_schedule: rows })}
         />
 
-        {/* Saving indicator */}
-        {saving && !collapsed && (
-          <span className="ml-auto text-[10px] tracking-wide text-neutral-600">Saving…</span>
-        )}
+        {/* Brief + saving indicator */}
+        <div className="ml-auto flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowBriefing((v) => !v)}
+            className={`text-[11px] transition-colors ${showBriefing ? "text-indigo-400" : "text-neutral-600 hover:text-neutral-400"}`}
+          >
+            ✦ Brief
+          </button>
+          {saving && !collapsed && (
+            <span className="text-[10px] tracking-wide text-neutral-600">Saving…</span>
+          )}
+        </div>
       </div>
+
+      {/* AI Briefing panel */}
+      {showBriefing && (
+        <BoardBriefingPanel boardId={board.id} onClose={() => setShowBriefing(false)} />
+      )}
 
       {/* ── Expanded body ── */}
       {!collapsed && (

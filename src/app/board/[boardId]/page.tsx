@@ -628,6 +628,7 @@ export default function BoardPage() {
         onDeleteBoard={handleDeleteBoard}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onOpenNote={openModal}
       />
 
       {currentBoard?.show_snapshot_header && !isSearchMode && (

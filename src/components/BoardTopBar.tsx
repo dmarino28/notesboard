@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BoardSelector } from "./BoardSelector";
+import { AiQueryBar } from "./AiQueryBar";
 import type { BoardRow } from "@/lib/boards";
 import { supabase } from "@/lib/supabase";
 
@@ -17,6 +18,7 @@ type Props = {
   onDeleteBoard: (id: string) => Promise<void>;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  onOpenNote?: (noteId: string) => void;
 };
 
 export function BoardTopBar({
@@ -29,9 +31,11 @@ export function BoardTopBar({
   onDeleteBoard,
   searchQuery,
   onSearchChange,
+  onOpenNote,
 }: Props) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [showQueryBar, setShowQueryBar] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -169,8 +173,15 @@ export function BoardTopBar({
           ))}
         </nav>
 
-        {/* Right: search + archived toggle + auth */}
+        {/* Right: search + archived toggle + ask AI + auth */}
         <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowQueryBar((v) => !v)}
+            className={`text-[11px] transition-colors ${showQueryBar ? "text-indigo-400" : "text-neutral-500 hover:text-neutral-300"}`}
+          >
+            ✦ Ask
+          </button>
           {onSearchChange && (
             <div className="relative flex items-center">
               <svg
@@ -211,6 +222,15 @@ export function BoardTopBar({
           {authEl}
         </div>
       </div>
+
+      {/* AI Query Bar — expands below the top bar */}
+      {showQueryBar && (
+        <AiQueryBar
+          boardId={boardId}
+          onClose={() => setShowQueryBar(false)}
+          onOpenNote={onOpenNote}
+        />
+      )}
     </header>
   );
 }

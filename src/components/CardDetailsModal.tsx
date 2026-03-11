@@ -38,6 +38,7 @@ import { acquireMailToken } from "@/lib/msalConfig";
 import { LABEL_PALETTE } from "@/lib/palette";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { AttachmentPreviewModal } from "@/components/AttachmentPreviewModal";
+import { AiCardSummary } from "@/components/AiCardSummary";
 import type { DateRange } from "@/components/DateRangePicker";
 import {
   NoteActivity,
@@ -171,6 +172,9 @@ export function CardDetailsModal({
 
   // --- Kebab menu ---
   const [showKebabMenu, setShowKebabMenu] = useState(false);
+
+  // --- AI summary ---
+  const [showAiSummary, setShowAiSummary] = useState(false);
 
   // --- Local (optimistic) activity events that aren't persisted server-side yet ---
   // We push entries here on field changes so the activity feed updates immediately.
@@ -1702,8 +1706,28 @@ export function CardDetailsModal({
             {/* ── RIGHT RAIL — Activity only ── */}
             <div className="flex w-[272px] flex-shrink-0 flex-col border-l border-neutral-800/40 bg-neutral-900/20">
               <div className="border-b border-neutral-800/40 px-4 py-2.5">
-                <p className="text-[11px] font-medium text-neutral-500">Activity</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-medium text-neutral-500">Activity</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAiSummary((v) => !v)}
+                    className={`text-[11px] transition-colors ${showAiSummary ? "text-indigo-400" : "text-neutral-600 hover:text-indigo-400"}`}
+                  >
+                    ✦ Summarize
+                  </button>
+                </div>
               </div>
+
+              {/* AI Summary */}
+              {showAiSummary && (
+                <div className="border-b border-neutral-800/30 px-4 py-2.5">
+                  <AiCardSummary
+                    noteId={noteId}
+                    onDismiss={() => setShowAiSummary(false)}
+                    onInsert={(text) => setNewComment(text)}
+                  />
+                </div>
+              )}
 
               {/* Composer */}
               <div className="border-b border-neutral-800/30 px-4 py-2.5">
