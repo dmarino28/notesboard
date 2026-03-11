@@ -9,22 +9,22 @@ export const STATUS_META: Record<
   on_track: {
     label: "On Track",
     dotClass: "bg-emerald-500",
-    badgeClass: "bg-emerald-950/60 text-emerald-400",
+    badgeClass: "bg-emerald-50 text-emerald-700",
   },
   at_risk: {
     label: "At Risk",
     dotClass: "bg-amber-500",
-    badgeClass: "bg-amber-950/60 text-amber-400",
+    badgeClass: "bg-amber-50 text-amber-700",
   },
   blocked: {
     label: "Blocked",
     dotClass: "bg-red-500",
-    badgeClass: "bg-red-950/60 text-red-400",
+    badgeClass: "bg-red-50 text-red-600",
   },
   done: {
     label: "Done",
-    dotClass: "bg-neutral-500",
-    badgeClass: "bg-neutral-800/60 text-neutral-500",
+    dotClass: "bg-neutral-400",
+    badgeClass: "bg-neutral-100 text-neutral-500",
   },
 };
 

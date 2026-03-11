@@ -338,7 +338,7 @@ export function Board({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-neutral-500">Loading board…</p>
+        <p className="text-sm text-gray-400">Loading board…</p>
       </div>
     );
   }
@@ -346,7 +346,7 @@ export function Board({
   if (error) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-red-400">{error}</p>
+        <p className="text-sm text-red-500">{error}</p>
       </div>
     );
   }
@@ -403,7 +403,7 @@ export function Board({
       {/* ── Mobile: column tabs + snap-scroll swipe view (hidden on sm+) ──── */}
       <div className="flex h-full flex-col overflow-hidden sm:hidden">
         {/* Tab bar — horizontally scrollable */}
-        <div className="flex-shrink-0 overflow-x-auto border-b border-white/[0.05] px-3 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex-shrink-0 overflow-x-auto border-b border-gray-200 px-3 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max gap-1.5 pb-3">
             {displayColumns.map((col) => {
               const isActive = col.id === activeColId;
@@ -414,8 +414,8 @@ export function Board({
                   onClick={() => scrollToColumn(col.id)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
                     isActive
-                      ? "bg-neutral-700/80 text-white shadow-sm"
-                      : "text-neutral-500 hover:text-neutral-300"
+                      ? "bg-gray-200 text-gray-800 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
                   {col.color && (
@@ -452,7 +452,7 @@ export function Board({
                 <SortableContext items={colNoteIds} strategy={verticalListSortingStrategy}>
                   <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto pb-2">
                     {colNotes.length === 0 ? (
-                      <li className="py-8 text-center text-xs text-neutral-600">No cards</li>
+                      <li className="py-8 text-center text-xs text-gray-400">No cards</li>
                     ) : (
                       colNotes.map((note) => (
                         <NoteItem
@@ -481,12 +481,12 @@ export function Board({
 
       <DragOverlay>
         {activeNote && (
-          <div className="w-72 scale-[1.03] rounded-xl border border-indigo-400/20 bg-neutral-800/95 p-3 shadow-2xl shadow-black/70 ring-1 ring-indigo-400/20">
-            <p className="whitespace-pre-wrap text-sm text-neutral-200">{activeNote.content}</p>
+          <div className="w-72 scale-[1.03] rounded-xl border border-black/[0.09] bg-white p-3 shadow-card-hover ring-1 ring-indigo-400/20">
+            <p className="whitespace-pre-wrap text-sm text-gray-800">{activeNote.content}</p>
           </div>
         )}
         {activeColumn && (
-          <div className="w-72 flex-shrink-0 rounded-xl border border-white/[0.10] bg-neutral-900/95 p-3 shadow-2xl shadow-black/60 opacity-90">
+          <div className="w-72 flex-shrink-0 rounded-xl border border-black/[0.06] bg-white/80 p-3 shadow-column opacity-90 backdrop-blur-sm">
             <div className="flex items-center gap-2">
               {activeColumn.color && (
                 <span
@@ -494,7 +494,7 @@ export function Board({
                   style={{ backgroundColor: activeColumn.color }}
                 />
               )}
-              <h2 className="flex-1 text-sm font-semibold text-neutral-100">
+              <h2 className="flex-1 text-sm font-semibold text-gray-800">
                 {activeColumn.name}
               </h2>
             </div>
@@ -539,13 +539,13 @@ function MoveSheet({
         onMouseDown={onClose}
       />
       {/* Sheet */}
-      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-x border-t border-white/[0.08] bg-neutral-900 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-          <span className="text-sm font-medium text-neutral-300">Move to list</span>
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-x border-t border-gray-200 bg-white shadow-elevated">
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+          <span className="text-sm font-medium text-gray-800">Move to list</span>
           <button
             type="button"
             onClick={onClose}
-            className="text-neutral-500 transition-colors hover:text-neutral-300"
+            className="text-gray-400 transition-colors hover:text-gray-600"
             aria-label="Close"
           >
             ✕
@@ -558,7 +558,7 @@ function MoveSheet({
                 type="button"
                 disabled={col.id === currentColumnId}
                 onClick={() => onMove(col.id)}
-                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {col.color && (
                   <span
@@ -566,9 +566,9 @@ function MoveSheet({
                     style={{ backgroundColor: col.color }}
                   />
                 )}
-                <span className="text-neutral-200">{col.name}</span>
+                <span className="text-gray-700">{col.name}</span>
                 {col.id === currentColumnId && (
-                  <span className="ml-auto text-[10px] text-neutral-600">Current</span>
+                  <span className="ml-auto text-[10px] text-gray-400">Current</span>
                 )}
               </button>
             </li>
@@ -626,7 +626,7 @@ function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
     return (
       <button
         onClick={handleExpand}
-        className="flex w-72 flex-shrink-0 items-center gap-2.5 rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-neutral-400 transition-colors hover:border-white/25 hover:bg-white/8 hover:text-neutral-200"
+        className="flex w-72 flex-shrink-0 items-center gap-2.5 rounded-xl border border-dashed border-gray-300 bg-transparent px-4 py-3 text-sm text-gray-400 transition-colors hover:border-gray-400 hover:bg-black/[0.02] hover:text-gray-600"
       >
         <span className="text-base leading-none">+</span>
         <span>Add another list</span>
@@ -635,7 +635,7 @@ function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
   }
 
   return (
-    <div className="flex w-72 flex-shrink-0 flex-col gap-2 rounded-xl border border-neutral-600/40 bg-neutral-800/60 p-3 shadow-lg">
+    <div className="flex w-72 flex-shrink-0 flex-col gap-2 rounded-xl border border-gray-200 bg-white/75 p-3 shadow-column backdrop-blur-sm">
       <input
         autoFocus
         value={name}
@@ -643,7 +643,7 @@ function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
         onKeyDown={handleKeyDown}
         onBlur={() => void submit()}
         placeholder="List name…"
-        className="rounded-md border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-400"
+        className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20"
       />
       <div className="flex gap-2">
         <button
@@ -652,7 +652,7 @@ function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
             void submit();
           }}
           disabled={!name.trim()}
-          className="rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-40"
+          className="btn-primary rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-40"
         >
           Add list
         </button>
@@ -662,7 +662,7 @@ function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
             setExpanded(false);
             setName("");
           }}
-          className="rounded-md px-3 py-1.5 text-xs text-neutral-400 transition-colors hover:text-neutral-200"
+          className="rounded-md px-3 py-1.5 text-xs text-gray-500 transition-colors hover:text-gray-700"
         >
           Cancel
         </button>

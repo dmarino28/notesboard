@@ -60,15 +60,11 @@ export function Column({
   // NoteItem sortable id = placement_id = note.id
   const noteIds = notes.map((n) => n.id);
 
-  const bodyBg = column.color ? hexBlendOnDark(column.color, 0.05) : undefined;
-  const headerBg = column.color ? hexToRgba(column.color, 0.12) : undefined;
-
   // ── Collapsed rail ─────────────────────────────────────────────────────────
   if (isCollapsed) {
     return (
       <div
-        className="flex w-14 flex-shrink-0 cursor-grab flex-col items-center gap-2 self-stretch rounded-xl bg-neutral-900 py-3 shadow-xl shadow-black/40 ring-1 ring-inset ring-white/[0.03] transition-shadow duration-150 hover:ring-white/[0.06] active:cursor-grabbing"
-        style={bodyBg ? { backgroundColor: bodyBg } : undefined}
+        className="flex w-14 flex-shrink-0 cursor-grab flex-col items-center gap-2 self-stretch rounded-xl bg-white/75 py-3 shadow-column ring-1 ring-inset ring-black/[0.05] backdrop-blur-sm transition-all duration-150 hover:shadow-[0_4px_18px_rgba(0,0,0,0.10)] hover:ring-black/[0.08] active:cursor-grabbing"
         onClick={onToggleCollapse}
         {...dragHandleListeners}
         {...dragHandleAttributes}
@@ -83,7 +79,7 @@ export function Column({
 
         {/* Name — primary, vertical */}
         <span
-          className="flex-1 select-none overflow-hidden text-[11px] font-medium text-neutral-100"
+          className="flex-1 select-none overflow-hidden text-[11px] font-medium text-gray-700"
           title={column.name}
           style={{
             writingMode: "vertical-rl",
@@ -96,7 +92,7 @@ export function Column({
         </span>
 
         {/* Count — secondary, bottom */}
-        <span className="tabular-nums text-[10px] text-neutral-500">{notes.length}</span>
+        <span className="tabular-nums text-[10px] text-gray-400">{notes.length}</span>
       </div>
     );
   }
@@ -104,9 +100,16 @@ export function Column({
   // ── Expanded column ────────────────────────────────────────────────────────
   return (
     <div
-      className="flex max-h-[calc(100vh-100px)] w-72 flex-shrink-0 flex-col rounded-xl bg-neutral-900 shadow-xl shadow-black/40 ring-1 ring-inset ring-white/[0.03]"
-      style={bodyBg ? { backgroundColor: bodyBg } : undefined}
+      className="flex max-h-[calc(100vh-100px)] w-72 flex-shrink-0 flex-col rounded-xl bg-white/75 shadow-column ring-1 ring-inset ring-black/[0.05] backdrop-blur-sm"
     >
+      {/* Colored accent bar — replaces tinted header bg */}
+      {column.color && (
+        <div
+          className="h-[3px] w-full flex-shrink-0 rounded-tl-xl rounded-tr-xl"
+          style={{ backgroundColor: column.color }}
+        />
+      )}
+
       <ListHeader
         column={column}
         noteCount={notes.length}
@@ -122,15 +125,15 @@ export function Column({
         onEditingChange={onEditingChange}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
-        headerBg={headerBg}
+        headerBg={undefined}
       />
 
       {/* Card list — scrollable */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         <SortableContext items={noteIds} strategy={verticalListSortingStrategy}>
-          <ul className="min-h-8 space-y-2">
+          <ul className="min-h-8 space-y-2.5">
             {notes.length === 0 ? (
-              <li className="py-4 text-center text-xs text-neutral-600">No cards</li>
+              <li className="py-4 text-center text-xs text-gray-400">No cards</li>
             ) : (
               notes.map((note) => (
                 <NoteItem
@@ -150,7 +153,7 @@ export function Column({
       </div>
 
       {/* Composer — pinned at bottom */}
-      <div className="flex-shrink-0 px-2 pb-2 pt-1">
+      <div className="flex-shrink-0 px-2 pb-2.5 pt-1">
         <NoteComposer onAdd={onAddNote} />
       </div>
     </div>
@@ -165,16 +168,16 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Blends a color over neutral-900 (#171717) to produce a solid rgb value.
+// Blends a color over the light panel background (#EBEDF0) to produce a solid rgb value.
 // Avoids transparency bleed-through when columns sit on varying canvas backgrounds.
 function hexBlendOnDark(hex: string, alpha: number): string {
   const cleaned = hex.replace("#", "");
   const r = parseInt(cleaned.slice(0, 2), 16);
   const g = parseInt(cleaned.slice(2, 4), 16);
   const b = parseInt(cleaned.slice(4, 6), 16);
-  const base = 23; // rgb(23,23,23) = #171717 (neutral-900)
-  const br = Math.round(base + (r - base) * alpha);
-  const bg = Math.round(base + (g - base) * alpha);
-  const bb = Math.round(base + (b - base) * alpha);
+  const baseR = 235, baseG = 237, baseB = 240; // #EBEDF0 (light panel bg)
+  const br = Math.round(baseR + (r - baseR) * alpha);
+  const bg = Math.round(baseG + (g - baseG) * alpha);
+  const bb = Math.round(baseB + (b - baseB) * alpha);
   return `rgb(${br}, ${bg}, ${bb})`;
 }

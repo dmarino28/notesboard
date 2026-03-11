@@ -617,7 +617,7 @@ export default function BoardPage() {
       onToggleInActions: () => {},
       onCreateTagDef: async () => null,
     }}>
-    <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
+    <div className="flex h-screen flex-col overflow-hidden" style={{ background: "transparent" }}>
       <BoardTopBar
         boards={boards}
         boardId={boardId}
@@ -643,10 +643,7 @@ export default function BoardPage() {
         />
       )}
 
-      <div
-        className="min-h-0 flex-1"
-        style={{ background: "linear-gradient(150deg, #1b1e2e 0%, #13151f 60%, #101218 100%)" }}
-      >
+      <div className="min-h-0 flex-1">
         {isSearchMode ? (
           <SearchResultsView
             query={searchQuery}
@@ -689,7 +686,7 @@ export default function BoardPage() {
       {/* Toast */}
       {toast && (
         <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2">
-          <div className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-200 shadow-xl">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-elevated">
             {toast}
           </div>
         </div>

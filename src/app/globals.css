@@ -2,26 +2,62 @@
 
 /* ── Design tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light theme — page, panel, card surface system */
+  --background:     #F4F5F7;
+  --foreground:     #111827;
+
+  /* Surface layers */
+  --nb-page-bg:     #F4F5F7;
+  --nb-panel-bg:    #EBEDF0;
+  --nb-surface:     #ffffff;
+
+  /* Borders */
+  --nb-border:      rgba(0, 0, 0, 0.08);
+  --nb-border-md:   rgba(0, 0, 0, 0.12);
+  --nb-divider:     #E5E7EB;
+
+  /* Text */
+  --nb-text-1:      #111827;
+  --nb-text-2:      #6B7280;
+  --nb-text-3:      #9CA3AF;
+
+  /* Accent */
+  --nb-accent:      #4F46E5;
+  --nb-accent-h:    #4338CA;
+
+  /* Shadows — richer, more dimensional */
+  --shadow-card:        0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-card-hover:  0 8px 28px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-column:      0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-panel:       0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-elevated:    0 12px 32px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.07);
+  --shadow-topbar:      0 1px 0 rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
+
+  /* Radii */
+  --radius-card:    12px;
+  --radius-panel:   12px;
+  --radius-pill:    9999px;
+  --radius-input:   8px;
+
+  /* Scrollbar */
+  --nb-scroll-thumb:       rgba(0, 0, 0, 0.12);
+  --nb-scroll-thumb-hover: rgba(0, 0, 0, 0.20);
 }
 
+/* Extend Tailwind theme with semantic color tokens */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Surface utilities — use bg-surface, bg-panel, etc. */
+  --color-surface:  #ffffff;
+  --color-panel:    #EBEDF0;
+  --color-page:     #F4F5F7;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-/* NotesBoard add-in dark-theme tokens.
-   Scoped to .nb-addin so they don't bleed into the main app. */
+/* ── Addin tokens (scoped, unchanged) ─────────────────────────────────────── */
 .nb-addin {
   --nb-bg:             #0c0c0f;
   --nb-surface:        #141417;
@@ -49,39 +85,79 @@ body {
 }
 
 body {
-  background: var(--background);
+  /* Atmospheric gradient: very subtle indigo blush at top, fading to warm neutral */
+  background:
+    radial-gradient(ellipse 160% 70% at 50% -10%, rgba(238,242,255,0.90) 0%, transparent 55%),
+    linear-gradient(180deg, #f1f3f7 0%, #ebedf2 100%);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── Thin scrollbar utilities ─────────────────────────────────────────────── */
 
-/* Vertical thin scrollbar (add-in panels + card lists) */
+/* Vertical thin scrollbar (card lists, panels) */
 .nb-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: var(--nb-scroll-thumb) transparent;
 }
 .nb-scroll::-webkit-scrollbar        { width: 4px; }
 .nb-scroll::-webkit-scrollbar-track  { background: transparent; }
-.nb-scroll::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.1); border-radius: 2px; }
-.nb-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.17); }
+.nb-scroll::-webkit-scrollbar-thumb  {
+  background: var(--nb-scroll-thumb);
+  border-radius: 2px;
+}
+.nb-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--nb-scroll-thumb-hover);
+}
 
 /* Horizontal thin scrollbar (main board canvas) */
 .nb-board-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: var(--nb-scroll-thumb) transparent;
 }
 .nb-board-scroll::-webkit-scrollbar        { height: 4px; }
 .nb-board-scroll::-webkit-scrollbar-track  { background: transparent; }
-.nb-board-scroll::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.08); border-radius: 2px; }
-.nb-board-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+.nb-board-scroll::-webkit-scrollbar-thumb  {
+  background: var(--nb-scroll-thumb);
+  border-radius: 2px;
+}
+.nb-board-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--nb-scroll-thumb-hover);
+}
 
-/* Label card tint glow — applied by NoteItem when a label color is present */
+/* ── Label card tint glow (light theme) ───────────────────────────────────── */
 .nb-card-glow:hover {
   box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.15),
+    var(--shadow-card-hover),
     0 0 0 1px var(--label-glow-ring, transparent),
-    0 0 14px var(--label-glow, transparent);
+    0 0 16px var(--label-glow, transparent);
+}
+
+/* ── Semantic shadow utilities ─────────────────────────────────────────────── */
+@layer utilities {
+  .shadow-card         { box-shadow: var(--shadow-card); }
+  .shadow-card-hover   { box-shadow: var(--shadow-card-hover); }
+  .shadow-column       { box-shadow: var(--shadow-column); }
+  .shadow-panel        { box-shadow: var(--shadow-panel); }
+  .shadow-elevated     { box-shadow: var(--shadow-elevated); }
+  .shadow-topbar       { box-shadow: var(--shadow-topbar); }
+}
+
+/* ── Primary CTA gradient button ────────────────────────────────────────────── */
+@layer utilities {
+  .btn-primary {
+    background: linear-gradient(135deg, #5B6CF9 0%, #7C3AED 100%);
+    color: white;
+    transition: filter 150ms ease, box-shadow 150ms ease;
+  }
+  .btn-primary:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 4px 12px rgba(91,108,249,0.35);
+  }
+  .btn-primary:active {
+    filter: brightness(0.96);
+  }
 }

@@ -60,12 +60,18 @@ export function BoardTopBar({
 
   const authEl = userEmail ? (
     <div className="flex items-center gap-2">
-      <span className="hidden max-w-[140px] truncate text-[11px] text-neutral-500 sm:inline">
-        {userEmail}
-      </span>
+      {/* User chip */}
+      <div className="hidden items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 sm:flex">
+        <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[8px] font-semibold text-indigo-600">
+          {userEmail[0].toUpperCase()}
+        </div>
+        <span className="max-w-[120px] truncate text-[11px] text-gray-600">
+          {userEmail}
+        </span>
+      </div>
       <button
         type="button"
-        className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
+        className="text-[11px] text-gray-400 transition-colors hover:text-gray-600"
         onClick={() => supabase.auth.signOut()}
       >
         Sign out
@@ -74,14 +80,14 @@ export function BoardTopBar({
   ) : (
     <Link
       href="/login"
-      className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
+      className="text-[11px] text-gray-500 transition-colors hover:text-gray-700"
     >
       Sign in
     </Link>
   );
 
   return (
-    <header className="relative z-10 flex-shrink-0 border-b border-white/[0.05] bg-neutral-950/60 pt-[env(safe-area-inset-top,0px)] shadow-sm shadow-black/20 backdrop-blur-md">
+    <header className="relative z-10 flex-shrink-0 border-b border-gray-200 bg-white pt-[env(safe-area-inset-top,0px)] shadow-topbar">
 
       {/* ── Mobile layout: two rows (hidden on sm+) ──────────────────────────── */}
       <div className="sm:hidden">
@@ -98,7 +104,7 @@ export function BoardTopBar({
           {onSearchChange && (
             <div className="relative flex items-center">
               <svg
-                className="pointer-events-none absolute left-1.5 h-3 w-3 text-neutral-600"
+                className="pointer-events-none absolute left-1.5 h-3 w-3 text-gray-400"
                 viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"
               >
                 <circle cx="6.5" cy="6.5" r="4" />
@@ -109,13 +115,13 @@ export function BoardTopBar({
                 placeholder="Search"
                 value={searchQuery ?? ""}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-20 rounded-lg border border-white/[0.07] bg-neutral-900/60 py-1 pl-5 pr-2 text-xs text-neutral-300 placeholder-neutral-600 outline-none transition-all duration-150 focus:w-28 focus:border-white/[0.14] focus:bg-neutral-900 focus:text-neutral-100"
+                className="w-20 rounded-lg border border-gray-200 bg-gray-50 py-1 pl-5 pr-2 text-xs text-gray-700 placeholder-gray-400 outline-none transition-all duration-150 focus:w-28 focus:border-indigo-300 focus:bg-white focus:text-gray-900"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => onSearchChange("")}
-                  className="absolute right-1 text-neutral-600 transition-colors hover:text-neutral-400"
+                  className="absolute right-1 text-gray-400 transition-colors hover:text-gray-600"
                   aria-label="Clear search"
                 >
                   ✕
@@ -135,8 +141,8 @@ export function BoardTopBar({
                 href={href}
                 className={`whitespace-nowrap rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
                   isActiveView(label, href)
-                    ? "bg-neutral-700/80 text-white shadow-sm"
-                    : "text-neutral-500 hover:text-neutral-200"
+                    ? "bg-white text-gray-900 shadow-[0_1px_4px_rgba(0,0,0,0.10)]"
+                    : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 {label}
@@ -147,7 +153,7 @@ export function BoardTopBar({
       </div>
 
       {/* ── Desktop layout: single row (hidden on mobile) ────────────────────── */}
-      <div className="relative hidden h-[52px] items-center gap-3 px-4 sm:flex">
+      <div className="relative hidden h-[56px] items-center gap-3 px-4 sm:flex">
         <BoardSelector
           boards={boards}
           currentBoardId={boardId}
@@ -157,15 +163,15 @@ export function BoardTopBar({
         />
 
         {/* Center: segmented view control */}
-        <nav className="absolute left-1/2 flex -translate-x-1/2 items-center rounded-[10px] bg-white/[0.05] p-0.5">
+        <nav className="absolute left-1/2 flex -translate-x-1/2 items-center rounded-[10px] bg-black/[0.05] p-0.5">
           {views.map(({ label, href }) => (
             <Link
               key={label}
               href={href}
               className={`rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
                 isActiveView(label, href)
-                  ? "bg-neutral-700/80 text-white shadow-sm"
-                  : "text-neutral-500 hover:text-neutral-200"
+                  ? "bg-white text-gray-900 shadow-[0_1px_4px_rgba(0,0,0,0.10)]"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               {label}
@@ -178,14 +184,14 @@ export function BoardTopBar({
           <button
             type="button"
             onClick={() => setShowQueryBar((v) => !v)}
-            className={`text-[11px] transition-colors ${showQueryBar ? "text-indigo-400" : "text-neutral-500 hover:text-neutral-300"}`}
+            className={`text-[11px] transition-colors ${showQueryBar ? "text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
           >
             ✦ Ask
           </button>
           {onSearchChange && (
             <div className="relative flex items-center">
               <svg
-                className="pointer-events-none absolute left-2 h-3 w-3 text-neutral-600"
+                className="pointer-events-none absolute left-2 h-3 w-3 text-gray-400"
                 viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"
               >
                 <circle cx="6.5" cy="6.5" r="4" />
@@ -196,13 +202,13 @@ export function BoardTopBar({
                 placeholder="Search"
                 value={searchQuery ?? ""}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-36 rounded-lg border border-white/[0.07] bg-neutral-900/60 py-1 pl-6 pr-2 text-xs text-neutral-300 placeholder-neutral-600 transition-all duration-150 focus:w-48 focus:border-white/[0.14] focus:bg-neutral-900 focus:text-neutral-100 focus:outline-none"
+                className="w-36 rounded-lg border border-gray-200 bg-gray-50 py-1 pl-6 pr-2 text-xs text-gray-700 placeholder-gray-400 transition-all duration-150 focus:w-48 focus:border-indigo-300 focus:bg-white focus:text-gray-900 focus:outline-none"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => onSearchChange("")}
-                  className="absolute right-1.5 text-neutral-600 transition-colors hover:text-neutral-400"
+                  className="absolute right-1.5 text-gray-400 transition-colors hover:text-gray-600"
                   aria-label="Clear search"
                 >
                   ✕
@@ -210,10 +216,10 @@ export function BoardTopBar({
               )}
             </div>
           )}
-          <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-neutral-500 transition-colors hover:text-neutral-300">
+          <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-gray-500 transition-colors hover:text-gray-700">
             <input
               type="checkbox"
-              className="accent-neutral-400"
+              className="accent-indigo-600"
               checked={showArchived}
               onChange={(e) => onShowArchivedChange(e.target.checked)}
             />

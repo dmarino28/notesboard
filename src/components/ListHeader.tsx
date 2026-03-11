@@ -102,11 +102,11 @@ export function ListHeader({
           onChange={(e) => setEditName(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={() => void saveEdit()}
-          className="min-w-0 flex-1 rounded bg-neutral-800 px-1.5 py-0.5 text-sm font-semibold text-neutral-100 outline-none ring-1 ring-neutral-600 focus:ring-neutral-400"
+          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-sm font-semibold text-gray-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
         />
       ) : (
         <h2
-          className="min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold text-neutral-100 hover:text-white"
+          className="min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold text-gray-800 hover:text-gray-900"
           onClick={startEdit}
           title="Click to rename"
         >
@@ -115,12 +115,12 @@ export function ListHeader({
       )}
 
       {/* Card count */}
-      <span className="flex-shrink-0 min-w-[1.25rem] rounded bg-white/[0.06] px-1 text-center tabular-nums text-[11px] font-medium text-neutral-500">{noteCount}</span>
+      <span className="flex-shrink-0 min-w-[1.25rem] rounded bg-black/[0.06] px-1 text-center tabular-nums text-[11px] font-medium text-gray-500">{noteCount}</span>
 
       {/* Collapse/expand */}
       <button
         onClick={onToggleCollapse}
-        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-neutral-500 transition-colors hover:bg-white/10 hover:text-neutral-300"
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-black/[0.06] hover:text-gray-600"
         aria-label={isCollapsed ? "Expand list" : "Collapse list"}
         title={isCollapsed ? "Expand" : "Collapse"}
       >

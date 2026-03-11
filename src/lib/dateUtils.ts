@@ -30,11 +30,11 @@ export type TimedLabelInfo = {
 };
 
 const TIMED_LABEL_INFO: Record<TimedBucketKey, TimedLabelInfo> = {
-  overdue:   { key: "overdue",   label: "Overdue",   badgeClass: "bg-red-950/60 text-red-400" },
-  today:     { key: "today",     label: "Today",     badgeClass: "bg-amber-950/60 text-amber-400" },
-  tomorrow:  { key: "tomorrow",  label: "Tomorrow",  badgeClass: "bg-orange-950/60 text-orange-400" },
-  this_week: { key: "this_week", label: "This Week", badgeClass: "bg-sky-950/60 text-sky-400" },
-  later:     { key: "later",     label: "Later",     badgeClass: "bg-neutral-800/60 text-neutral-500" },
+  overdue:   { key: "overdue",   label: "Overdue",   badgeClass: "bg-red-50 text-red-600" },
+  today:     { key: "today",     label: "Today",     badgeClass: "bg-amber-50 text-amber-700" },
+  tomorrow:  { key: "tomorrow",  label: "Tomorrow",  badgeClass: "bg-orange-50 text-orange-600" },
+  this_week: { key: "this_week", label: "This Week", badgeClass: "bg-sky-50 text-sky-600" },
+  later:     { key: "later",     label: "Later",     badgeClass: "bg-neutral-100 text-neutral-500" },
 };
 
 /**

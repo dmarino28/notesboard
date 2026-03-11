@@ -68,7 +68,7 @@ export function ListMenu({
     <div className="relative flex-shrink-0" ref={menuRef}>
       <button
         onClick={toggle}
-        className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 transition-colors hover:bg-white/10 hover:text-neutral-300"
+        className="flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-black/[0.06] hover:text-gray-600"
         aria-label="List options"
         title="List options"
       >
@@ -76,7 +76,7 @@ export function ListMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-7 z-50 min-w-48 rounded-lg border border-neutral-700 bg-neutral-900 py-1 shadow-2xl">
+        <div className="absolute right-0 top-7 z-50 min-w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-elevated">
           {/* Rename */}
           <MenuItem
             onClick={() => {
@@ -92,12 +92,12 @@ export function ListMenu({
             Change color
           </MenuItem>
           {subMenu === "color" && (
-            <div className="border-t border-neutral-800 px-3 py-2.5">
+            <div className="border-t border-gray-100 px-3 py-2.5">
               <div className="flex flex-wrap gap-1.5">
                 {/* No color option */}
                 <button
                   onClick={() => { onChangeColor(""); close(); }}
-                  className={`flex h-5 w-5 items-center justify-center rounded-full border border-neutral-600 text-[9px] text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-300${!column.color ? " ring-2 ring-white/40 ring-offset-1 ring-offset-neutral-900" : ""}`}
+                  className={`flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-[9px] text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-600${!column.color ? " ring-2 ring-gray-400/50 ring-offset-1 ring-offset-white" : ""}`}
                   title="No color"
                 >
                   ✕
@@ -108,7 +108,7 @@ export function ListMenu({
                     onClick={() => { onChangeColor(hex); close(); }}
                     className={`h-5 w-5 rounded-full transition-all duration-100${
                       column.color === hex
-                        ? " scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-900"
+                        ? " scale-110 ring-2 ring-gray-400/60 ring-offset-1 ring-offset-white"
                         : " opacity-65 hover:opacity-100 hover:scale-105"
                     }`}
                     style={{ backgroundColor: hex }}
@@ -126,7 +126,7 @@ export function ListMenu({
                 Move to board…
               </MenuItem>
               {subMenu === "move" && (
-                <div className="border-t border-neutral-800 py-1">
+                <div className="border-t border-gray-100 py-1">
                   {otherBoards.map((b) => (
                     <button
                       key={b.id}
@@ -134,7 +134,7 @@ export function ListMenu({
                         onMoveToBoard(b.id);
                         close();
                       }}
-                      className="w-full px-4 py-1.5 text-left text-xs text-neutral-300 transition-colors hover:bg-white/8 hover:text-white"
+                      className="w-full px-4 py-1.5 text-left text-xs text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900"
                     >
                       {b.name}
                     </button>
@@ -151,7 +151,7 @@ export function ListMenu({
                 Copy to board…
               </MenuItem>
               {subMenu === "copy" && (
-                <div className="border-t border-neutral-800 py-1">
+                <div className="border-t border-gray-100 py-1">
                   {otherBoards.map((b) => (
                     <button
                       key={b.id}
@@ -159,7 +159,7 @@ export function ListMenu({
                         onCopyToBoard(b.id);
                         close();
                       }}
-                      className="w-full px-4 py-1.5 text-left text-xs text-neutral-300 transition-colors hover:bg-white/8 hover:text-white"
+                      className="w-full px-4 py-1.5 text-left text-xs text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900"
                     >
                       {b.name}
                     </button>
@@ -169,7 +169,7 @@ export function ListMenu({
             </>
           )}
 
-          <div className="my-1 border-t border-neutral-800" />
+          <div className="my-1 border-t border-gray-100" />
 
           {/* Delete */}
           {!pendingDelete ? (
@@ -178,7 +178,7 @@ export function ListMenu({
             </MenuItem>
           ) : (
             <div className="space-y-2 px-3 py-2">
-              <p className="text-xs text-neutral-300">
+              <p className="text-xs text-gray-700">
                 Delete &quot;{column.name}&quot;? All cards will be lost.
               </p>
               <div className="flex gap-2">
@@ -193,7 +193,7 @@ export function ListMenu({
                 </button>
                 <button
                   onClick={() => setPendingDelete(false)}
-                  className="text-xs text-neutral-400 transition-colors hover:text-neutral-200"
+                  className="text-xs text-gray-500 transition-colors hover:text-gray-700"
                 >
                   Cancel
                 </button>
@@ -222,17 +222,17 @@ function MenuItem({
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-white/8 ${
+      className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-gray-50 ${
         danger
-          ? "text-red-400 hover:text-red-300"
+          ? "text-red-500 hover:text-red-600"
           : active
-            ? "text-white"
-            : "text-neutral-300 hover:text-white"
+            ? "text-gray-900"
+            : "text-gray-700 hover:text-gray-900"
       }`}
     >
       <span>{children}</span>
       {hasArrow && (
-        <span className="ml-2 text-neutral-500">{active ? "▾" : "▸"}</span>
+        <span className="ml-2 text-gray-400">{active ? "▾" : "▸"}</span>
       )}
     </button>
   );

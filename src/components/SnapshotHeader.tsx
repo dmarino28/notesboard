@@ -53,11 +53,11 @@ function InlineText({
 
   return (
     <div className="flex flex-col gap-[3px]">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">{label}</span>
+      <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">{label}</span>
       {editing ? (
         <input
           ref={inputRef}
-          className={`${wide ? "w-40" : "w-28"} min-w-0 rounded border border-neutral-700 bg-neutral-800/80 px-1.5 py-px text-[11px] text-neutral-200 outline-none focus:border-indigo-600/70`}
+          className={`${wide ? "w-40" : "w-28"} min-w-0 rounded border border-gray-300 bg-white px-1.5 py-px text-[11px] text-gray-800 outline-none focus:border-indigo-400`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
@@ -70,7 +70,7 @@ function InlineText({
         <button
           type="button"
           onClick={() => { setDraft(value ?? ""); setEditing(true); }}
-          className={`cursor-text border-b border-transparent pb-px text-left text-[11px] transition-colors duration-100 hover:border-neutral-700/60 ${value ? "text-neutral-200" : "text-neutral-700"} ${wide ? "max-w-[160px] truncate" : "max-w-[112px] truncate"}`}
+          className={`cursor-text border-b border-transparent pb-px text-left text-[11px] transition-colors duration-100 hover:border-gray-300 ${value ? "text-gray-700" : "text-gray-300"} ${wide ? "max-w-[160px] truncate" : "max-w-[112px] truncate"}`}
           title={value ?? placeholder}
         >
           {value ?? placeholder}
@@ -111,12 +111,12 @@ function InlineDate({
 
   return (
     <div className="flex flex-col gap-[3px]">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">{label}</span>
+      <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">{label}</span>
       {editing ? (
         <input
           ref={inputRef}
           type="date"
-          className="rounded border border-neutral-700 bg-neutral-800/80 px-1.5 py-px text-[11px] text-neutral-200 outline-none focus:border-indigo-600/70"
+          className="rounded border border-gray-300 bg-white px-1.5 py-px text-[11px] text-gray-800 outline-none focus:border-indigo-400"
           value={draft}
           onChange={(e) => { setDraft(e.target.value); commit(e.target.value); }}
           onBlur={() => commit(draft)}
@@ -128,7 +128,7 @@ function InlineDate({
         <button
           type="button"
           onClick={() => { setDraft(value ?? ""); setEditing(true); }}
-          className={`cursor-text border-b border-transparent pb-px text-left text-[11px] transition-colors duration-100 hover:border-neutral-700/60 ${value ? "text-neutral-200" : "text-neutral-700"}`}
+          className={`cursor-text border-b border-transparent pb-px text-left text-[11px] transition-colors duration-100 hover:border-gray-300 ${value ? "text-gray-700" : "text-gray-300"}`}
         >
           {value ? formatDate(value) : "—"}
         </button>
@@ -163,17 +163,17 @@ function MarketsField({
 
   return (
     <div className="flex flex-col gap-[3px]">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">Markets</span>
+      <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">Markets</span>
       <div className="flex flex-wrap items-center gap-1">
         {value.map((m) => (
           <span
             key={m}
-            className="inline-flex items-center gap-0.5 rounded border border-white/[0.07] bg-neutral-800/40 px-1.5 py-px text-[11px] text-neutral-200"
+            className="inline-flex items-center gap-0.5 rounded border border-gray-200 bg-gray-100 px-1.5 py-px text-[11px] text-gray-700"
           >
             {m}
             <button
               type="button"
-              className="leading-none text-neutral-500 transition-colors duration-100 hover:text-red-400"
+              className="leading-none text-gray-400 transition-colors duration-100 hover:text-red-500"
               onClick={() => onSave(value.filter((v) => v !== m))}
               aria-label={`Remove ${m}`}
             >
@@ -184,7 +184,7 @@ function MarketsField({
         {adding ? (
           <input
             ref={inputRef}
-            className="w-16 rounded border border-neutral-700 bg-neutral-800/80 px-1.5 py-px text-[11px] text-neutral-200 outline-none focus:border-indigo-600/70"
+            className="w-16 rounded border border-gray-300 bg-white px-1.5 py-px text-[11px] text-gray-800 outline-none focus:border-indigo-400"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={addMarket}
@@ -198,7 +198,7 @@ function MarketsField({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="rounded border border-dashed border-neutral-700/50 px-1.5 py-px text-[11px] text-neutral-700 transition-colors duration-100 hover:border-neutral-600 hover:text-neutral-400"
+            className="rounded border border-dashed border-gray-300 px-1.5 py-px text-[11px] text-gray-400 transition-colors duration-100 hover:border-gray-400 hover:text-gray-600"
           >
             +
           </button>
@@ -504,10 +504,10 @@ function ReleaseDatesPopover({
   // ── Display helpers ─────────────────────────────────────────────────────────
 
   function formatDisplayDate(item: ReleaseScheduleItem): { text: string; cls: string } {
-    if (item.tba) return { text: "TBA", cls: "text-amber-400/80" };
-    if (item.no_release) return { text: "No Release", cls: "text-neutral-600" };
-    if (item.date) return { text: formatDateShort(item.date), cls: "text-neutral-400" };
-    return { text: "—", cls: "text-neutral-700" };
+    if (item.tba) return { text: "TBA", cls: "text-amber-600" };
+    if (item.no_release) return { text: "No Release", cls: "text-gray-400" };
+    if (item.date) return { text: formatDateShort(item.date), cls: "text-gray-600" };
+    return { text: "—", cls: "text-gray-300" };
   }
 
   const label = schedule.length > 0 ? `Release Dates · ${schedule.length} ▾` : "Release Dates ▾";
@@ -518,20 +518,20 @@ function ReleaseDatesPopover({
     <div
       ref={popoverRef}
       style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999, width: POPOVER_W }}
-      className="flex max-h-[80vh] flex-col rounded-lg border border-white/[0.07] bg-neutral-950 shadow-2xl shadow-black/80 ring-1 ring-black/30"
+      className="flex max-h-[80vh] flex-col rounded-lg border border-gray-200 bg-white shadow-elevated"
     >
       {/* ── Fixed header ──────────────────────────────────────────────────── */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/[0.05] px-3 py-2.5">
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 px-3 py-2.5">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[11px] font-medium tracking-wide text-neutral-300">Release Dates</span>
+          <span className="text-[11px] font-medium tracking-wide text-gray-700">Release Dates</span>
           {schedule.length > 0 && (
-            <span className="tabular-nums text-[10px] text-neutral-600">{schedule.length}</span>
+            <span className="tabular-nums text-[10px] text-gray-400">{schedule.length}</span>
           )}
         </div>
         <button
           type="button"
           onClick={closePopover}
-          className="text-[13px] leading-none text-neutral-700 transition-colors hover:text-neutral-400"
+          className="text-[13px] leading-none text-gray-300 transition-colors hover:text-gray-500"
           aria-label="Close"
         >
           ×
@@ -539,13 +539,13 @@ function ReleaseDatesPopover({
       </div>
 
       {/* ── Fixed search + region filter chips ────────────────────────────── */}
-      <div className="flex-shrink-0 space-y-1.5 border-b border-white/[0.05] px-3 py-2">
+      <div className="flex-shrink-0 space-y-1.5 border-b border-gray-100 px-3 py-2">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search territory…"
-          className="w-full rounded border border-white/[0.05] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-300 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+          className="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-700 placeholder:text-gray-400 outline-none focus:border-indigo-400"
         />
         {namedRegions.length > 1 && (
           <div className="flex flex-wrap gap-1">
@@ -554,8 +554,8 @@ function ReleaseDatesPopover({
               onClick={() => setRegionFilter(null)}
               className={`rounded px-2 py-px text-[10px] tracking-wide transition-colors ${
                 regionFilter === null
-                  ? "bg-indigo-950/60 text-indigo-300 ring-1 ring-inset ring-indigo-500/20"
-                  : "text-neutral-600 hover:text-neutral-400"
+                  ? "bg-indigo-50 text-indigo-600 ring-1 ring-inset ring-indigo-200"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               All
@@ -567,8 +567,8 @@ function ReleaseDatesPopover({
                 onClick={() => setRegionFilter(regionFilter === r ? null : r)}
                 className={`rounded px-2 py-px text-[10px] tracking-wide transition-colors ${
                   regionFilter === r
-                    ? "bg-indigo-950/60 text-indigo-300 ring-1 ring-inset ring-indigo-500/20"
-                    : "text-neutral-600 hover:text-neutral-400"
+                    ? "bg-indigo-50 text-indigo-600 ring-1 ring-inset ring-indigo-200"
+                    : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 {r}
@@ -582,27 +582,27 @@ function ReleaseDatesPopover({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {pasteMode === "none" ? (
           schedule.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[11px] text-neutral-700">No schedule imported yet.</p>
+            <p className="px-3 py-6 text-center text-[11px] text-gray-400">No schedule imported yet.</p>
           ) : groups.length === 0 ? (
-            <p className="px-3 py-4 text-center text-[11px] text-neutral-700">No territories match.</p>
+            <p className="px-3 py-4 text-center text-[11px] text-gray-400">No territories match.</p>
           ) : (
             groups.map(({ region, items }) => (
               <div key={region}>
                 {/* Sticky region heading */}
-                <div className="sticky top-0 z-[1] flex items-baseline justify-between bg-neutral-950 px-3 pb-1 pt-2.5">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-neutral-600">
+                <div className="sticky top-0 z-[1] flex items-baseline justify-between bg-white px-3 pb-1 pt-2.5">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-gray-400">
                     {region}
                   </span>
-                  <span className="tabular-nums text-[10px] text-neutral-800">{items.length}</span>
+                  <span className="tabular-nums text-[10px] text-gray-300">{items.length}</span>
                 </div>
                 {items.map((item, i) => {
                   const { text, cls } = formatDisplayDate(item);
                   return (
                     <div
                       key={`${item.region ?? "none"}|${item.territory}|${item.date ?? "null"}|${i}`}
-                      className="flex items-center justify-between px-3 py-1 transition-colors hover:bg-white/[0.02]"
+                      className="flex items-center justify-between px-3 py-1 transition-colors hover:bg-gray-50"
                     >
-                      <span className="min-w-0 flex-1 truncate pr-3 text-[11px] text-neutral-300">
+                      <span className="min-w-0 flex-1 truncate pr-3 text-[11px] text-gray-700">
                         {item.territory}
                       </span>
                       <span className={`flex-shrink-0 tabular-nums text-[11px] ${cls}`}>
@@ -622,7 +622,7 @@ function ReleaseDatesPopover({
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
               placeholder="Paste raw PDF text here…"
-              className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1.5 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+              className="w-full resize-none rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[11px] text-gray-800 placeholder:text-gray-400 outline-none focus:border-indigo-400"
             />
             <button
               type="button"
@@ -638,23 +638,23 @@ function ReleaseDatesPopover({
           <div className="space-y-2 p-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-0.5">
-                <p className="text-[10px] text-neutral-600">Territories</p>
+                <p className="text-[10px] text-gray-500">Territories</p>
                 <textarea
                   rows={7}
                   value={blocksA}
                   onChange={(e) => { setBlocksA(e.target.value); setBlocksPreview(null); }}
                   placeholder={"Australia\nUnited Kingdom\nFrance\n…"}
-                  className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+                  className="w-full resize-none rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-800 placeholder:text-gray-400 outline-none focus:border-indigo-400"
                 />
               </div>
               <div className="space-y-0.5">
-                <p className="text-[10px] text-neutral-600">Dates</p>
+                <p className="text-[10px] text-gray-500">Dates</p>
                 <textarea
                   rows={7}
                   value={blocksB}
                   onChange={(e) => { setBlocksB(e.target.value); setBlocksPreview(null); }}
                   placeholder={"1-Jan-26\nTBA\nNo Release\n…"}
-                  className="w-full resize-none rounded border border-white/[0.06] bg-neutral-800/50 px-2 py-1 text-[11px] text-neutral-200 placeholder:text-neutral-700 outline-none focus:border-indigo-500/30"
+                  className="w-full resize-none rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-800 placeholder:text-gray-400 outline-none focus:border-indigo-400"
                 />
               </div>
             </div>
@@ -663,22 +663,22 @@ function ReleaseDatesPopover({
                 type="button"
                 disabled={!blocksA.trim() || !blocksB.trim()}
                 onClick={handleBlocksZip}
-                className="rounded border border-neutral-700/60 px-2.5 py-1 text-[11px] text-neutral-400 transition-colors hover:border-neutral-600 hover:text-neutral-200 disabled:opacity-40"
+                className="rounded border border-gray-200 px-2.5 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 disabled:opacity-40"
               >
                 Zip &amp; Preview
               </button>
             ) : (
               <div className="space-y-1.5">
-                <p className="text-[10px] text-neutral-500">
+                <p className="text-[10px] text-gray-500">
                   {blocksPreview.length} rows matched{blocksPreview.length > 10 ? " · showing first 10" : ""}
                 </p>
-                <div className="rounded border border-white/[0.05] bg-neutral-900/60">
+                <div className="rounded border border-gray-100 bg-gray-50">
                   <table className="w-full text-[11px]">
                     <tbody>
                       {blocksPreview.slice(0, 10).map((row, i) => (
-                        <tr key={i} className="border-b border-white/[0.04] last:border-0">
-                          <td className="max-w-[110px] truncate px-2 py-[3px] text-neutral-300">{row.territory}</td>
-                          <td className={`px-2 py-[3px] text-right tabular-nums ${row.tba ? "text-amber-400/80" : row.no_release ? "text-neutral-600" : "text-neutral-400"}`}>{row.dateDisplay}</td>
+                        <tr key={i} className="border-b border-gray-100 last:border-0">
+                          <td className="max-w-[110px] truncate px-2 py-[3px] text-gray-700">{row.territory}</td>
+                          <td className={`px-2 py-[3px] text-right tabular-nums ${row.tba ? "text-amber-600" : row.no_release ? "text-gray-400" : "text-gray-600"}`}>{row.dateDisplay}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -688,7 +688,7 @@ function ReleaseDatesPopover({
                   <button type="button" onClick={handleBlocksSave} className="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500">
                     Save {blocksPreview.length} rows
                   </button>
-                  <button type="button" onClick={() => setBlocksPreview(null)} className="rounded border border-neutral-700/60 px-2.5 py-1 text-[11px] text-neutral-600 transition-colors hover:text-neutral-400">
+                  <button type="button" onClick={() => setBlocksPreview(null)} className="rounded border border-gray-200 px-2.5 py-1 text-[11px] text-gray-500 transition-colors hover:text-gray-700">
                     Edit
                   </button>
                 </div>
@@ -699,9 +699,9 @@ function ReleaseDatesPopover({
       </div>
 
       {/* ── Sticky footer — import controls always visible ────────────────── */}
-      <div className="flex-shrink-0 space-y-1.5 border-t border-white/[0.05] bg-neutral-950/95 px-3 py-2.5 backdrop-blur-sm">
+      <div className="flex-shrink-0 space-y-1.5 border-t border-gray-100 bg-white px-3 py-2.5">
         {importError && (
-          <p className="text-[11px] leading-snug text-red-400/80">{importError}</p>
+          <p className="text-[11px] leading-snug text-red-500">{importError}</p>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChange} />
@@ -709,7 +709,7 @@ function ReleaseDatesPopover({
             type="button"
             disabled={importing}
             onClick={() => fileInputRef.current?.click()}
-            className="rounded border border-neutral-700/60 px-2 py-px text-[11px] text-neutral-500 transition-colors hover:border-neutral-600 hover:text-neutral-200 disabled:opacity-40"
+            className="rounded border border-gray-200 px-2 py-px text-[11px] text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 disabled:opacity-40"
           >
             {importing ? "Importing…" : "Import PDF"}
           </button>
@@ -717,7 +717,7 @@ function ReleaseDatesPopover({
             type="button"
             disabled={importing}
             onClick={() => { setPasteMode(pasteMode === "text" ? "none" : "text"); setBlocksPreview(null); setImportError(null); }}
-            className={`rounded border px-2 py-px text-[11px] transition-colors disabled:opacity-40 ${pasteMode === "text" ? "border-indigo-800/60 text-indigo-400" : "border-neutral-700/60 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"}`}
+            className={`rounded border px-2 py-px text-[11px] transition-colors disabled:opacity-40 ${pasteMode === "text" ? "border-indigo-300 text-indigo-600" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}
           >
             Paste text
           </button>
@@ -725,7 +725,7 @@ function ReleaseDatesPopover({
             type="button"
             disabled={importing}
             onClick={() => { setPasteMode(pasteMode === "blocks" ? "none" : "blocks"); setBlocksPreview(null); setImportError(null); }}
-            className={`rounded border px-2 py-px text-[11px] transition-colors disabled:opacity-40 ${pasteMode === "blocks" ? "border-indigo-800/60 text-indigo-400" : "border-neutral-700/60 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400"}`}
+            className={`rounded border px-2 py-px text-[11px] transition-colors disabled:opacity-40 ${pasteMode === "blocks" ? "border-indigo-300 text-indigo-600" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}
           >
             Two blocks
           </button>
@@ -740,7 +740,7 @@ function ReleaseDatesPopover({
         ref={triggerRef}
         type="button"
         onClick={() => (open ? closePopover() : openPopover())}
-        className="rounded border border-neutral-800/80 px-1.5 py-px text-[11px] text-neutral-600 transition-colors duration-100 hover:border-neutral-700 hover:text-neutral-400"
+        className="rounded border border-gray-200 px-1.5 py-px text-[11px] text-gray-500 transition-colors duration-100 hover:border-gray-300 hover:text-gray-700"
       >
         {label}
       </button>
@@ -809,44 +809,44 @@ export function SnapshotHeader({
   const summary = collapsedSummary(blockedCount, overdueCount);
 
   return (
-    // Left accent bar via border-l; pl compensated so content alignment is unchanged
-    <div className="flex-shrink-0 border-b border-l-2 border-b-white/[0.05] border-l-indigo-900/25 bg-neutral-950/70 py-1.5 pl-[18px] pr-5 backdrop-blur-sm">
+    // Left accent bar via border-l; subtle bottom shadow separates snapshot from board canvas
+    <div className="flex-shrink-0 border-b border-l-[3px] border-b-gray-200 border-l-indigo-400 bg-white py-2 pl-[18px] pr-5 shadow-[0_2px_6px_rgba(0,0,0,0.04)]">
 
       {/* ── Single header row ── */}
       <div className="flex h-6 items-center gap-2.5">
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-neutral-400/70 transition-colors duration-100 hover:text-neutral-300"
+          className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 transition-colors duration-100 hover:text-gray-700"
         >
-          <span className="text-[7px] text-neutral-600">{collapsed ? "▶" : "▼"}</span>
+          <span className="text-[7px] text-gray-300">{collapsed ? "▶" : "▼"}</span>
           <span>Snapshot</span>
         </button>
 
-        <span className="select-none text-neutral-700">·</span>
+        <span className="select-none text-gray-300">·</span>
 
         {collapsed ? (
           /* Collapsed: concise status text — reads as a compressed control bar */
-          <span className="text-[11px] tracking-wide text-neutral-400">
-            {summary || <span className="text-neutral-600">—</span>}
+          <span className="text-[11px] tracking-wide text-gray-500">
+            {summary || <span className="text-gray-300">—</span>}
           </span>
         ) : (
-          /* Expanded: status chips with depth */
+          /* Expanded: status chips */
           <div className="flex items-center gap-1.5">
             {blockedCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded border border-red-900/25 bg-red-950/40 px-2 py-0.5 text-[11px] text-red-400/90 shadow-[0_0_10px_rgba(239,68,68,0.06)]">
-                <span className="h-[5px] w-[5px] rounded-full bg-red-500/70 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+              <span className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] text-red-600">
+                <span className="h-[5px] w-[5px] rounded-full bg-red-500" />
                 {blockedCount} blocked
               </span>
             )}
             {overdueCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded border border-amber-900/25 bg-amber-950/40 px-2 py-0.5 text-[11px] text-amber-400/80 shadow-[0_0_10px_rgba(245,158,11,0.05)]">
-                <span className="h-[5px] w-[5px] rounded-full bg-amber-500/70 shadow-[0_0_4px_rgba(245,158,11,0.4)]" />
+              <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                <span className="h-[5px] w-[5px] rounded-full bg-amber-500" />
                 {overdueCount} overdue
               </span>
             )}
             {blockedCount === 0 && overdueCount === 0 && (
-              <span className="text-[11px] tracking-wide text-neutral-700">No issues</span>
+              <span className="text-[11px] tracking-wide text-gray-400">No issues</span>
             )}
           </div>
         )}
@@ -863,12 +863,12 @@ export function SnapshotHeader({
           <button
             type="button"
             onClick={() => setShowBriefing((v) => !v)}
-            className={`text-[11px] transition-colors ${showBriefing ? "text-indigo-400" : "text-neutral-600 hover:text-neutral-400"}`}
+            className={`text-[11px] transition-colors ${showBriefing ? "text-indigo-600" : "text-gray-400 hover:text-gray-600"}`}
           >
             ✦ Brief
           </button>
           {saving && !collapsed && (
-            <span className="text-[10px] tracking-wide text-neutral-600">Saving…</span>
+            <span className="text-[10px] tracking-wide text-gray-400">Saving…</span>
           )}
         </div>
       </div>
@@ -927,14 +927,14 @@ export function SnapshotHeader({
           </div>
 
           {/* Pinned cards — subtle top divider separates from field rows */}
-          <div className="border-t border-white/[0.04] pt-1.5">
+          <div className="border-t border-gray-100 pt-1.5">
             {highlightedNotes.length === 0 ? (
-              <p className="text-[10px] text-neutral-700">
+              <p className="text-[10px] text-gray-400">
                 No pinned cards — use ☆ on a card to pin one.
               </p>
             ) : (
               <div className="flex items-start gap-1.5">
-                <span className="mt-[3px] flex-shrink-0 text-[10px] uppercase tracking-[0.08em] text-neutral-700">
+                <span className="mt-[3px] flex-shrink-0 text-[10px] uppercase tracking-[0.08em] text-gray-400">
                   Pinned
                 </span>
                 <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -944,14 +944,14 @@ export function SnapshotHeader({
                       return (
                         <div
                           key={note.id}
-                          className="group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded border border-white/[0.07] bg-neutral-900/80 py-1 pl-2 pr-1 shadow-sm shadow-black/40 transition-colors duration-100 hover:border-white/[0.12] hover:bg-neutral-800/70"
+                          className="group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white py-1 pl-2.5 pr-1.5 shadow-card transition-all duration-150 hover:-translate-y-[1px] hover:border-gray-300 hover:shadow-card-hover"
                           onClick={() => onOpenNote(note.note_id)}
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpenNote(note.note_id); }}
                         >
                           <div className="min-w-0">
-                            <p className="max-w-[180px] truncate text-[11px] text-neutral-200">
+                            <p className="max-w-[180px] truncate text-[11px] text-gray-800">
                               {note.content}
                             </p>
                             {dueLabel && (
@@ -967,7 +967,7 @@ export function SnapshotHeader({
                               e.stopPropagation();
                               onHighlightToggle(note.note_id, false);
                             }}
-                            className="flex-shrink-0 text-[10px] text-amber-500 opacity-0 transition-opacity duration-100 group-hover:opacity-100 hover:text-neutral-500"
+                            className="flex-shrink-0 text-[10px] text-amber-500 opacity-0 transition-opacity duration-100 group-hover:opacity-100 hover:text-gray-400"
                             title="Unpin"
                           >
                             ★

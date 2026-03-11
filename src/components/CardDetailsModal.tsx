@@ -977,7 +977,7 @@ export function CardDetailsModal({
     >
       {/* Panel */}
       <div
-        className={`fixed inset-0 flex flex-col bg-neutral-950 transition-all duration-200 sm:relative sm:inset-auto sm:w-full ${NEW_CARD_LAYOUT ? "sm:max-w-4xl" : "sm:max-w-3xl"} sm:rounded-xl sm:border sm:border-neutral-800 sm:shadow-2xl ${
+        className={`fixed inset-0 flex flex-col bg-white transition-all duration-200 sm:relative sm:inset-auto sm:w-full ${NEW_CARD_LAYOUT ? "sm:max-w-4xl" : "sm:max-w-3xl"} sm:rounded-xl sm:border sm:border-gray-200 sm:shadow-elevated ${
           visible ? "opacity-100 sm:scale-100" : "opacity-0 sm:scale-95"
         }`}
         role="dialog"
@@ -986,11 +986,11 @@ export function CardDetailsModal({
         {/* Confirmation overlay — Personal → Shared */}
         {showVisibilityConfirm && (
           <div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl bg-black/60">
-            <div className="mx-4 max-w-sm space-y-3 rounded-xl border border-neutral-700 bg-neutral-900 p-5">
-              <p className="text-sm font-medium text-neutral-100">
+            <div className="mx-4 max-w-sm space-y-3 rounded-xl border border-gray-200 bg-white p-5 shadow-elevated">
+              <p className="text-sm font-medium text-gray-900">
                 This card will become visible to others.
               </p>
-              <p className="text-xs text-neutral-500">Your private layer will remain private.</p>
+              <p className="text-xs text-gray-500">Your private layer will remain private.</p>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -1005,7 +1005,7 @@ export function CardDetailsModal({
                 <button
                   type="button"
                   onClick={() => setShowVisibilityConfirm(false)}
-                  className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200"
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700"
                 >
                   Cancel
                 </button>
@@ -1015,18 +1015,18 @@ export function CardDetailsModal({
         )}
 
         {/* ── HEADER ─────────────────────────────────── */}
-        <div className="relative flex-shrink-0 border-b border-neutral-800 bg-neutral-950 pb-0 pl-5 pr-4 pt-3 sm:sticky sm:top-0 sm:z-10">
+        <div className="relative flex-shrink-0 border-b border-gray-200 bg-white pb-0 pl-5 pr-4 pt-3 sm:sticky sm:top-0 sm:z-10">
           {/* Row 1: title + controls */}
           <div className="flex items-center gap-3 pb-2">
             <input
-              className="flex-1 bg-transparent text-base font-semibold text-neutral-100 outline-none placeholder:text-neutral-600"
+              className="flex-1 bg-transparent text-base font-semibold text-gray-900 outline-none placeholder:text-gray-300"
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Untitled"
               autoFocus
             />
             {/* Visibility toggle */}
-            <div className="flex overflow-hidden rounded-lg border border-neutral-800 text-xs">
+            <div className="flex overflow-hidden rounded-lg border border-gray-200 text-xs">
               {(["personal", "shared"] as const).map((v) => (
                 <button
                   key={v}
@@ -1038,8 +1038,8 @@ export function CardDetailsModal({
                   }
                   className={`px-3 py-1 transition-colors ${
                     visibility === v
-                      ? "bg-neutral-800 font-medium text-neutral-100"
-                      : "text-neutral-500 hover:text-neutral-300"
+                      ? "bg-gray-100 font-medium text-gray-800"
+                      : "text-gray-400 hover:text-gray-600"
                   }`}
                 >
                   {v === "personal" ? "Personal" : "Shared"}
@@ -1049,9 +1049,9 @@ export function CardDetailsModal({
             <span
               className={`shrink-0 text-xs transition-colors ${
                 saveStatus === "saving"
-                  ? "text-neutral-500"
+                  ? "text-gray-400"
                   : saveStatus === "saved"
-                    ? "text-green-500"
+                    ? "text-green-600"
                     : "select-none text-transparent"
               }`}
             >
@@ -1061,18 +1061,18 @@ export function CardDetailsModal({
             <div className="relative" ref={kebabRef}>
               <button
                 type="button"
-                className="shrink-0 rounded p-1 text-neutral-500 hover:text-neutral-200"
+                className="shrink-0 rounded p-1 text-gray-400 hover:text-gray-700"
                 onClick={() => setShowKebabMenu((v) => !v)}
                 aria-label="More actions"
               >
                 ···
               </button>
               {showKebabMenu && (
-                <div className="absolute right-0 top-full z-40 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 py-1 shadow-xl">
+                <div className="absolute right-0 top-full z-40 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-elevated">
                   {onLinkToBoard && otherBoards.length > 0 && (
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-neutral-300 hover:bg-neutral-800"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50"
                       onClick={() => { setShowLinkForm(true); setShowKebabMenu(false); }}
                     >
                       🔗 Link to another board…
@@ -1080,15 +1080,15 @@ export function CardDetailsModal({
                   )}
                   <button
                     type="button"
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-neutral-800 ${archived ? "text-green-400" : "text-neutral-300"}`}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50 ${archived ? "text-green-600" : "text-gray-700"}`}
                     onClick={() => { void handleArchiveToggle(); setShowKebabMenu(false); }}
                   >
                     {archived ? "Restore from archive" : "Archive"}
                   </button>
-                  <div className="my-1 border-t border-neutral-800" />
+                  <div className="my-1 border-t border-gray-100" />
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 hover:bg-neutral-800"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-500 hover:bg-gray-50"
                     onClick={() => { void handleDeleteEverywhere(); setShowKebabMenu(false); }}
                   >
                     Delete everywhere
@@ -1098,7 +1098,7 @@ export function CardDetailsModal({
             </div>
             <button
               type="button"
-              className="shrink-0 rounded p-1 text-neutral-400 hover:text-white"
+              className="shrink-0 rounded p-1 text-gray-400 hover:text-gray-700"
               onClick={triggerClose}
               aria-label="Close"
             >
@@ -1109,10 +1109,10 @@ export function CardDetailsModal({
           {NEW_CARD_LAYOUT ? (
             /* ── NEW: single meta row — Labels · Status · Due · Event ── */
             <>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-800/50 py-2.5 text-[11px]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-100 py-2.5 text-[11px]">
                 {/* Labels inline */}
                 {labelsLoading ? (
-                  <span className="text-neutral-700">…</span>
+                  <span className="text-gray-400">…</span>
                 ) : (
                   <>
                     {noteLabels.map((label) => (
@@ -1132,20 +1132,20 @@ export function CardDetailsModal({
                     ))}
                     <button
                       type="button"
-                      className="rounded-full border border-dashed border-neutral-800 px-2 py-0.5 text-neutral-700 transition-colors hover:border-neutral-600 hover:text-neutral-500"
+                      className="rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-gray-400 transition-colors hover:border-gray-400 hover:text-gray-600"
                       onClick={() => setShowPicker((v) => !v)}
                     >+ Label</button>
                   </>
                 )}
 
                 {/* Divider */}
-                <span className="h-3.5 w-px shrink-0 bg-neutral-800" />
+                <span className="h-3.5 w-px shrink-0 bg-gray-200" />
 
                 {/* Status */}
-                <div className="flex items-center gap-1 text-neutral-600">
+                <div className="flex items-center gap-1 text-gray-500">
                   {status && <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dotClass}`} />}
                   <select
-                    className="cursor-pointer bg-transparent text-neutral-500 outline-none"
+                    className="cursor-pointer bg-transparent text-gray-500 outline-none"
                     value={status ?? ""}
                     onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}
                   >
@@ -1179,22 +1179,22 @@ export function CardDetailsModal({
                     if (newStart || newEnd) handleEventRangeSet(newStart, newEnd);
                   }
                   return (
-                    <div className="relative flex items-center gap-1.5 text-neutral-600">
-                      <span className="h-3.5 w-px shrink-0 bg-neutral-800" />
+                    <div className="relative flex items-center gap-1.5 text-gray-500">
+                      <span className="h-3.5 w-px shrink-0 bg-gray-200" />
                       <input ref={dueDateInputRef} type="datetime-local" className="sr-only" value={dueDate} onChange={(e) => handleDueDateChange(e.target.value)} tabIndex={-1} />
                       {/* Due sub-chip */}
                       <button type="button" onClick={() => dueDateInputRef.current?.showPicker()}
-                        className={`rounded-full px-2 py-0.5 transition-colors ${hasDue ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600" : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"}`}>
+                        className={`rounded-full px-2 py-0.5 transition-colors ${hasDue ? "border border-gray-300 bg-gray-100 text-gray-700 hover:border-gray-400" : "border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600"}`}>
                         {hasDue ? fmtDate(dueDate) : "Due"}
                       </button>
-                      {hasDue && <button type="button" className="text-neutral-700 hover:text-neutral-400" onClick={() => handleDueDateChange("")}>×</button>}
+                      {hasDue && <button type="button" className="text-gray-400 hover:text-gray-600" onClick={() => handleDueDateChange("")}>×</button>}
                       {/* Event sub-chip */}
                       <button type="button" onClick={() => setShowEventPicker((v) => !v)}
-                        className={`rounded-full px-2 py-0.5 transition-colors ${hasEvent ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600" : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"}`}>
+                        className={`rounded-full px-2 py-0.5 transition-colors ${hasEvent ? "border border-gray-300 bg-gray-100 text-gray-700 hover:border-gray-400" : "border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600"}`}>
                         {hasEvent ? `${eventStart ? fmtDate(eventStart) : "?"} – ${eventEnd ? fmtDate(eventEnd) : "?"}` : "Event"}
                       </button>
                       {hasEvent && (
-                        <button type="button" className="text-neutral-700 hover:text-neutral-400"
+                        <button type="button" className="text-gray-400 hover:text-gray-600"
                           onClick={handleEventRangeClear}>×</button>
                       )}
                       {showEventPicker && (
@@ -1218,11 +1218,11 @@ export function CardDetailsModal({
 
               {/* Label picker — drops below header (shared by both layouts) */}
               {showPicker && (
-                <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-30 border-t border-gray-100 bg-white px-5 py-3 shadow-elevated">
                   <div className="space-y-3">
                     {unattachedLabels.length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-xs text-neutral-500">Add existing</p>
+                        <p className="text-xs text-gray-500">Add existing</p>
                         <div className="flex flex-wrap gap-1.5">
                           {unattachedLabels.map((label) => (
                             <button
@@ -1239,7 +1239,7 @@ export function CardDetailsModal({
                       </div>
                     )}
                     <div className="space-y-1.5">
-                      <p className="text-xs text-neutral-500">Create new</p>
+                      <p className="text-xs text-gray-500">Create new</p>
                       <div className="mb-1.5 flex flex-wrap gap-1.5">
                         {LABEL_PALETTE.map(({ hex, label }) => (
                           <button
@@ -1248,7 +1248,7 @@ export function CardDetailsModal({
                             onClick={() => setNewLabelColor(hex)}
                             className={`h-5 w-5 rounded-full transition-all duration-100 ${
                               newLabelColor === hex
-                                ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-950"
+                                ? "scale-110 ring-2 ring-gray-400/60 ring-offset-1 ring-offset-white"
                                 : "opacity-60 hover:scale-105 hover:opacity-100"
                             }`}
                             style={{ backgroundColor: hex }}
@@ -1258,7 +1258,7 @@ export function CardDetailsModal({
                       </div>
                       <div className="flex items-center gap-2">
                         <input
-                          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-600"
+                          className="flex-1 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-800 outline-none placeholder:text-gray-400 focus:border-indigo-400"
                           placeholder="Label name"
                           value={newLabelName}
                           onChange={(e) => setNewLabelName(e.target.value)}
@@ -1284,7 +1284,7 @@ export function CardDetailsModal({
               {/* Row 2: labels */}
               <div className="flex flex-wrap items-center gap-1.5 pb-2">
                 {labelsLoading ? (
-                  <span className="text-[11px] text-neutral-700">…</span>
+                  <span className="text-[11px] text-gray-400">…</span>
                 ) : (
                   <>
                     {noteLabels.map((label) => (
@@ -1304,7 +1304,7 @@ export function CardDetailsModal({
                     ))}
                     <button
                       type="button"
-                      className="rounded-full border border-dashed border-neutral-800 px-2 py-0.5 text-[11px] text-neutral-700 transition-colors hover:border-neutral-600 hover:text-neutral-500"
+                      className="rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] text-gray-400 transition-colors hover:border-gray-400 hover:text-gray-600"
                       onClick={() => setShowPicker((v) => !v)}
                     >+ Label</button>
                   </>
@@ -1313,11 +1313,11 @@ export function CardDetailsModal({
 
               {/* Label picker — drops below header */}
               {showPicker && (
-                <div className="absolute left-0 right-0 top-full z-30 border-t border-neutral-800 bg-neutral-950 px-5 py-3 shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-30 border-t border-gray-100 bg-white px-5 py-3 shadow-elevated">
                   <div className="space-y-3">
                     {unattachedLabels.length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-xs text-neutral-500">Add existing</p>
+                        <p className="text-xs text-gray-500">Add existing</p>
                         <div className="flex flex-wrap gap-1.5">
                           {unattachedLabels.map((label) => (
                             <button
@@ -1332,7 +1332,7 @@ export function CardDetailsModal({
                       </div>
                     )}
                     <div className="space-y-1.5">
-                      <p className="text-xs text-neutral-500">Create new</p>
+                      <p className="text-xs text-gray-500">Create new</p>
                       <div className="mb-1.5 flex flex-wrap gap-1.5">
                         {LABEL_PALETTE.map(({ hex, label }) => (
                           <button
@@ -1341,7 +1341,7 @@ export function CardDetailsModal({
                             onClick={() => setNewLabelColor(hex)}
                             className={`h-5 w-5 rounded-full transition-all duration-100 ${
                               newLabelColor === hex
-                                ? "scale-110 ring-2 ring-white/50 ring-offset-1 ring-offset-neutral-950"
+                                ? "scale-110 ring-2 ring-gray-400/60 ring-offset-1 ring-offset-white"
                                 : "opacity-60 hover:scale-105 hover:opacity-100"
                             }`}
                             style={{ backgroundColor: hex }}
@@ -1351,7 +1351,7 @@ export function CardDetailsModal({
                       </div>
                       <div className="flex items-center gap-2">
                         <input
-                          className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-neutral-600"
+                          className="flex-1 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-800 outline-none placeholder:text-gray-400 focus:border-indigo-400"
                           placeholder="Label name"
                           value={newLabelName}
                           onChange={(e) => setNewLabelName(e.target.value)}
@@ -1370,20 +1370,20 @@ export function CardDetailsModal({
               )}
 
               {/* Row 3: timeline — Due · Event · Status */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-neutral-800/50 py-2 text-[11px] text-neutral-600">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 py-2 text-[11px] text-gray-500">
                 <div className="flex items-center gap-1.5">
                   <span>Due</span>
                   <input ref={dueDateInputRef} type="datetime-local" className="sr-only" value={dueDate} onChange={(e) => handleDueDateChange(e.target.value)} tabIndex={-1} />
                   <button type="button" onClick={() => dueDateInputRef.current?.showPicker()}
-                    className={`rounded-full px-2 py-0.5 transition-colors ${dueDate ? "border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:border-neutral-600" : "border border-dashed border-neutral-800 text-neutral-700 hover:border-neutral-700 hover:text-neutral-500"}`}>
+                    className={`rounded-full px-2 py-0.5 transition-colors ${dueDate ? "border border-gray-300 bg-gray-100 text-gray-700 hover:border-gray-400" : "border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600"}`}>
                     {dueDate ? new Date(dueDate).toLocaleString(undefined, { month: "short", day: "numeric" }) : "Set"}
                   </button>
-                  {dueDate && <button type="button" className="text-neutral-700 hover:text-neutral-400" onClick={() => handleDueDateChange("")}>×</button>}
+                  {dueDate && <button type="button" className="text-gray-400 hover:text-gray-600" onClick={() => handleDueDateChange("")}>×</button>}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span>Status</span>
                   {status && <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[status].dotClass}`} />}
-                  <select className="cursor-pointer bg-transparent text-[11px] text-neutral-500 outline-none" value={status ?? ""} onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}>
+                  <select className="cursor-pointer bg-transparent text-[11px] text-gray-500 outline-none" value={status ?? ""} onChange={(e) => void handleStatusChange((e.target.value as NoteStatus) || null)}>
                     <option value="">—</option>
                     {STATUS_VALUES.filter((s) => s !== "done").map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
                   </select>
@@ -1403,9 +1403,9 @@ export function CardDetailsModal({
 
                 {/* About / description — content-first, no border box */}
                 <div>
-                  <p className="mb-1.5 text-[11px] font-medium text-neutral-600">About</p>
+                  <p className="mb-1.5 text-[11px] font-medium text-gray-500">About</p>
                   <AutoTextarea
-                    className="w-full bg-transparent text-sm leading-relaxed text-neutral-200 outline-none placeholder:text-neutral-600"
+                    className="w-full bg-transparent text-sm leading-relaxed text-gray-800 outline-none placeholder:text-gray-400"
                     placeholder="Add a description…"
                     value={description}
                     onChange={(e) => handleDescriptionChange(e.target.value)}
@@ -1413,16 +1413,16 @@ export function CardDetailsModal({
                 </div>
 
                 {/* My layer — personal, collapsible */}
-                <div className="rounded-xl bg-neutral-900/40 shadow-sm">
+                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setMyLayerOpen((v) => !v)}
-                    className="flex w-full items-center justify-between px-4 py-3 text-[11px] font-medium text-neutral-600 hover:text-neutral-400"
+                    className="flex w-full items-center justify-between px-4 py-3 text-[11px] font-medium text-gray-500 hover:text-gray-700"
                   >
                     <span>My layer</span>
                     <div className="flex items-center gap-2">
                       {!myLayerOpen && (
-                        <span className="text-[10px] font-normal normal-case tracking-normal text-neutral-700">
+                        <span className="text-[10px] font-normal normal-case tracking-normal text-gray-400">
                           {[
                             isInActions && "In Actions",
                             personalReminder.trim() && "note",
@@ -1430,16 +1430,16 @@ export function CardDetailsModal({
                           ].filter(Boolean).join(" · ")}
                         </span>
                       )}
-                      <span className="text-neutral-700">{myLayerOpen ? "▾" : "▸"}</span>
+                      <span className="text-gray-400">{myLayerOpen ? "▾" : "▸"}</span>
                     </div>
                   </button>
 
                   {myLayerOpen && (
-                    <div className="space-y-3.5 border-t border-neutral-800/40 px-4 pb-3.5 pt-3">
+                    <div className="space-y-3.5 border-t border-gray-100 px-4 pb-3.5 pt-3">
 
                       {/* My actions */}
                       <div>
-                        <p className="mb-2 text-[11px] text-neutral-600">My actions</p>
+                        <p className="mb-2 text-[11px] text-gray-500">My actions</p>
                         <div className="flex items-center gap-3">
                           <label className="flex cursor-pointer items-center gap-2">
                             <input
@@ -1448,10 +1448,10 @@ export function CardDetailsModal({
                               onChange={(e) => onToggleInActions(noteId, e.target.checked)}
                               className="h-3.5 w-3.5 rounded accent-indigo-500"
                             />
-                            <span className="text-xs text-neutral-400">Track in My Actions</span>
+                            <span className="text-xs text-gray-500">Track in My Actions</span>
                           </label>
                           {isInActions && (
-                            <Link href="/actions" className="text-[11px] text-indigo-400 transition-colors hover:text-indigo-300">
+                            <Link href="/actions" className="text-[11px] text-indigo-600 transition-colors hover:text-indigo-500">
                               View →
                             </Link>
                           )}
@@ -1460,9 +1460,9 @@ export function CardDetailsModal({
 
                       {/* Notes to self — auto-grows, never clips */}
                       <div>
-                        <p className="mb-1.5 text-[11px] text-neutral-600">Notes to self</p>
+                        <p className="mb-1.5 text-[11px] text-gray-500">Notes to self</p>
                         <AutoTextarea
-                          className="w-full rounded-lg bg-neutral-800/40 px-3 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-600 focus:bg-neutral-800/60 focus:ring-1 focus:ring-neutral-700/50"
+                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-indigo-300 focus:ring-1 focus:ring-indigo-300/30"
                           placeholder="Private notes…"
                           value={personalReminder}
                           onChange={(e) => handlePersonalReminderChange(e.target.value)}
@@ -1471,44 +1471,44 @@ export function CardDetailsModal({
 
                       {/* Linked emails */}
                       <div ref={emailsRef}>
-                        <p className="mb-1.5 text-[11px] text-neutral-600">
+                        <p className="mb-1.5 text-[11px] text-gray-500">
                           Linked emails{emailThreads.length > 0 ? ` (${emailThreads.length})` : ""}
                         </p>
                         {emailThreadsLoading ? (
-                          <p className="text-[11px] text-neutral-700">Loading…</p>
+                          <p className="text-[11px] text-gray-400">Loading…</p>
                         ) : emailThreads.length === 0 ? (
-                          <p className="text-[11px] text-neutral-700">No linked emails</p>
+                          <p className="text-[11px] text-gray-400">No linked emails</p>
                         ) : (
                           <div className="space-y-1">
                             {emailThreads.map((thread) => {
                               const threadAttachments = attachmentMap[thread.id];
                               return (
-                                <div key={thread.id} className="rounded-lg bg-neutral-800/30 px-3 py-2">
+                                <div key={thread.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
+                                    <p className="min-w-0 flex-1 truncate text-[11px] text-gray-600">
                                       ✉ {thread.subject ?? "Email thread"}
                                     </p>
                                     <button
                                       type="button"
                                       disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
                                       onClick={() => void handleOpenThread(thread)}
-                                      className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50"
+                                      className="shrink-0 text-[11px] text-blue-600 transition-colors hover:text-blue-500 disabled:opacity-50"
                                     >
                                       {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
                                     </button>
                                     <button
                                       type="button"
-                                      className="shrink-0 text-[11px] text-neutral-700 hover:text-red-400"
+                                      className="shrink-0 text-[11px] text-gray-300 hover:text-red-500"
                                       onClick={() => handleUnlinkThread(thread.id)}
                                     >×</button>
                                   </div>
                                   {emailOpenError?.threadId === thread.id && (
-                                    <p className="mt-1 text-[10px] text-red-400">{emailOpenError.msg}</p>
+                                    <p className="mt-1 text-[10px] text-red-500">{emailOpenError.msg}</p>
                                   )}
                                   {threadAttachments && threadAttachments.length > 0 && (
                                     <div className="mt-1.5 flex flex-wrap gap-1">
                                       {threadAttachments.map((att) => (
-                                        <span key={att.id} className="max-w-[120px] truncate rounded border border-neutral-700 bg-neutral-800/60 px-1.5 py-0.5 text-[10px] text-neutral-500">
+                                        <span key={att.id} className="max-w-[120px] truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-500">
                                           📎 {att.file_name}
                                         </span>
                                       ))}
@@ -1526,64 +1526,64 @@ export function CardDetailsModal({
 
                 {/* Context — Attachments + Links */}
                 <div>
-                  <p className="mb-2 text-[11px] font-medium text-neutral-600">Context</p>
+                  <p className="mb-2 text-[11px] font-medium text-gray-500">Context</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setShowAttachments((v) => !v)}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${showAttachments ? "bg-neutral-800 text-neutral-200" : "bg-neutral-900/60 text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-300"}`}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${showAttachments ? "bg-gray-200 text-gray-800" : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"}`}
                     >
                       <span>📎</span>
                       <span>Attachments</span>
                       {noteAttachments.length > 0 && (
-                        <span className="text-neutral-500">{noteAttachments.length}</span>
+                        <span className="text-gray-400">{noteAttachments.length}</span>
                       )}
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowLinks((v) => !v)}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${showLinks ? "bg-neutral-800 text-neutral-200" : "bg-neutral-900/60 text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-300"}`}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] transition-colors ${showLinks ? "bg-gray-200 text-gray-800" : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"}`}
                     >
                       <span>🔗</span>
                       <span>Links</span>
                       {noteLinks.length > 0 && (
-                        <span className="text-neutral-500">{noteLinks.length}</span>
+                        <span className="text-gray-400">{noteLinks.length}</span>
                       )}
                     </button>
                   </div>
 
                   {/* Attachments panel */}
                   {showAttachments && (
-                    <div className="mt-2 space-y-0.5 rounded-xl bg-neutral-900/40 px-3 py-2.5">
+                    <div className="mt-2 space-y-0.5 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
                       {noteAttachments.map((att) => {
                         const ft = fileTypeLabel(att.mime_type, att.file_name);
                         return (
-                          <div key={att.id} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-neutral-800/40">
+                          <div key={att.id} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-gray-100">
                             <span className={`w-7 shrink-0 text-center font-mono text-[9px] font-bold tracking-wider ${ft.color}`}>{ft.abbr}</span>
                             <button
                               type="button"
                               onClick={() => setPreviewAttachment(att)}
                               className="min-w-0 flex-1 text-left"
                             >
-                              <span className="block truncate text-[11px] font-medium text-neutral-300 transition-colors group-hover:text-neutral-100">{att.file_name}</span>
+                              <span className="block truncate text-[11px] font-medium text-gray-700 transition-colors group-hover:text-gray-900">{att.file_name}</span>
                               {att.file_size != null && (
-                                <span className="block text-[10px] text-neutral-700">{fmtFileSize(att.file_size)}</span>
+                                <span className="block text-[10px] text-gray-400">{fmtFileSize(att.file_size)}</span>
                               )}
                             </button>
                             <button
                               type="button"
                               onClick={() => void handleDeleteAttachment(att)}
-                              className="shrink-0 text-[11px] text-neutral-800 opacity-0 transition-all hover:text-red-400 group-hover:opacity-100"
+                              className="shrink-0 text-[11px] text-gray-200 opacity-0 transition-all hover:text-red-500 group-hover:opacity-100"
                               aria-label="Remove attachment"
                             >×</button>
                           </div>
                         );
                       })}
                       {uploadingFile && (
-                        <p className="px-1.5 text-[11px] text-neutral-600">Uploading…</p>
+                        <p className="px-1.5 text-[11px] text-gray-500">Uploading…</p>
                       )}
                       {noteAttachments.length > 0 && (
-                        <div className="my-0.5 border-t border-neutral-800/30" />
+                        <div className="my-0.5 border-t border-gray-100" />
                       )}
                       <label className="flex cursor-pointer items-center gap-1 px-1.5 py-1">
                         <input
@@ -1596,7 +1596,7 @@ export function CardDetailsModal({
                             e.target.value = "";
                           }}
                         />
-                        <span className="text-[11px] text-neutral-700 transition-colors hover:text-neutral-400">
+                        <span className="text-[11px] text-gray-500 transition-colors hover:text-gray-700">
                           + Add file
                         </span>
                       </label>
@@ -1605,29 +1605,29 @@ export function CardDetailsModal({
 
                   {/* Links panel */}
                   {showLinks && (
-                    <div className="mt-2 space-y-0.5 rounded-xl bg-neutral-900/40 px-3 py-2.5">
+                    <div className="mt-2 space-y-0.5 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
                       {noteLinks.map((link) => {
                         const provider = detectProvider(link.url);
                         const host = linkHostname(link.url);
                         const label = link.title || host;
                         const sub = link.title ? (provider ?? host) : provider;
                         return (
-                          <div key={link.id} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-neutral-800/40">
-                            <span className="w-7 shrink-0 text-center text-[10px] text-neutral-700">↗</span>
+                          <div key={link.id} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-gray-100">
+                            <span className="w-7 shrink-0 text-center text-[10px] text-gray-300">↗</span>
                             <button
                               type="button"
                               onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
                               className="min-w-0 flex-1 text-left"
                             >
-                              <span className="block truncate text-[11px] font-medium text-indigo-400 transition-colors group-hover:text-indigo-300">{label}</span>
+                              <span className="block truncate text-[11px] font-medium text-indigo-600 transition-colors group-hover:text-indigo-500">{label}</span>
                               {sub && (
-                                <span className="block truncate text-[10px] text-neutral-600">{sub}</span>
+                                <span className="block truncate text-[10px] text-gray-500">{sub}</span>
                               )}
                             </button>
                             <button
                               type="button"
                               onClick={() => void handleDeleteLink(link.id)}
-                              className="shrink-0 text-[11px] text-neutral-800 opacity-0 transition-all hover:text-red-400 group-hover:opacity-100"
+                              className="shrink-0 text-[11px] text-gray-200 opacity-0 transition-all hover:text-red-500 group-hover:opacity-100"
                               aria-label="Remove link"
                             >×</button>
                           </div>
@@ -1635,18 +1635,18 @@ export function CardDetailsModal({
                       })}
                       {/* Add link form */}
                       {noteLinks.length > 0 && (
-                        <div className="my-0.5 border-t border-neutral-800/30" />
+                        <div className="my-0.5 border-t border-gray-100" />
                       )}
                       <div className="flex items-center gap-1.5 pt-0.5">
                         <input
-                          className="min-w-0 flex-1 rounded-lg bg-neutral-800/60 px-2 py-1 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-600 focus:ring-1 focus:ring-neutral-700"
+                          className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-indigo-400"
                           placeholder="https://…"
                           value={newLinkUrl}
                           onChange={(e) => setNewLinkUrl(e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") void handleAddLink(); }}
                         />
                         <input
-                          className="w-24 shrink-0 rounded-lg bg-neutral-800/60 px-2 py-1 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-600 focus:ring-1 focus:ring-neutral-700"
+                          className="w-24 shrink-0 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-indigo-400"
                           placeholder="Label (opt)"
                           value={newLinkTitle}
                           onChange={(e) => setNewLinkTitle(e.target.value)}
@@ -1667,33 +1667,33 @@ export function CardDetailsModal({
 
                 {/* Link-to-board form (opened from kebab menu) */}
                 {showLinkForm && onLinkToBoard && (
-                  <div className="rounded-xl bg-neutral-900/40 p-4 shadow-sm">
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 shadow-sm">
                     <div className="mb-3 flex items-center justify-between">
-                      <p className="text-xs font-medium text-neutral-400">Link to board</p>
-                      <button type="button" className="text-xs text-neutral-600 hover:text-neutral-300" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>✕</button>
+                      <p className="text-xs font-medium text-gray-600">Link to board</p>
+                      <button type="button" className="text-xs text-gray-400 hover:text-gray-600" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>✕</button>
                     </div>
                     <div className="space-y-2">
-                      <select className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkBoardId} onChange={(e) => handleLinkBoardChange(e.target.value)}>
+                      <select className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 outline-none focus:border-indigo-400" value={linkBoardId} onChange={(e) => handleLinkBoardChange(e.target.value)}>
                         <option value="">Select board…</option>
                         {otherBoards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                       </select>
                       {linkBoardId && (
                         linkColumnsLoading ? (
-                          <p className="text-xs text-neutral-600">Loading columns…</p>
+                          <p className="text-xs text-gray-400">Loading columns…</p>
                         ) : linkColumns.length === 0 ? (
-                          <p className="text-xs text-neutral-500">No columns on this board.</p>
+                          <p className="text-xs text-gray-500">No columns on this board.</p>
                         ) : (
-                          <select className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkColumnId} onChange={(e) => setLinkColumnId(e.target.value)}>
+                          <select className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 outline-none focus:border-indigo-400" value={linkColumnId} onChange={(e) => setLinkColumnId(e.target.value)}>
                             {linkColumns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
                         )
                       )}
                       {linkSuccess ? (
-                        <p className="text-xs text-green-500">Linked successfully!</p>
+                        <p className="text-xs text-green-600">Linked successfully!</p>
                       ) : (
                         <div className="flex gap-2">
                           <button type="button" className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50" onClick={handleLink} disabled={linking || !linkBoardId || !linkColumnId}>{linking ? "Linking…" : "Link"}</button>
-                          <button type="button" className="rounded-lg px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>Cancel</button>
+                          <button type="button" className="rounded-lg px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>Cancel</button>
                         </div>
                       )}
                     </div>
@@ -1704,14 +1704,14 @@ export function CardDetailsModal({
             </div>{/* end left column */}
 
             {/* ── RIGHT RAIL — Activity only ── */}
-            <div className="flex w-[272px] flex-shrink-0 flex-col border-l border-neutral-800/40 bg-neutral-900/20">
-              <div className="border-b border-neutral-800/40 px-4 py-2.5">
+            <div className="flex w-[272px] flex-shrink-0 flex-col border-l border-gray-100 bg-gray-50/50">
+              <div className="border-b border-gray-100 px-4 py-2.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-medium text-neutral-500">Activity</p>
+                  <p className="text-[11px] font-medium text-gray-500">Activity</p>
                   <button
                     type="button"
                     onClick={() => setShowAiSummary((v) => !v)}
-                    className={`text-[11px] transition-colors ${showAiSummary ? "text-indigo-400" : "text-neutral-600 hover:text-indigo-400"}`}
+                    className={`text-[11px] transition-colors ${showAiSummary ? "text-indigo-600" : "text-gray-400 hover:text-indigo-600"}`}
                   >
                     ✦ Summarize
                   </button>
@@ -1720,7 +1720,7 @@ export function CardDetailsModal({
 
               {/* AI Summary */}
               {showAiSummary && (
-                <div className="border-b border-neutral-800/30 px-4 py-2.5">
+                <div className="border-b border-gray-100 px-4 py-2.5">
                   <AiCardSummary
                     noteId={noteId}
                     onDismiss={() => setShowAiSummary(false)}
@@ -1730,16 +1730,16 @@ export function CardDetailsModal({
               )}
 
               {/* Composer */}
-              <div className="border-b border-neutral-800/30 px-4 py-2.5">
+              <div className="border-b border-gray-100 px-4 py-2.5">
                 {collabAuthed === false ? (
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xs text-neutral-600">Sign in to comment.</p>
-                    <Link href="/login" className="text-xs text-indigo-400 hover:text-indigo-300">Sign in →</Link>
+                    <p className="text-xs text-gray-500">Sign in to comment.</p>
+                    <Link href="/login" className="text-xs text-indigo-600 hover:text-indigo-500">Sign in →</Link>
                   </div>
                 ) : (
-                  <div className="rounded-lg bg-neutral-800/50 px-3 py-2 transition-colors focus-within:bg-neutral-800/70 focus-within:ring-1 focus-within:ring-neutral-700/50">
+                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 transition-colors focus-within:border-indigo-300 focus-within:ring-1 focus-within:ring-indigo-300/30">
                     <AutoTextarea
-                      className="w-full bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-700"
+                      className="w-full bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400"
                       placeholder="Write a comment…"
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
@@ -1754,7 +1754,7 @@ export function CardDetailsModal({
                     {(newComment.trim() || composerStatusChange) && (
                       <div className="mt-1.5 flex items-center gap-2">
                         <select
-                          className="bg-transparent text-[11px] text-neutral-600 outline-none"
+                          className="bg-transparent text-[11px] text-gray-500 outline-none"
                           value={composerStatusChange ?? ""}
                           onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}
                         >
@@ -1780,26 +1780,26 @@ export function CardDetailsModal({
               {/* Feed — newest first, scrollable */}
               <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
                 {collabLoading ? (
-                  <p className="px-1 py-3 text-[11px] text-neutral-700">Loading…</p>
+                  <p className="px-1 py-3 text-[11px] text-gray-400">Loading…</p>
                 ) : feedEntries.length === 0 ? (
-                  <p className="px-1 py-3 text-[11px] text-neutral-700">No activity yet.</p>
+                  <p className="px-1 py-3 text-[11px] text-gray-400">No activity yet.</p>
                 ) : (
                   <div className="space-y-px">
                     {feedEntries.map((entry) => {
                       if (entry.kind === "comment") {
                         const c = entry.data;
                         return (
-                          <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-neutral-800/30">
-                            <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-900/50">
-                              <span className="text-[8px] text-indigo-400">✦</span>
+                          <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-50">
+                            <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100">
+                              <span className="text-[8px] text-indigo-500">✦</span>
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="break-words text-xs leading-relaxed text-neutral-200">{c.content}</p>
-                              <p className="mt-0.5 text-[10px] text-neutral-700">{relativeTime(c.created_at)}</p>
+                              <p className="break-words text-xs leading-relaxed text-gray-800">{c.content}</p>
+                              <p className="mt-0.5 text-[10px] text-gray-400">{relativeTime(c.created_at)}</p>
                             </div>
                             <button
                               type="button"
-                              className="mt-0.5 shrink-0 text-[10px] text-neutral-700 opacity-0 hover:text-red-400 group-hover:opacity-100"
+                              className="mt-0.5 shrink-0 text-[10px] text-gray-300 opacity-0 hover:text-red-500 group-hover:opacity-100"
                               onClick={() => handleDeleteComment(c.id)}
                               aria-label="Delete"
                             >✕</button>
@@ -1808,14 +1808,14 @@ export function CardDetailsModal({
                       }
                       if (entry.kind === "local") {
                         return (
-                          <p key={entry.id} className="px-2 py-1.5 text-[11px] italic text-neutral-700">
+                          <p key={entry.id} className="px-2 py-1.5 text-[11px] italic text-gray-400">
                             {entry.text} · just now
                           </p>
                         );
                       }
                       const a = entry.data;
                       return (
-                        <p key={a.id} className="px-2 py-1.5 text-[11px] text-neutral-700">
+                        <p key={a.id} className="px-2 py-1.5 text-[11px] text-gray-400">
                           {formatActivity(a)} · {relativeTime(a.created_at)}
                         </p>
                       );
@@ -1831,37 +1831,37 @@ export function CardDetailsModal({
             <div className="flex-1 overflow-y-auto">
               <div className="space-y-4 p-5">
                 <AutoTextarea
-                  className="w-full bg-transparent text-sm text-neutral-200 outline-none placeholder:text-neutral-600"
+                  className="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400"
                   placeholder="Add a description…"
                   value={description}
                   onChange={(e) => handleDescriptionChange(e.target.value)}
                 />
-                <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30" ref={emailsRef}>
+                <div className="rounded-lg border border-gray-100 bg-gray-50" ref={emailsRef}>
                   <div className="p-3">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs text-neutral-500">Emails</span>
+                      <span className="text-xs text-gray-500">Emails</span>
                     </div>
                     {emailThreadsLoading ? (
-                      <p className="text-[11px] text-neutral-700">Loading…</p>
+                      <p className="text-[11px] text-gray-400">Loading…</p>
                     ) : emailThreads.length === 0 ? (
-                      <p className="text-[11px] text-neutral-700">No linked emails yet</p>
+                      <p className="text-[11px] text-gray-400">No linked emails yet</p>
                     ) : (
                       <div className="space-y-1.5">
                         {emailThreads.map((thread) => {
                           const threadAttachments = attachmentMap[thread.id];
                           return (
-                            <div key={thread.id} className="rounded border border-neutral-800/50 px-2 py-1.5">
+                            <div key={thread.id} className="rounded border border-gray-200 bg-white px-2 py-1.5">
                               <div className="flex items-center gap-1">
-                                <p className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">✉ {thread.subject ?? "Email thread"}</p>
-                                <button type="button" disabled={connectingThreadId !== null || emailSignInRedirecting !== null} onClick={() => void handleOpenThread(thread)} className="shrink-0 text-[11px] text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-50">
+                                <p className="min-w-0 flex-1 truncate text-[11px] text-gray-600">✉ {thread.subject ?? "Email thread"}</p>
+                                <button type="button" disabled={connectingThreadId !== null || emailSignInRedirecting !== null} onClick={() => void handleOpenThread(thread)} className="shrink-0 text-[11px] text-blue-600 transition-colors hover:text-blue-500 disabled:opacity-50">
                                   {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
                                 </button>
-                                <button type="button" className="shrink-0 text-[11px] text-neutral-700 transition-colors hover:text-red-400" onClick={() => handleUnlinkThread(thread.id)}>×</button>
+                                <button type="button" className="shrink-0 text-[11px] text-gray-300 transition-colors hover:text-red-500" onClick={() => handleUnlinkThread(thread.id)}>×</button>
                               </div>
-                              {emailOpenError?.threadId === thread.id && <p className="mt-0.5 text-[10px] text-red-400">{emailOpenError.msg}</p>}
+                              {emailOpenError?.threadId === thread.id && <p className="mt-0.5 text-[10px] text-red-500">{emailOpenError.msg}</p>}
                               {threadAttachments && threadAttachments.length > 0 && (
                                 <div className="mt-1 flex flex-wrap gap-1">
-                                  {threadAttachments.map((att) => <span key={att.id} className="max-w-[100px] truncate rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-[10px] text-neutral-500">📎 {att.file_name}</span>)}
+                                  {threadAttachments.map((att) => <span key={att.id} className="max-w-[100px] truncate rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500">📎 {att.file_name}</span>)}
                                 </div>
                               )}
                             </div>
@@ -1870,28 +1870,28 @@ export function CardDetailsModal({
                       </div>
                     )}
                   </div>
-                  <div className="border-t border-neutral-800/60 p-3">
+                  <div className="border-t border-gray-100 p-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-neutral-500">Attachments</span>
-                      <button type="button" className="text-[11px] text-neutral-700 hover:text-neutral-400" onClick={() => alert("File attachments coming soon")}>+ Add</button>
+                      <span className="text-xs text-gray-500">Attachments</span>
+                      <button type="button" className="text-[11px] text-gray-400 hover:text-gray-600" onClick={() => alert("File attachments coming soon")}>+ Add</button>
                     </div>
                   </div>
                 </div>
-                <div className="rounded-lg border border-neutral-800/60 bg-neutral-900/30">
-                  <div className="border-b border-neutral-800/60 px-3 pb-2 pt-3">
-                    <span className="text-xs text-neutral-500">Updates</span>
+                <div className="rounded-lg border border-gray-100 bg-gray-50">
+                  <div className="border-b border-gray-100 px-3 pb-2 pt-3">
+                    <span className="text-xs text-gray-500">Updates</span>
                   </div>
-                  {collabLoading ? <p className="p-3 text-xs text-neutral-600">Loading…</p> : collabAuthed === false ? (
+                  {collabLoading ? <p className="p-3 text-xs text-gray-400">Loading…</p> : collabAuthed === false ? (
                     <div className="flex items-center gap-1.5 p-3">
-                      <p className="text-xs text-neutral-600">Sign in to post updates.</p>
-                      <Link href="/login" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">Sign in →</Link>
+                      <p className="text-xs text-gray-500">Sign in to post updates.</p>
+                      <Link href="/login" className="text-xs text-indigo-600 transition-colors hover:text-indigo-500">Sign in →</Link>
                     </div>
                   ) : (
                     <div className="space-y-3 p-3">
-                      <div className="overflow-hidden rounded-lg border border-neutral-800 transition-colors focus-within:border-neutral-700">
-                        <AutoTextarea className="w-full bg-transparent px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-600" placeholder="Write a comment…" value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSubmitComposer(); } }} disabled={addingComment} />
-                        <div className="flex items-center gap-2 border-t border-neutral-800/60 px-2 py-1.5">
-                          <select className="bg-transparent px-1 py-0.5 text-xs text-neutral-600 outline-none" value={composerStatusChange ?? ""} onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}>
+                      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white transition-colors focus-within:border-indigo-300">
+                        <AutoTextarea className="w-full bg-transparent px-3 py-2 text-sm text-gray-800 outline-none placeholder:text-gray-400" placeholder="Write a comment…" value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSubmitComposer(); } }} disabled={addingComment} />
+                        <div className="flex items-center gap-2 border-t border-gray-100 px-2 py-1.5">
+                          <select className="bg-transparent px-1 py-0.5 text-xs text-gray-500 outline-none" value={composerStatusChange ?? ""} onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}>
                             <option value="">Status…</option>
                             {STATUS_VALUES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
                           </select>
@@ -1905,50 +1905,50 @@ export function CardDetailsModal({
                               const c = entry.data;
                               return (
                                 <div key={c.id} className="group flex items-start gap-2 py-1">
-                                  <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-neutral-800"><span className="text-[10px] text-neutral-500">✦</span></div>
-                                  <div className="min-w-0 flex-1"><p className="break-words text-sm text-neutral-200">{c.content}</p><p className="mt-0.5 text-[10px] text-neutral-600">{relativeTime(c.created_at)}</p></div>
-                                  <button type="button" className="mt-1 shrink-0 text-xs text-neutral-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100" onClick={() => handleDeleteComment(c.id)} aria-label="Delete comment">✕</button>
+                                  <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gray-100"><span className="text-[10px] text-gray-400">✦</span></div>
+                                  <div className="min-w-0 flex-1"><p className="break-words text-sm text-gray-800">{c.content}</p><p className="mt-0.5 text-[10px] text-gray-400">{relativeTime(c.created_at)}</p></div>
+                                  <button type="button" className="mt-1 shrink-0 text-xs text-gray-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100" onClick={() => handleDeleteComment(c.id)} aria-label="Delete comment">✕</button>
                                 </div>
                               );
                             }
                             if (entry.kind === "local") {
-                              return <p key={entry.id} className="py-0.5 text-[11px] italic text-neutral-700">{entry.text} · just now</p>;
+                              return <p key={entry.id} className="py-0.5 text-[11px] italic text-gray-400">{entry.text} · just now</p>;
                             }
                             const a = entry.data;
-                            return <p key={a.id} className="py-0.5 text-[11px] text-neutral-600">{formatActivity(a)} · {relativeTime(a.created_at)}</p>;
+                            return <p key={a.id} className="py-0.5 text-[11px] text-gray-400">{formatActivity(a)} · {relativeTime(a.created_at)}</p>;
                           })}
                         </div>
                       )}
                     </div>
                   )}
                 </div>
-                <div className="space-y-3 border-t border-neutral-800 pt-4">
+                <div className="space-y-3 border-t border-gray-100 pt-4">
                   {onLinkToBoard && otherBoards.length > 0 && (
-                    <>{!showLinkForm ? <button type="button" className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-neutral-200" onClick={() => setShowLinkForm(true)}>🔗 Link to another board…</button> : <div className="space-y-2.5 rounded-md border border-neutral-800 bg-neutral-900 p-3"><p className="text-xs font-medium text-neutral-400">Link to board</p><select className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkBoardId} onChange={(e) => handleLinkBoardChange(e.target.value)}><option value="">Select board…</option>{otherBoards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>{linkBoardId && (<>{linkColumnsLoading ? <p className="text-xs text-neutral-600">Loading columns…</p> : linkColumns.length === 0 ? <p className="text-xs text-neutral-500">No columns on this board.</p> : <select className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1.5 text-sm text-neutral-200 outline-none focus:border-neutral-600" value={linkColumnId} onChange={(e) => setLinkColumnId(e.target.value)}>{linkColumns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}</>)}{linkSuccess ? <p className="text-xs text-green-500">Linked successfully!</p> : <div className="flex gap-2"><button type="button" className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50" onClick={handleLink} disabled={linking || !linkBoardId || !linkColumnId}>{linking ? "Linking…" : "Link"}</button><button type="button" className="rounded-md px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>Cancel</button></div>}</div>}</>
+                    <>{!showLinkForm ? <button type="button" className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700" onClick={() => setShowLinkForm(true)}>🔗 Link to another board…</button> : <div className="space-y-2.5 rounded-md border border-gray-100 bg-gray-50 p-3"><p className="text-xs font-medium text-gray-500">Link to board</p><select className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 outline-none focus:border-indigo-300" value={linkBoardId} onChange={(e) => handleLinkBoardChange(e.target.value)}><option value="">Select board…</option>{otherBoards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>{linkBoardId && (<>{linkColumnsLoading ? <p className="text-xs text-gray-400">Loading columns…</p> : linkColumns.length === 0 ? <p className="text-xs text-gray-500">No columns on this board.</p> : <select className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 outline-none focus:border-indigo-300" value={linkColumnId} onChange={(e) => setLinkColumnId(e.target.value)}>{linkColumns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}</>)}{linkSuccess ? <p className="text-xs text-green-600">Linked successfully!</p> : <div className="flex gap-2"><button type="button" className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50" onClick={handleLink} disabled={linking || !linkBoardId || !linkColumnId}>{linking ? "Linking…" : "Link"}</button><button type="button" className="rounded-md px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700" onClick={() => { setShowLinkForm(false); setLinkBoardId(""); setLinkColumns([]); setLinkColumnId(""); }}>Cancel</button></div>}</div>}</>
                   )}
                   <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${archived ? "border-green-700 text-green-400 hover:bg-green-900/20" : "border-neutral-700 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"}`} onClick={handleArchiveToggle}>{archived ? "Restore from Archive" : "Archive Card"}</button>
-                    <button type="button" className="text-xs text-neutral-700 transition-colors hover:text-red-400" onClick={handleDeleteEverywhere}>Delete everywhere</button>
+                    <button type="button" className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${archived ? "border-green-300 text-green-600 hover:bg-green-50" : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`} onClick={handleArchiveToggle}>{archived ? "Restore from Archive" : "Archive Card"}</button>
+                    <button type="button" className="text-xs text-gray-300 transition-colors hover:text-red-500" onClick={handleDeleteEverywhere}>Delete everywhere</button>
                   </div>
                 </div>
               </div>
             </div>
-            <div className={`flex-shrink-0 border-t border-neutral-800 transition-all duration-200 md:border-l md:border-t-0 ${panelOpen ? "md:w-64" : "md:w-9"}`}>
-              <div className="flex items-center border-b border-neutral-800 px-2.5 py-2">
-                <button type="button" onClick={togglePanel} className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400">{panelOpen ? "Workspace ›" : "‹"}</button>
+            <div className={`flex-shrink-0 border-t border-gray-100 transition-all duration-200 md:border-l md:border-t-0 ${panelOpen ? "md:w-64" : "md:w-9"}`}>
+              <div className="flex items-center border-b border-gray-100 px-2.5 py-2">
+                <button type="button" onClick={togglePanel} className="text-[11px] text-gray-500 transition-colors hover:text-gray-700">{panelOpen ? "Workspace ›" : "‹"}</button>
               </div>
               {panelOpen && (
                 <div className="space-y-4 p-3">
                   <div className="space-y-1">
                     <label className="flex cursor-pointer items-center gap-2">
-                      <input type="checkbox" checked={isInActions} onChange={(e) => onToggleInActions(noteId, e.target.checked)} className="h-3.5 w-3.5 rounded border-neutral-700 accent-indigo-500" />
-                      <span className="text-xs text-neutral-400">Add to My Actions</span>
+                      <input type="checkbox" checked={isInActions} onChange={(e) => onToggleInActions(noteId, e.target.checked)} className="h-3.5 w-3.5 rounded border-gray-300 accent-indigo-600" />
+                      <span className="text-xs text-gray-500">Add to My Actions</span>
                     </label>
-                    {isInActions && <Link href="/actions" className="block text-[11px] text-indigo-400 transition-colors hover:text-indigo-300">View in Actions →</Link>}
+                    {isInActions && <Link href="/actions" className="block text-[11px] text-indigo-600 transition-colors hover:text-indigo-500">View in Actions →</Link>}
                   </div>
                   <div className="space-y-1.5">
-                    <p className="text-xs text-neutral-500">Personal Notes</p>
-                    <AutoTextarea className="w-full rounded-md border border-neutral-800/60 bg-transparent px-2.5 py-1.5 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-700" placeholder="Private note…" value={personalReminder} onChange={(e) => handlePersonalReminderChange(e.target.value)} />
+                    <p className="text-xs text-gray-500">Personal Notes</p>
+                    <AutoTextarea className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-indigo-300" placeholder="Private note…" value={personalReminder} onChange={(e) => handlePersonalReminderChange(e.target.value)} />
                   </div>
                 </div>
               )}
@@ -1995,7 +1995,7 @@ function NewGroupInline({
 
   return (
     <input
-      className="w-24 rounded border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-600"
+      className="w-24 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-700 outline-none placeholder:text-gray-400 focus:border-indigo-300"
       placeholder="+ new group"
       value={value}
       onChange={(e) => setValue(e.target.value)}
@@ -2026,7 +2026,7 @@ function TagInput({ onAdd }: { onAdd: (tag: string) => void }) {
 
   return (
     <input
-      className="w-24 rounded border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-200 outline-none placeholder:text-neutral-500 focus:border-neutral-600"
+      className="w-24 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] text-gray-700 outline-none placeholder:text-gray-400 focus:border-indigo-300"
       placeholder="+ category"
       value={value}
       onChange={(e) => setValue(e.target.value)}
@@ -2103,14 +2103,14 @@ function fileTypeLabel(mime: string | null, fileName: string): { abbr: string; c
   if (["ppt","pptx"].includes(ext) || mime?.includes("presentationml"))
     return { abbr: "PPT", color: "text-orange-400" };
   if (["txt","md"].includes(ext) || mime === "text/plain")
-    return { abbr: "TXT", color: "text-neutral-400" };
+    return { abbr: "TXT", color: "text-gray-400" };
   if (["zip","gz","tar","rar","7z"].includes(ext))
-    return { abbr: "ZIP", color: "text-purple-400" };
+    return { abbr: "ZIP", color: "text-purple-500" };
   if (["mp4","mov","avi","webm"].includes(ext) || mime?.startsWith("video/"))
-    return { abbr: "VID", color: "text-yellow-400" };
+    return { abbr: "VID", color: "text-yellow-500" };
   if (["mp3","wav","m4a","ogg"].includes(ext) || mime?.startsWith("audio/"))
-    return { abbr: "AUD", color: "text-pink-400" };
-  return { abbr: "FILE", color: "text-neutral-500" };
+    return { abbr: "AUD", color: "text-pink-500" };
+  return { abbr: "FILE", color: "text-gray-500" };
 }
 
 function detectProvider(url: string): string | null {

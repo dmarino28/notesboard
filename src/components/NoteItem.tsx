@@ -19,9 +19,9 @@ const ACTION_DOT: Record<ActionState, string> = {
 };
 
 const ACTION_BADGE: Record<ActionState, string> = {
-  needs_action: "bg-orange-950/60 text-orange-400 border border-orange-900/30",
-  waiting: "bg-sky-950/60 text-sky-400 border border-sky-900/30",
-  done: "bg-emerald-950/60 text-emerald-400 border border-emerald-900/30",
+  needs_action: "bg-orange-50 text-orange-600 border border-orange-200",
+  waiting: "bg-sky-50 text-sky-600 border border-sky-200",
+  done: "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 
 const ACTION_TEXT: Record<ActionState, string> = {
@@ -132,7 +132,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-150 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/45${tintColor ? " nb-card-glow" : ""}${isDragging ? " scale-[1.02] shadow-2xl ring-1 ring-indigo-400/30" : ""}`}
+      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-4 transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-card-hover${tintColor ? " nb-card-glow" : ""}${isDragging ? " scale-[1.02] shadow-elevated ring-2 ring-indigo-400/20" : " shadow-card border-black/[0.07] hover:border-black/[0.11]"}`}
     >
       {/* Per-user unseen dot — indigo, top-right */}
       {isUnseen && (
@@ -145,7 +145,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       {editing ? (
         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
           <textarea
-            className="w-full rounded-lg border border-white/[0.12] bg-neutral-800 p-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-indigo-500/40"
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20"
             rows={3}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
@@ -154,14 +154,14 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
           />
           <div className="flex items-center gap-2">
             <button
-              className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+              className="btn-primary rounded-lg px-3 py-1 text-xs font-medium disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
               onClick={handleSave}
               disabled={saving || !editContent.trim()}
             >
               {saving ? "Saving…" : "Save"}
             </button>
             <button
-              className="rounded-lg border border-white/[0.08] px-3 py-1 text-xs text-neutral-400 transition-colors hover:text-neutral-200 disabled:opacity-50"
+              className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 disabled:opacity-50"
               onClick={handleCancel}
               disabled={saving}
             >
@@ -172,7 +172,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
         </div>
       ) : (
         <>
-          <p className="whitespace-pre-wrap text-sm leading-tight text-neutral-100">{note.content}</p>
+          <p className="whitespace-pre-wrap text-[13px] font-medium leading-snug text-gray-900">{note.content}</p>
 
           {(note.due_date || note.event_start || note.status) && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -197,7 +197,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                 </span>
               )}
               {note.event_start && (
-                <span className="inline-flex items-center rounded-full bg-neutral-800/60 px-2 py-0.5 text-[11px] text-neutral-500">
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
                   {note.event_end
                     ? formatDateRange(note.event_start, note.event_end)
                     : formatDateOnly(note.event_start)}
@@ -224,8 +224,8 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                 <span
                   className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     note.visibility === "personal"
-                      ? "bg-neutral-800/80 text-neutral-500"
-                      : "bg-sky-950/60 text-sky-500"
+                      ? "bg-gray-100 text-gray-500"
+                      : "bg-sky-50 text-sky-600"
                   }`}
                 >
                   {note.visibility === "personal" ? "Personal" : "Shared"}
@@ -235,11 +235,11 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                 <span className="text-[11px] leading-none text-amber-500" title="Pinned to snapshot">★</span>
               )}
               {hasEmailThread && (
-                <span className="text-[11px] leading-none text-neutral-600" title="Email thread linked">✉</span>
+                <span className="text-[11px] leading-none text-gray-400" title="Email thread linked">✉</span>
               )}
               {note.placement_count > 1 && (
                 <span
-                  className="text-[11px] leading-none text-neutral-600"
+                  className="text-[11px] leading-none text-gray-400"
                   title={`On ${note.placement_count} boards`}
                 >
                   ⬡
@@ -251,7 +251,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   className={`text-[10px] ${
                     displayIsRecent
                       ? "font-medium text-emerald-600"
-                      : "text-neutral-700"
+                      : "text-gray-400"
                   }`}
                   title={note.last_public_activity_preview ?? ""}
                 >
@@ -262,7 +262,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
             {/* Mobile: three-dot menu trigger */}
             <button
               type="button"
-              className="sm:hidden rounded-md px-1 text-base leading-none text-neutral-500 transition-colors hover:text-neutral-300"
+              className="sm:hidden rounded-md px-1 text-base leading-none text-gray-400 transition-colors hover:text-gray-600"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); setShowMobileMenu(true); }}
               aria-label="Card actions"
@@ -275,7 +275,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
               {!currActionState && (
                 <button
                   type="button"
-                  className="text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
+                  className="text-[11px] text-gray-400 transition-colors hover:text-gray-600"
                   onClick={(e) => { e.stopPropagation(); onActionChange(note.note_id, "needs_action"); }}
                 >
                   + Actions
@@ -283,14 +283,14 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
               )}
               <button
                 type="button"
-                className="text-[11px] text-neutral-500 transition-colors hover:text-neutral-300"
+                className="text-[11px] text-gray-400 transition-colors hover:text-gray-700"
                 onClick={(e) => { e.stopPropagation(); setEditing(true); }}
               >
                 Edit
               </button>
               <button
                 type="button"
-                className="text-[11px] text-neutral-600 transition-colors hover:text-red-400"
+                className="text-[11px] text-gray-400 transition-colors hover:text-red-500"
                 onClick={(e) => { e.stopPropagation(); void handleRemove(); }}
               >
                 Remove
@@ -300,7 +300,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
                   type="button"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); onHighlightToggle(note.note_id, !note.highlight_on_snapshot); }}
-                  className={`text-[11px] transition-colors ${note.highlight_on_snapshot ? "text-amber-400 opacity-100" : "text-neutral-600 hover:text-amber-400"}`}
+                  className={`text-[11px] transition-colors ${note.highlight_on_snapshot ? "text-amber-500 opacity-100" : "text-gray-300 hover:text-amber-400"}`}
                   title={note.highlight_on_snapshot ? "Remove from snapshot" : "Pin to snapshot"}
                 >
                   {note.highlight_on_snapshot ? "★" : "☆"}
@@ -346,14 +346,14 @@ function MobileCardActionsSheet({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/60" onMouseDown={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-x border-t border-white/[0.08] bg-neutral-900 shadow-2xl">
+      <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-x border-t border-gray-200 bg-white shadow-elevated">
         <ul className="py-2">
           {!hasAction && (
             <li>
               <button
                 type="button"
                 onClick={onAddAction}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.05]"
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <span className="h-2 w-2 rounded-full bg-orange-400" />
                 Add to My Actions
@@ -364,7 +364,7 @@ function MobileCardActionsSheet({
             <button
               type="button"
               onClick={onEdit}
-              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.05]"
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-50"
             >
               Edit card
             </button>
@@ -374,7 +374,7 @@ function MobileCardActionsSheet({
               <button
                 type="button"
                 onClick={onMove}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-neutral-300 transition-colors hover:bg-white/[0.05]"
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-50"
               >
                 Move to list…
               </button>
@@ -384,7 +384,7 @@ function MobileCardActionsSheet({
             <button
               type="button"
               onClick={onRemove}
-              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-400 transition-colors hover:bg-white/[0.05]"
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-500 transition-colors hover:bg-gray-50"
             >
               Remove from board
             </button>
