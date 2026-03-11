@@ -81,7 +81,7 @@ export function ListHeader({
 
   return (
     <div
-      className="flex flex-shrink-0 cursor-grab items-center gap-1.5 rounded-t-xl px-2 py-2.5 active:cursor-grabbing"
+      className="flex flex-shrink-0 cursor-grab items-center gap-1.5 rounded-t-xl px-3 py-3 active:cursor-grabbing"
       style={headerBg ? { backgroundColor: headerBg } : undefined}
       {...dragHandleListeners}
       {...dragHandleAttributes}
@@ -102,11 +102,11 @@ export function ListHeader({
           onChange={(e) => setEditName(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={() => void saveEdit()}
-          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-sm font-semibold text-gray-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[13px] font-semibold text-gray-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
         />
       ) : (
         <h2
-          className="min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold text-gray-800 hover:text-gray-900"
+          className="min-w-0 flex-1 cursor-pointer truncate text-[13px] font-semibold text-gray-900"
           onClick={startEdit}
           title="Click to rename"
         >
@@ -115,7 +115,7 @@ export function ListHeader({
       )}
 
       {/* Card count */}
-      <span className="flex-shrink-0 min-w-[1.25rem] rounded bg-black/[0.06] px-1 text-center tabular-nums text-[11px] font-medium text-gray-500">{noteCount}</span>
+      <span className="flex-shrink-0 min-w-[1.25rem] rounded bg-gray-100 px-1 text-center tabular-nums text-[11px] font-medium text-gray-500">{noteCount}</span>
 
       {/* Collapse/expand */}
       <button

@@ -113,10 +113,10 @@ export function BoardSelector({
       <button
         onClick={() => (open ? closePopover() : openPopover())}
         aria-label="Switch board"
-        className={`flex max-w-[12rem] items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold tracking-tight transition-colors duration-150 ${
+        className={`flex max-w-[12rem] items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold tracking-tight shadow-sm transition-all duration-150 ${
           open
-            ? "bg-white/10 text-white"
-            : "text-neutral-100 hover:bg-white/[0.06] hover:text-white"
+            ? "border-gray-300 bg-gray-50 text-gray-900"
+            : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50"
         }`}
       >
         <span className="truncate">{boards.find((b) => b.id === currentBoardId)?.name ?? "Boards"}</span>

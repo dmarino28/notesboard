@@ -141,8 +141,8 @@ export function BoardTopBar({
                 href={href}
                 className={`whitespace-nowrap rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
                   isActiveView(label, href)
-                    ? "bg-white text-gray-900 shadow-[0_1px_4px_rgba(0,0,0,0.10)]"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-white text-indigo-700 shadow-[0_1px_5px_rgba(0,0,0,0.13)]"
+                    : "text-gray-500 hover:text-gray-800"
                 }`}
               >
                 {label}
@@ -163,15 +163,15 @@ export function BoardTopBar({
         />
 
         {/* Center: segmented view control */}
-        <nav className="absolute left-1/2 flex -translate-x-1/2 items-center rounded-[10px] bg-black/[0.05] p-0.5">
+        <nav className="absolute left-1/2 flex -translate-x-1/2 items-center rounded-[10px] bg-black/[0.07] p-0.5 ring-1 ring-inset ring-black/[0.04]">
           {views.map(({ label, href }) => (
             <Link
               key={label}
               href={href}
               className={`rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
                 isActiveView(label, href)
-                  ? "bg-white text-gray-900 shadow-[0_1px_4px_rgba(0,0,0,0.10)]"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "bg-white text-indigo-600 shadow-[0_1px_0_rgba(0,0,0,0.06),0_2px_10px_rgba(0,0,0,0.14)] ring-1 ring-inset ring-black/[0.05]"
+                  : "text-gray-500 hover:text-gray-800"
               }`}
             >
               {label}

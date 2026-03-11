@@ -7,9 +7,11 @@
   --foreground:     #111827;
 
   /* Surface layers */
-  --nb-page-bg:     #F4F5F7;
-  --nb-panel-bg:    #EBEDF0;
-  --nb-surface:     #ffffff;
+  --nb-page-bg:      #F4F5F7;
+  --nb-panel-bg:     #EBEDF0;
+  --nb-surface:      #ffffff;
+  /* Board canvas — clearly darker than white columns so columns read as surfaces */
+  --nb-board-canvas: #C8D0DD;
 
   /* Borders */
   --nb-border:      rgba(0, 0, 0, 0.08);
@@ -25,13 +27,16 @@
   --nb-accent:      #4F46E5;
   --nb-accent-h:    #4338CA;
 
-  /* Shadows — richer, more dimensional */
-  --shadow-card:        0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
-  --shadow-card-hover:  0 8px 28px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-column:      0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+  /* Shadows */
+  /* card: clear inner definition + soft ambient spread on the canvas */
+  --shadow-card:        0 1px 2px rgba(0,0,0,0.10), 0 3px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-card-hover:  0 4px 16px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.08);
+  /* column: white surface floating on the darker canvas */
+  --shadow-column:      0 1px 3px rgba(0,0,0,0.10), 0 4px 20px rgba(0,0,0,0.08);
   --shadow-panel:       0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
-  --shadow-elevated:    0 12px 32px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.07);
-  --shadow-topbar:      0 1px 0 rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-elevated:    0 12px 32px rgba(0,0,0,0.14), 0 4px 12px rgba(0,0,0,0.08);
+  /* topbar: anchors the nav above the canvas */
+  --shadow-topbar:      0 1px 0 rgba(0,0,0,0.10), 0 3px 10px rgba(0,0,0,0.06);
 
   /* Radii */
   --radius-card:    12px;
@@ -46,15 +51,16 @@
 
 /* Extend Tailwind theme with semantic color tokens */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background:    var(--background);
+  --color-foreground:    var(--foreground);
+  --font-sans:           var(--font-geist-sans);
+  --font-mono:           var(--font-geist-mono);
 
-  /* Surface utilities — use bg-surface, bg-panel, etc. */
-  --color-surface:  #ffffff;
-  --color-panel:    #EBEDF0;
-  --color-page:     #F4F5F7;
+  /* Surface utilities — use bg-surface, bg-panel, bg-board-canvas, etc. */
+  --color-surface:       #ffffff;
+  --color-panel:         #EBEDF0;
+  --color-page:          #F4F5F7;
+  --color-board-canvas:  var(--nb-board-canvas);
 }
 
 /* ── Addin tokens (scoped, unchanged) ─────────────────────────────────────── */
@@ -85,11 +91,7 @@ body {
 }
 
 body {
-  /* Atmospheric gradient: very subtle indigo blush at top, fading to warm neutral */
-  background:
-    radial-gradient(ellipse 160% 70% at 50% -10%, rgba(238,242,255,0.90) 0%, transparent 55%),
-    linear-gradient(180deg, #f1f3f7 0%, #ebedf2 100%);
-  background-attachment: fixed;
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   -webkit-font-smoothing: antialiased;
@@ -144,6 +146,16 @@ body {
   .shadow-panel        { box-shadow: var(--shadow-panel); }
   .shadow-elevated     { box-shadow: var(--shadow-elevated); }
   .shadow-topbar       { box-shadow: var(--shadow-topbar); }
+}
+
+/* ── Board canvas ─────────────────────────────────────────────────────────── */
+/* Applied to the flex-1 board area; provides the workspace surface behind columns */
+@layer utilities {
+  .nb-board-canvas-bg {
+    background: var(--nb-board-canvas);
+    /* Very subtle inner vignette to give depth at edges */
+    box-shadow: inset 0 1px 8px rgba(0,0,0,0.07);
+  }
 }
 
 /* ── Primary CTA gradient button ────────────────────────────────────────────── */

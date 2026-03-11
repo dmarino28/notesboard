@@ -617,7 +617,7 @@ export default function BoardPage() {
       onToggleInActions: () => {},
       onCreateTagDef: async () => null,
     }}>
-    <div className="flex h-screen flex-col overflow-hidden" style={{ background: "transparent" }}>
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F4F5F7]">
       <BoardTopBar
         boards={boards}
         boardId={boardId}
@@ -643,7 +643,7 @@ export default function BoardPage() {
         />
       )}
 
-      <div className="min-h-0 flex-1">
+      <div className="nb-board-canvas-bg min-h-0 flex-1">
         {isSearchMode ? (
           <SearchResultsView
             query={searchQuery}

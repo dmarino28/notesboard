@@ -132,7 +132,7 @@ export function NoteItem({ note, noteLabels, hasEmailThread, onRemove, onUpdate,
       onClick={() => {
         if (!editing) onOpen();
       }}
-      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-4 transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-card-hover${tintColor ? " nb-card-glow" : ""}${isDragging ? " scale-[1.02] shadow-elevated ring-2 ring-indigo-400/20" : " shadow-card border-black/[0.07] hover:border-black/[0.11]"}`}
+      className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-4 transition-all duration-150 ease-out hover:-translate-y-[1px] hover:shadow-card-hover${tintColor ? " nb-card-glow" : ""}${isDragging ? " scale-[1.02] shadow-elevated ring-2 ring-indigo-400/20" : " shadow-card border-gray-200 hover:border-gray-300"}`}
     >
       {/* Per-user unseen dot — indigo, top-right */}
       {isUnseen && (

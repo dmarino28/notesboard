@@ -64,7 +64,7 @@ export function Column({
   if (isCollapsed) {
     return (
       <div
-        className="flex w-14 flex-shrink-0 cursor-grab flex-col items-center gap-2 self-stretch rounded-xl bg-white/75 py-3 shadow-column ring-1 ring-inset ring-black/[0.05] backdrop-blur-sm transition-all duration-150 hover:shadow-[0_4px_18px_rgba(0,0,0,0.10)] hover:ring-black/[0.08] active:cursor-grabbing"
+        className="flex w-14 flex-shrink-0 cursor-grab flex-col items-center gap-2 self-stretch rounded-xl bg-white py-3 shadow-column ring-1 ring-inset ring-black/[0.06] transition-all duration-150 active:cursor-grabbing"
         onClick={onToggleCollapse}
         {...dragHandleListeners}
         {...dragHandleAttributes}
@@ -100,7 +100,7 @@ export function Column({
   // ── Expanded column ────────────────────────────────────────────────────────
   return (
     <div
-      className="flex max-h-[calc(100vh-100px)] w-72 flex-shrink-0 flex-col rounded-xl bg-white/75 shadow-column ring-1 ring-inset ring-black/[0.05] backdrop-blur-sm"
+      className="flex max-h-[calc(100vh-100px)] w-72 flex-shrink-0 flex-col rounded-xl bg-white shadow-column ring-1 ring-inset ring-black/[0.06]"
     >
       {/* Colored accent bar — replaces tinted header bg */}
       {column.color && (
@@ -129,7 +129,7 @@ export function Column({
       />
 
       {/* Card list — scrollable */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-gray-50 px-2 py-2">
         <SortableContext items={noteIds} strategy={verticalListSortingStrategy}>
           <ul className="min-h-8 space-y-2.5">
             {notes.length === 0 ? (

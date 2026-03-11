@@ -53,7 +53,7 @@ function InlineText({
 
   return (
     <div className="flex flex-col gap-[3px]">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">{label}</span>
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-gray-500">{label}</span>
       {editing ? (
         <input
           ref={inputRef}
@@ -70,7 +70,7 @@ function InlineText({
         <button
           type="button"
           onClick={() => { setDraft(value ?? ""); setEditing(true); }}
-          className={`cursor-text border-b border-transparent pb-px text-left text-[11px] transition-colors duration-100 hover:border-gray-300 ${value ? "text-gray-700" : "text-gray-300"} ${wide ? "max-w-[160px] truncate" : "max-w-[112px] truncate"}`}
+          className={`cursor-text border-b border-transparent pb-px text-left text-[12px] font-semibold transition-colors duration-100 hover:border-gray-300 ${value ? "text-gray-900" : "text-gray-300"} ${wide ? "max-w-[160px] truncate" : "max-w-[112px] truncate"}`}
           title={value ?? placeholder}
         >
           {value ?? placeholder}
@@ -111,7 +111,7 @@ function InlineDate({
 
   return (
     <div className="flex flex-col gap-[3px]">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">{label}</span>
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-gray-500">{label}</span>
       {editing ? (
         <input
           ref={inputRef}
@@ -128,7 +128,7 @@ function InlineDate({
         <button
           type="button"
           onClick={() => { setDraft(value ?? ""); setEditing(true); }}
-          className={`cursor-text border-b border-transparent pb-px text-left text-[11px] transition-colors duration-100 hover:border-gray-300 ${value ? "text-gray-700" : "text-gray-300"}`}
+          className={`cursor-text border-b border-transparent pb-px text-left text-[12px] font-semibold transition-colors duration-100 hover:border-gray-300 ${value ? "text-gray-900" : "text-gray-300"}`}
         >
           {value ? formatDate(value) : "—"}
         </button>
@@ -163,7 +163,7 @@ function MarketsField({
 
   return (
     <div className="flex flex-col gap-[3px]">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400">Markets</span>
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-gray-500">Markets</span>
       <div className="flex flex-wrap items-center gap-1">
         {value.map((m) => (
           <span
@@ -810,7 +810,7 @@ export function SnapshotHeader({
 
   return (
     // Left accent bar via border-l; subtle bottom shadow separates snapshot from board canvas
-    <div className="flex-shrink-0 border-b border-l-[3px] border-b-gray-200 border-l-indigo-400 bg-white py-2 pl-[18px] pr-5 shadow-[0_2px_6px_rgba(0,0,0,0.04)]">
+    <div className="flex-shrink-0 border-b border-l-[3px] border-b-gray-300 border-l-indigo-400 bg-gradient-to-b from-white to-[#edf0f4] py-2 pl-[18px] pr-5 shadow-[0_4px_16px_rgba(0,0,0,0.10)]">
 
       {/* ── Single header row ── */}
       <div className="flex h-6 items-center gap-2.5">
@@ -934,7 +934,7 @@ export function SnapshotHeader({
               </p>
             ) : (
               <div className="flex items-start gap-1.5">
-                <span className="mt-[3px] flex-shrink-0 text-[10px] uppercase tracking-[0.08em] text-gray-400">
+                <span className="mt-[3px] flex-shrink-0 text-[10px] font-medium uppercase tracking-[0.08em] text-gray-500">
                   Pinned
                 </span>
                 <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -944,7 +944,7 @@ export function SnapshotHeader({
                       return (
                         <div
                           key={note.id}
-                          className="group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white py-1 pl-2.5 pr-1.5 shadow-card transition-all duration-150 hover:-translate-y-[1px] hover:border-gray-300 hover:shadow-card-hover"
+                          className="group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-amber-200/60 bg-amber-50/40 py-1 pl-2.5 pr-1.5 shadow-card transition-all duration-150 hover:-translate-y-[1px] hover:border-amber-300/70 hover:shadow-card-hover"
                           onClick={() => onOpenNote(note.note_id)}
                           role="button"
                           tabIndex={0}

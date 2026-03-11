@@ -486,7 +486,7 @@ export function Board({
           </div>
         )}
         {activeColumn && (
-          <div className="w-72 flex-shrink-0 rounded-xl border border-black/[0.06] bg-white/80 p-3 shadow-column opacity-90 backdrop-blur-sm">
+          <div className="w-72 flex-shrink-0 rounded-xl border border-gray-200 bg-white p-3 shadow-column opacity-90">
             <div className="flex items-center gap-2">
               {activeColumn.color && (
                 <span
@@ -635,7 +635,7 @@ function AddListStub({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
   }
 
   return (
-    <div className="flex w-72 flex-shrink-0 flex-col gap-2 rounded-xl border border-gray-200 bg-white/75 p-3 shadow-column backdrop-blur-sm">
+    <div className="flex w-72 flex-shrink-0 flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-column">
       <input
         autoFocus
         value={name}
