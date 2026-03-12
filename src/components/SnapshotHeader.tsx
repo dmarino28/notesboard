@@ -3,18 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BoardRow, ReleaseScheduleItem } from "@/lib/boards";
-import type { PlacedNoteRow } from "@/lib/placements";
-import { timedLabelForDueDate } from "@/lib/dateUtils";
 import { BoardBriefingPanel } from "@/components/BoardBriefingPanel";
 
 type Props = {
   board: BoardRow;
-  highlightedNotes: PlacedNoteRow[];
   blockedCount: number;
   overdueCount: number;
   onBoardUpdate: (fields: Partial<BoardRow>) => Promise<void>;
-  onHighlightToggle: (noteId: string, val: boolean) => void;
-  onOpenNote: (noteId: string) => void;
 };
 
 // ── Inline editable text field ────────────────────────────────────────────────
@@ -776,12 +771,9 @@ function collapsedSummary(blocked: number, overdue: number): string {
 
 export function SnapshotHeader({
   board,
-  highlightedNotes,
   blockedCount,
   overdueCount,
   onBoardUpdate,
-  onHighlightToggle,
-  onOpenNote,
 }: Props) {
   const collapseKey = `nb_snapshot_${board.id}`;
   const [collapsed, setCollapsed] = useState(() => {
@@ -924,61 +916,6 @@ export function SnapshotHeader({
                 wide
               />
             </div>
-          </div>
-
-          {/* Pinned cards — subtle top divider separates from field rows */}
-          <div className="border-t border-gray-100 pt-1.5">
-            {highlightedNotes.length === 0 ? (
-              <p className="text-[10px] text-gray-400">
-                No pinned cards — use ☆ on a card to pin one.
-              </p>
-            ) : (
-              <div className="flex items-start gap-1.5">
-                <span className="mt-[3px] flex-shrink-0 text-[10px] font-medium uppercase tracking-[0.08em] text-gray-500">
-                  Pinned
-                </span>
-                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  <div className="flex gap-1.5 pb-0.5">
-                    {highlightedNotes.map((note) => {
-                      const dueLabel = timedLabelForDueDate(note.due_date);
-                      return (
-                        <div
-                          key={note.id}
-                          className="group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-amber-200/60 bg-amber-50/40 py-1 pl-2.5 pr-1.5 shadow-card transition-all duration-150 hover:-translate-y-[1px] hover:border-amber-300/70 hover:shadow-card-hover"
-                          onClick={() => onOpenNote(note.note_id)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpenNote(note.note_id); }}
-                        >
-                          <div className="min-w-0">
-                            <p className="max-w-[180px] truncate text-[11px] text-gray-800">
-                              {note.content}
-                            </p>
-                            {dueLabel && (
-                              <span className={`mt-0.5 block rounded px-1 text-[10px] font-medium leading-tight ${dueLabel.badgeClass}`}>
-                                {dueLabel.label}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onHighlightToggle(note.note_id, false);
-                            }}
-                            className="flex-shrink-0 text-[10px] text-amber-500 opacity-0 transition-opacity duration-100 group-hover:opacity-100 hover:text-gray-400"
-                            title="Unpin"
-                          >
-                            ★
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
         </div>

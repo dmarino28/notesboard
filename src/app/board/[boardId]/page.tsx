@@ -634,13 +634,66 @@ export default function BoardPage() {
       {currentBoard?.show_snapshot_header && !isSearchMode && (
         <SnapshotHeader
           board={currentBoard}
-          highlightedNotes={highlightedNotes}
           blockedCount={blockedCount}
           overdueCount={overdueCount}
           onBoardUpdate={handleBoardUpdate}
-          onHighlightToggle={handleHighlightToggle}
-          onOpenNote={openModal}
         />
+      )}
+
+      {/* ── My Pins — personal layer, only shown when pins exist ──────────────── */}
+      {!isSearchMode && highlightedNotes.length > 0 && (
+        <div className="flex-shrink-0 border-b border-[#e8eaf6] bg-[#f5f7ff] px-4 py-2">
+          <div className="flex items-center gap-2">
+            {/* Lock icon */}
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 11 11"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="flex-shrink-0 text-indigo-400"
+              aria-hidden="true"
+            >
+              <rect x="2" y="5" width="7" height="5" rx="1" />
+              <path d="M3.5 5V3.5a2 2 0 0 1 4 0V5" />
+            </svg>
+            <span className="text-[11px] font-semibold text-indigo-700">My Pins</span>
+            <span className="text-[10px] text-indigo-400/80">· Private to you</span>
+            <div className="ml-2 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-1.5 pb-0.5">
+                {highlightedNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="group flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-amber-200/60 bg-amber-50/60 py-1 pl-2.5 pr-1.5 shadow-sm transition-all duration-150 hover:-translate-y-[1px] hover:border-amber-300/70 hover:shadow-md"
+                    onClick={() => openModal(note.note_id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openModal(note.note_id); }}
+                  >
+                    <p className="max-w-[180px] truncate text-[11px] text-gray-800">
+                      {note.content}
+                    </p>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleHighlightToggle(note.note_id, false);
+                      }}
+                      className="flex-shrink-0 text-[10px] text-amber-500 opacity-0 transition-opacity duration-100 group-hover:opacity-100 hover:text-gray-400"
+                      title="Unpin"
+                    >
+                      ★
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="nb-board-canvas-bg min-h-0 flex-1">

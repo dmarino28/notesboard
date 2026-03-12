@@ -1412,118 +1412,6 @@ export function CardDetailsModal({
                   />
                 </div>
 
-                {/* My layer — personal, collapsible */}
-                <div className="rounded-xl bg-gray-50 ring-1 ring-gray-100 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => setMyLayerOpen((v) => !v)}
-                    className="flex w-full items-center justify-between px-4 py-3 text-[11px] font-medium text-gray-500 hover:text-gray-700"
-                  >
-                    <span>My layer</span>
-                    <div className="flex items-center gap-2">
-                      {!myLayerOpen && (
-                        <span className="text-[10px] font-normal normal-case tracking-normal text-gray-400">
-                          {[
-                            isInActions && "In Actions",
-                            personalReminder.trim() && "note",
-                            emailThreads.length > 0 && `${emailThreads.length} email${emailThreads.length !== 1 ? "s" : ""}`,
-                          ].filter(Boolean).join(" · ")}
-                        </span>
-                      )}
-                      <span className="text-gray-400">{myLayerOpen ? "▾" : "▸"}</span>
-                    </div>
-                  </button>
-
-                  {myLayerOpen && (
-                    <div className="space-y-3.5 border-t border-gray-100 px-4 pb-3.5 pt-3">
-
-                      {/* My actions */}
-                      <div>
-                        <p className="mb-2 text-[11px] text-gray-500">My actions</p>
-                        <div className="flex items-center gap-3">
-                          <label className="flex cursor-pointer items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isInActions}
-                              onChange={(e) => onToggleInActions(noteId, e.target.checked)}
-                              className="h-3.5 w-3.5 rounded accent-indigo-500"
-                            />
-                            <span className="text-xs text-gray-500">Track in My Actions</span>
-                          </label>
-                          {isInActions && (
-                            <Link href="/actions" className="text-[11px] text-indigo-600 transition-colors hover:text-indigo-500">
-                              View →
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Notes to self — auto-grows, never clips */}
-                      <div>
-                        <p className="mb-1.5 text-[11px] text-gray-500">Notes to self</p>
-                        <AutoTextarea
-                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-indigo-300 focus:ring-1 focus:ring-indigo-300/30"
-                          placeholder="Private notes…"
-                          value={personalReminder}
-                          onChange={(e) => handlePersonalReminderChange(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Linked emails */}
-                      <div ref={emailsRef}>
-                        <p className="mb-1.5 text-[11px] text-gray-500">
-                          Linked emails{emailThreads.length > 0 ? ` (${emailThreads.length})` : ""}
-                        </p>
-                        {emailThreadsLoading ? (
-                          <p className="text-[11px] text-gray-400">Loading…</p>
-                        ) : emailThreads.length === 0 ? (
-                          <p className="text-[11px] text-gray-400">No linked emails</p>
-                        ) : (
-                          <div className="space-y-1">
-                            {emailThreads.map((thread) => {
-                              const threadAttachments = attachmentMap[thread.id];
-                              return (
-                                <div key={thread.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                                  <div className="flex items-center gap-2">
-                                    <p className="min-w-0 flex-1 truncate text-[11px] text-gray-600">
-                                      ✉ {thread.subject ?? "Email thread"}
-                                    </p>
-                                    <button
-                                      type="button"
-                                      disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
-                                      onClick={() => void handleOpenThread(thread)}
-                                      className="shrink-0 text-[11px] text-blue-600 transition-colors hover:text-blue-500 disabled:opacity-50"
-                                    >
-                                      {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="shrink-0 text-[11px] text-gray-300 hover:text-red-500"
-                                      onClick={() => handleUnlinkThread(thread.id)}
-                                    >×</button>
-                                  </div>
-                                  {emailOpenError?.threadId === thread.id && (
-                                    <p className="mt-1 text-[10px] text-red-500">{emailOpenError.msg}</p>
-                                  )}
-                                  {threadAttachments && threadAttachments.length > 0 && (
-                                    <div className="mt-1.5 flex flex-wrap gap-1">
-                                      {threadAttachments.map((att) => (
-                                        <span key={att.id} className="max-w-[120px] truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-500">
-                                          📎 {att.file_name}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 {/* Context — Attachments + Links */}
                 <div>
                   <p className="mb-2 text-[11px] font-medium text-gray-500">Context</p>
@@ -1700,128 +1588,233 @@ export function CardDetailsModal({
                   </div>
                 )}
 
-              </div>
-            </div>{/* end left column */}
-
-            {/* ── RIGHT RAIL — Activity only ── */}
-            <div className="flex w-[272px] flex-shrink-0 flex-col border-l border-gray-100 bg-gray-50/50">
-              <div className="border-b border-gray-100 px-4 py-2.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-medium text-gray-500">Activity</p>
-                  <button
-                    type="button"
-                    onClick={() => setShowAiSummary((v) => !v)}
-                    className={`text-[11px] transition-colors ${showAiSummary ? "text-indigo-600" : "text-gray-400 hover:text-indigo-600"}`}
-                  >
-                    ✦ Summarize
-                  </button>
-                </div>
-              </div>
-
-              {/* AI Summary */}
-              {showAiSummary && (
-                <div className="border-b border-gray-100 px-4 py-2.5">
-                  <AiCardSummary
-                    noteId={noteId}
-                    onDismiss={() => setShowAiSummary(false)}
-                    onInsert={(text) => setNewComment(text)}
-                  />
-                </div>
-              )}
-
-              {/* Composer */}
-              <div className="border-b border-gray-100 px-4 py-2.5">
-                {collabAuthed === false ? (
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs text-gray-500">Sign in to comment.</p>
-                    <Link href="/login" className="text-xs text-indigo-600 hover:text-indigo-500">Sign in →</Link>
+                {/* Activity — shared conversation */}
+                <div className="border-t border-gray-100 pt-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[11px] font-medium text-gray-500">Activity</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAiSummary((v) => !v)}
+                      className={`text-[11px] transition-colors ${showAiSummary ? "text-indigo-600" : "text-gray-400 hover:text-indigo-600"}`}
+                    >
+                      ✦ Summarize
+                    </button>
                   </div>
-                ) : (
-                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 transition-colors focus-within:border-indigo-300 focus-within:ring-1 focus-within:ring-indigo-300/30">
-                    <AutoTextarea
-                      className="w-full bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400"
-                      placeholder="Write a comment…"
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void handleSubmitComposer();
-                        }
-                      }}
-                      disabled={addingComment}
-                    />
-                    {(newComment.trim() || composerStatusChange) && (
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <select
-                          className="bg-transparent text-[11px] text-gray-500 outline-none"
-                          value={composerStatusChange ?? ""}
-                          onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}
-                        >
-                          <option value="">Status…</option>
-                          {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
-                            <option key={s} value={s}>{STATUS_META[s].label}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="ml-auto rounded-md bg-indigo-600 px-2.5 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
-                          onClick={handleSubmitComposer}
-                          disabled={addingComment || (!newComment.trim() && !composerStatusChange)}
-                        >
-                          {addingComment ? "…" : "Send"}
-                        </button>
+
+                  {/* AI Summary */}
+                  {showAiSummary && (
+                    <div className="mb-3">
+                      <AiCardSummary
+                        noteId={noteId}
+                        onDismiss={() => setShowAiSummary(false)}
+                        onInsert={(text) => setNewComment(text)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Composer */}
+                  <div className="mb-3">
+                    {collabAuthed === false ? (
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs text-gray-500">Sign in to comment.</p>
+                        <Link href="/login" className="text-xs text-indigo-600 hover:text-indigo-500">Sign in →</Link>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 transition-colors focus-within:border-indigo-300 focus-within:ring-1 focus-within:ring-indigo-300/30">
+                        <AutoTextarea
+                          className="w-full bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400"
+                          placeholder="Write a comment…"
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              void handleSubmitComposer();
+                            }
+                          }}
+                          disabled={addingComment}
+                        />
+                        {(newComment.trim() || composerStatusChange) && (
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <select
+                              className="bg-transparent text-[11px] text-gray-500 outline-none"
+                              value={composerStatusChange ?? ""}
+                              onChange={(e) => setComposerStatusChange((e.target.value as NoteStatus) || null)}
+                            >
+                              <option value="">Status…</option>
+                              {STATUS_VALUES.filter((s) => s !== "done").map((s) => (
+                                <option key={s} value={s}>{STATUS_META[s].label}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="ml-auto rounded-md bg-indigo-600 px-2.5 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
+                              onClick={handleSubmitComposer}
+                              disabled={addingComment || (!newComment.trim() && !composerStatusChange)}
+                            >
+                              {addingComment ? "…" : "Send"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* Feed — newest first, scrollable */}
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-                {collabLoading ? (
-                  <p className="px-1 py-3 text-[11px] text-gray-400">Loading…</p>
-                ) : feedEntries.length === 0 ? (
-                  <p className="px-1 py-3 text-[11px] text-gray-400">No activity yet.</p>
-                ) : (
-                  <div className="space-y-px">
-                    {feedEntries.map((entry) => {
-                      if (entry.kind === "comment") {
-                        const c = entry.data;
-                        return (
-                          <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-50">
-                            <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100">
-                              <span className="text-[8px] text-indigo-500">✦</span>
+                  {/* Feed */}
+                  {collabLoading ? (
+                    <p className="px-1 py-2 text-[11px] text-gray-400">Loading…</p>
+                  ) : feedEntries.length === 0 ? (
+                    <p className="px-1 py-2 text-[11px] text-gray-400">No activity yet.</p>
+                  ) : (
+                    <div className="space-y-px">
+                      {feedEntries.map((entry) => {
+                        if (entry.kind === "comment") {
+                          const c = entry.data;
+                          return (
+                            <div key={c.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-100">
+                              <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100">
+                                <span className="text-[8px] text-indigo-500">✦</span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="break-words text-xs leading-relaxed text-gray-800">{c.content}</p>
+                                <p className="mt-0.5 text-[10px] text-gray-400">{relativeTime(c.created_at)}</p>
+                              </div>
+                              <button
+                                type="button"
+                                className="mt-0.5 shrink-0 text-[10px] text-gray-300 opacity-0 hover:text-red-500 group-hover:opacity-100"
+                                onClick={() => handleDeleteComment(c.id)}
+                                aria-label="Delete"
+                              >✕</button>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="break-words text-xs leading-relaxed text-gray-800">{c.content}</p>
-                              <p className="mt-0.5 text-[10px] text-gray-400">{relativeTime(c.created_at)}</p>
-                            </div>
-                            <button
-                              type="button"
-                              className="mt-0.5 shrink-0 text-[10px] text-gray-300 opacity-0 hover:text-red-500 group-hover:opacity-100"
-                              onClick={() => handleDeleteComment(c.id)}
-                              aria-label="Delete"
-                            >✕</button>
-                          </div>
-                        );
-                      }
-                      if (entry.kind === "local") {
+                          );
+                        }
+                        if (entry.kind === "local") {
+                          return (
+                            <p key={entry.id} className="px-2 py-1.5 text-[11px] italic text-gray-400">
+                              {entry.text} · just now
+                            </p>
+                          );
+                        }
+                        const a = entry.data;
                         return (
-                          <p key={entry.id} className="px-2 py-1.5 text-[11px] italic text-gray-400">
-                            {entry.text} · just now
+                          <p key={a.id} className="px-2 py-1.5 text-[11px] text-gray-400">
+                            {formatActivity(a)} · {relativeTime(a.created_at)}
                           </p>
                         );
-                      }
-                      const a = entry.data;
-                      return (
-                        <p key={a.id} className="px-2 py-1.5 text-[11px] text-gray-400">
-                          {formatActivity(a)} · {relativeTime(a.created_at)}
-                        </p>
-                      );
-                    })}
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>{/* end left column */}
+
+            {/* ── RIGHT RAIL — My Layer ── */}
+            <div className="flex w-[340px] flex-shrink-0 flex-col border-l border-gray-200">
+
+              {/* ── MY LAYER ── fills full rail height */}
+              <div className="nb-scroll flex-1 overflow-y-auto">
+
+                {/* Header — faint indigo wash signals "personal space" */}
+                <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-indigo-100/80 bg-[#f5f7ff] px-4 py-3">
+                  <svg
+                    width="12" height="12" viewBox="0 0 12 12"
+                    fill="none" stroke="currentColor" strokeWidth="1.6"
+                    strokeLinecap="round" strokeLinejoin="round"
+                    className="shrink-0 text-indigo-400" aria-hidden="true"
+                  >
+                    <rect x="1.5" y="5" width="9" height="6" rx="1.5" />
+                    <path d="M4 5V3.5a2 2 0 0 1 4 0V5" />
+                  </svg>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold tracking-wide text-gray-700">My Layer</p>
+                    <p className="text-[10px] text-indigo-400/90">Private to you</p>
                   </div>
-                )}
+                </div>
+
+                {/* My Actions */}
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-gray-400">My Actions</p>
+                  <div className="flex items-center gap-3">
+                    <label className="flex flex-1 cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isInActions}
+                        onChange={(e) => onToggleInActions(noteId, e.target.checked)}
+                        className="h-3.5 w-3.5 rounded accent-indigo-500"
+                      />
+                      <span className="text-xs text-gray-600">Track in My Actions</span>
+                    </label>
+                    {isInActions && (
+                      <Link href="/actions" className="shrink-0 text-[11px] text-indigo-600 transition-colors hover:text-indigo-500">
+                        View →
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {/* Notes to self */}
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-gray-400">Notes to Self</p>
+                  <AutoTextarea
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-indigo-300 focus:ring-1 focus:ring-indigo-300/30"
+                    placeholder="Private notes…"
+                    value={personalReminder}
+                    onChange={(e) => handlePersonalReminderChange(e.target.value)}
+                  />
+                </div>
+
+                {/* Linked emails */}
+                <div className="px-4 py-3" ref={emailsRef}>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                    Linked Emails{emailThreads.length > 0 ? ` · ${emailThreads.length}` : ""}
+                  </p>
+                  {emailThreadsLoading ? (
+                    <p className="text-[11px] text-gray-400">Loading…</p>
+                  ) : emailThreads.length === 0 ? (
+                    <p className="text-[11px] text-gray-400">No linked emails</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {emailThreads.map((thread) => {
+                        const threadAttachments = attachmentMap[thread.id];
+                        return (
+                          <div key={thread.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <p className="min-w-0 flex-1 truncate text-[11px] text-gray-700">
+                                ✉ {thread.subject ?? "Email thread"}
+                              </p>
+                              <button
+                                type="button"
+                                disabled={connectingThreadId !== null || emailSignInRedirecting !== null}
+                                onClick={() => void handleOpenThread(thread)}
+                                className="shrink-0 text-[11px] text-indigo-600 transition-colors hover:text-indigo-500 disabled:opacity-50"
+                              >
+                                {emailSignInRedirecting === thread.id ? "…" : connectingThreadId === thread.id ? "…" : "Open →"}
+                              </button>
+                              <button
+                                type="button"
+                                className="shrink-0 text-[11px] text-gray-300 hover:text-red-500"
+                                onClick={() => handleUnlinkThread(thread.id)}
+                              >×</button>
+                            </div>
+                            {emailOpenError?.threadId === thread.id && (
+                              <p className="mt-1 text-[10px] text-red-500">{emailOpenError.msg}</p>
+                            )}
+                            {threadAttachments && threadAttachments.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {threadAttachments.map((att) => (
+                                  <span key={att.id} className="max-w-[140px] truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-500">
+                                    📎 {att.file_name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>{/* end right rail */}
           </div>
