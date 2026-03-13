@@ -52,6 +52,7 @@ export function BoardTopBar({
     { label: "Board", href: `/board/${boardId}` },
     { label: "Calendar", href: "/calendar" },
     { label: "Timeline", href: "/timeline" },
+    { label: "Notes", href: "/notes" },
   ];
 
   function isActiveView(label: string, href: string) {

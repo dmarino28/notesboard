@@ -9,10 +9,10 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Props = {
-  boardHref: string;
+  boardHref?: string;
 };
 
-export function SharedTopBar({ boardHref }: Props) {
+export function SharedTopBar({ boardHref = "/" }: Props) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -33,10 +33,12 @@ export function SharedTopBar({ boardHref }: Props) {
     { label: "Board", href: boardHref },
     { label: "Calendar", href: "/calendar" },
     { label: "Timeline", href: "/timeline" },
+    { label: "Notes", href: "/notes" },
   ];
 
   function isActive(label: string, href: string) {
-    return label === "Board" ? pathname?.startsWith("/board/") : pathname === href;
+    if (label === "Board") return !!pathname?.startsWith("/board/");
+    return pathname === href;
   }
 
   const authEl = userEmail ? (
