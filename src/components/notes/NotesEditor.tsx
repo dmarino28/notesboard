@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { Fragment, useCallback } from "react";
 import type { NoteEntryWithSignals } from "@/lib/noteEntries";
 import type { BoardRow } from "@/lib/boards";
+import type { AliasMap } from "@/lib/noteAliases";
 import { NoteEntryRow } from "./NoteEntryRow";
 import { viewByDay } from "@/lib/noteViews";
+import { resolveBoardHex } from "./ContextBadge";
 
 type Props = {
   entries: NoteEntryWithSignals[];
@@ -20,6 +22,9 @@ type Props = {
   onArrow: (id: string, direction: "up" | "down") => void;
   onSelect: (id: string) => void;
   onAddFirstEntry: () => void;
+  onOrganize?: () => void;
+  userAliases?: AliasMap;
+  onConfirmAlias?: (alias: string, boardId: string) => void;
 };
 
 export function NotesEditor({
@@ -36,6 +41,9 @@ export function NotesEditor({
   onArrow,
   onSelect,
   onAddFirstEntry,
+  onOrganize,
+  userAliases,
+  onConfirmAlias,
 }: Props) {
   const today = new Date().toISOString().split("T")[0];
   const dayGroups = viewByDay(entries);
@@ -63,10 +71,20 @@ export function NotesEditor({
     );
   }
 
+  // Precompute context headers: show a board header when context changes between entries.
+  // lastBoardId resets at each day group so each day's first context section is always labeled.
   return (
     <div className="space-y-5">
       {dayGroups.map((group) => {
         const isToday = group.date === today;
+        let lastBoardId: string | null = null;
+
+        const rowsWithHeaders = group.entries.map((entry) => {
+          const resolvedId = entry.explicit_board_id ?? entry.inferred_board_id ?? null;
+          const showHeader = resolvedId !== null && resolvedId !== lastBoardId;
+          if (resolvedId !== null) lastBoardId = resolvedId;
+          return { entry, showHeader, resolvedId };
+        });
 
         return (
           <div key={group.date}>
@@ -78,29 +96,72 @@ export function NotesEditor({
               <div className="h-px flex-1 bg-gray-100" />
             </div>
 
-            {/* Entries for this day */}
+            {/* Entries with context headers */}
             <div className="space-y-0">
-              {group.entries.map((entry) => (
-                <NoteEntryRow
-                  key={entry.id}
-                  entry={entry}
-                  boards={boards}
-                  isFocused={focusedId === entry.id}
-                  isSelected={selectedIds.has(entry.id)}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                  onChange={onChange}
-                  onEnter={onEnter}
-                  onBackspace={onBackspace}
-                  onIndent={onIndent}
-                  onArrow={handleArrow}
-                  onSelect={onSelect}
-                />
+              {rowsWithHeaders.map(({ entry, showHeader, resolvedId }) => (
+                <Fragment key={entry.id}>
+                  {showHeader && resolvedId && (
+                    <ContextSectionHeader boardId={resolvedId} boards={boards} />
+                  )}
+                  <NoteEntryRow
+                    entry={entry}
+                    boards={boards}
+                    isFocused={focusedId === entry.id}
+                    isSelected={selectedIds.has(entry.id)}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    onChange={onChange}
+                    onEnter={onEnter}
+                    onBackspace={onBackspace}
+                    onIndent={onIndent}
+                    onArrow={handleArrow}
+                    onSelect={onSelect}
+                    onOrganize={onOrganize}
+                    userAliases={userAliases}
+                    onConfirmAlias={onConfirmAlias}
+                  />
+                </Fragment>
               ))}
             </div>
           </div>
         );
       })}
+
+      {/* Indent hint — subtle, visible when at least one entry is indented */}
+      {entries.some((e) => e.indent_level > 0) && (
+        <p className="mt-3 text-center text-[10px] text-gray-300 select-none">
+          Tab to indent · Shift+Tab to unindent
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Context section header ────────────────────────────────────────────────────
+
+function ContextSectionHeader({
+  boardId,
+  boards,
+}: {
+  boardId: string;
+  boards: BoardRow[];
+}) {
+  const board = boards.find((b) => b.id === boardId);
+  if (!board) return null;
+  const hex = resolveBoardHex(boardId, boards) ?? "#6366f1";
+
+  return (
+    <div className="flex items-center gap-2.5 pb-1.5 pt-3">
+      <span
+        className="text-[11px] font-semibold tracking-wide"
+        style={{ color: hex }}
+      >
+        {board.name}
+      </span>
+      <div
+        className="h-px flex-1"
+        style={{ backgroundColor: `${hex}2e` }}
+      />
     </div>
   );
 }

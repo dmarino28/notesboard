@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { NoteEntryWithSignals } from "@/lib/noteEntries";
 import type { BoardRow } from "@/lib/boards";
 import type { ViewMode } from "@/lib/noteViews";
 import type { AISuggestion } from "@/lib/ai/noteOrganize";
 import { detectSignals } from "@/lib/noteSignals";
 import { inferContextForEntries } from "@/lib/noteContext";
+import {
+  type AliasMap,
+  loadUserAliases,
+  saveUserAlias,
+  buildAliasLookup,
+} from "@/lib/noteAliases";
 import { appendPosition, midpointPosition } from "@/lib/noteEntries";
 import { NotesToolbar } from "./NotesToolbar";
 import { NotesEditor } from "./NotesEditor";
@@ -38,6 +44,18 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
   const [showOrganize, setShowOrganize] = useState(false);
   const [organizing, setOrganizing] = useState(false);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
+  const [userAliases, setUserAliases] = useState<AliasMap>(() => loadUserAliases());
+
+  // Build combined alias lookup (generated heuristics + user-confirmed)
+  const aliasLookup = useMemo(
+    () => buildAliasLookup(boards, userAliases),
+    [boards, userAliases]
+  );
+
+  const handleConfirmAlias = useCallback((alias: string, boardId: string) => {
+    const updated = saveUserAlias(alias, boardId);
+    setUserAliases({ ...updated });
+  }, []);
 
   // Debounce timers for per-entry saves: entry_id → timeout handle
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -46,7 +64,7 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
   // Re-detect signals for an entry's content and update context fields.
   const enrichEntry = useCallback(
     (entry: NoteEntryWithSignals): NoteEntryWithSignals => {
-      const signals = detectSignals(entry.content, boards);
+      const signals = detectSignals(entry.content, boards, aliasLookup);
       const boardSig = signals.find((s) => s.type === "board");
       return {
         ...entry,
@@ -65,7 +83,7 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
         context_source: boardSig ? "direct_match" : "unknown",
       };
     },
-    [boards]
+    [boards, aliasLookup]
   );
 
   // Re-run context inference for all entries whenever entries change.
@@ -440,6 +458,9 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
               onArrow={handleArrow}
               onSelect={handleSelect}
               onAddFirstEntry={handleAddFirstEntry}
+              onOrganize={() => void handleOrganize()}
+              userAliases={userAliases}
+              onConfirmAlias={handleConfirmAlias}
             />
           ) : (
             <NotesViewPanel

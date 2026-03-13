@@ -180,13 +180,18 @@ function deduplicateOverlaps(signals: Signal[]): Signal[] {
  * Detect all signals in a single entry's content.
  *
  * @param content  Raw text of the entry
- * @param boards   Live board list (used for board-name detection)
+ * @param boards      Live board list (used for board-name detection)
+ * @param aliasLookup Optional alias map (lowercase alias → boardId) for shorthand detection
  */
-export function detectSignals(content: string, boards: BoardRef[]): Signal[] {
+export function detectSignals(
+  content: string,
+  boards: BoardRef[],
+  aliasLookup?: Map<string, string>
+): Signal[] {
   const lower = content.toLowerCase();
   const signals: Signal[] = [];
 
-  // 1. Board names
+  // 1. Board names (exact match)
   for (const board of boards) {
     if (!board.name.trim()) continue;
     const nameLower = board.name.toLowerCase();
@@ -203,6 +208,27 @@ export function detectSignals(content: string, boards: BoardRef[]): Signal[] {
         });
       }
       idx = lower.indexOf(nameLower, idx + 1);
+    }
+  }
+
+  // 1b. Confirmed + generated aliases (deduplication handles any overlap with board names)
+  if (aliasLookup) {
+    for (const [alias, boardId] of aliasLookup) {
+      let idx = lower.indexOf(alias);
+      while (idx !== -1) {
+        if (hasWordBoundaries(content, idx, idx + alias.length)) {
+          const board = boards.find((b) => b.id === boardId);
+          signals.push({
+            type: "board",
+            value: boardId,
+            matchText: content.slice(idx, idx + alias.length),
+            matchStart: idx,
+            matchEnd: idx + alias.length,
+            normalizedValue: board?.name,
+          });
+        }
+        idx = lower.indexOf(alias, idx + 1);
+      }
     }
   }
 
@@ -315,6 +341,7 @@ export function buildTextSegments(content: string, signals: Signal[]): TextSegme
   let cursor = 0;
 
   for (const sig of sorted) {
+    if (sig.matchStart < cursor) continue; // skip duplicate / overlapping signals
     if (sig.matchStart > cursor) {
       segments.push({ text: content.slice(cursor, sig.matchStart) });
     }
