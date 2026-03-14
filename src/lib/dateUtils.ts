@@ -1,4 +1,12 @@
-// Shared date helpers used by NoteItem, ActionsBoard, and awareness logic.
+// Shared date helpers used by NoteItem, ActionsBoard, awareness logic, and board page.
+
+export type WeekEndDay = "friday" | "saturday" | "sunday";
+
+const WEEK_END_DAY_NUM: Record<WeekEndDay, number> = {
+  friday:   5,
+  saturday: 6,
+  sunday:   0,
+};
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -9,13 +17,23 @@ function fmtDate(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
-function upcomingFriday(from: Date): string {
+/**
+ * Returns the date of the next upcoming occurrence of weekEndDay,
+ * using (dayNum - today + 7) % 7 arithmetic.
+ * If today IS the weekEndDay, returns today.
+ */
+export function upcomingWeekEndDate(from: Date, weekEndDay: WeekEndDay = "friday"): Date {
+  const dayNum = WEEK_END_DAY_NUM[weekEndDay];
   const d = new Date(from);
-  const day = d.getDay(); // 0=Sun … 5=Fri
-  if (day === 5) return fmtDate(d);
-  const daysUntil = (5 - day + 7) % 7;
+  const day = d.getDay();
+  const daysUntil = (dayNum - day + 7) % 7;
   d.setDate(d.getDate() + daysUntil);
-  return fmtDate(d);
+  return d;
+}
+
+/** Returns a YYYY-MM-DD string for the upcoming week-end date. */
+export function upcomingWeekEndStr(from: Date, weekEndDay: WeekEndDay = "friday"): string {
+  return fmtDate(upcomingWeekEndDate(from, weekEndDay));
 }
 
 // ── Timed bucket ──────────────────────────────────────────────────────────────
@@ -39,11 +57,16 @@ const TIMED_LABEL_INFO: Record<TimedBucketKey, TimedLabelInfo> = {
 
 /**
  * Derives the display bucket key from a card's effective due date.
- * Matches ActionsBoard bucketing semantics exactly (calendar-day comparisons, no time component).
+ * Returns "later" when dueAt is null — callers that need a "tracking" distinction
+ * should check for null before calling this function.
+ *
+ * weekEndDay defaults to "friday" for backward compatibility with callers
+ * that don't have access to user preferences.
  */
 export function bucketKeyForDueDate(
   dueAt: string | null,
   today: Date,
+  weekEndDay: WeekEndDay = "friday",
 ): TimedBucketKey {
   if (!dueAt) return "later";
   const datePart = dueAt.split("T")[0];
@@ -66,8 +89,8 @@ export function bucketKeyForDueDate(
   if (dueStr === todayStr) return "today";
   if (dueStr === tomorrowStr) return "tomorrow";
 
-  const fridayStr = upcomingFriday(startOfToday);
-  if (dueStr <= fridayStr) return "this_week";
+  const weekEndStr = upcomingWeekEndStr(startOfToday, weekEndDay);
+  if (dueStr <= weekEndStr) return "this_week";
 
   return "later";
 }
@@ -75,9 +98,12 @@ export function bucketKeyForDueDate(
 /**
  * Returns the timed label info for a due date string, or null if no due date.
  */
-export function timedLabelForDueDate(dueAt: string | null): TimedLabelInfo | null {
+export function timedLabelForDueDate(
+  dueAt: string | null,
+  weekEndDay: WeekEndDay = "friday",
+): TimedLabelInfo | null {
   if (!dueAt) return null;
-  const key = bucketKeyForDueDate(dueAt, new Date());
+  const key = bucketKeyForDueDate(dueAt, new Date(), weekEndDay);
   return TIMED_LABEL_INFO[key];
 }
 

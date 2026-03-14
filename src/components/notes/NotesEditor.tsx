@@ -78,11 +78,20 @@ export function NotesEditor({
       {dayGroups.map((group) => {
         const isToday = group.date === today;
         let lastBoardId: string | null = null;
+        // Track how many entries ago we last showed a header for each board.
+        // A header only re-appears for the same board after a gap of ≥4 entries,
+        // preventing visual noise when boards alternate frequently.
+        const lastHeaderIdxForBoard = new Map<string, number>();
 
-        const rowsWithHeaders = group.entries.map((entry) => {
+        const rowsWithHeaders = group.entries.map((entry, idx) => {
           const resolvedId = entry.explicit_board_id ?? entry.inferred_board_id ?? null;
-          const showHeader = resolvedId !== null && resolvedId !== lastBoardId;
+          const boardChanged = resolvedId !== null && resolvedId !== lastBoardId;
+          const lastHeaderIdx = resolvedId
+            ? (lastHeaderIdxForBoard.get(resolvedId) ?? -Infinity)
+            : -Infinity;
+          const showHeader = boardChanged && idx - lastHeaderIdx >= 4;
           if (resolvedId !== null) lastBoardId = resolvedId;
+          if (showHeader && resolvedId) lastHeaderIdxForBoard.set(resolvedId, idx);
           return { entry, showHeader, resolvedId };
         });
 

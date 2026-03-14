@@ -42,13 +42,13 @@ export function CalendarMonthGrid({
   );
 
   return (
-    <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08]">
+    <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
       {/* Weekday header */}
-      <div className="grid grid-cols-7 border-b border-white/[0.07] bg-neutral-900/50">
+      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
         {WEEKDAYS.map((day) => (
           <div
             key={day}
-            className="py-2 text-center text-[11px] font-medium uppercase tracking-wide text-neutral-600"
+            className="py-2 text-center text-[11px] font-medium uppercase tracking-wide text-gray-400"
           >
             {day}
           </div>
@@ -57,7 +57,7 @@ export function CalendarMonthGrid({
 
       {/* Day cells or empty state */}
       {hasAnyItems ? (
-        <div className="grid grid-cols-7">
+        <div className="grid grid-cols-7 bg-white">
           {cells.map((date, i) => {
             const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
             const isToday = date.getTime() === today.getTime();
@@ -75,9 +75,9 @@ export function CalendarMonthGrid({
           })}
         </div>
       ) : (
-        <div className="flex min-h-[280px] flex-col items-center justify-center gap-1.5 text-center">
-          <p className="text-sm font-medium text-neutral-500">No dated cards this month</p>
-          <p className="text-xs text-neutral-700">
+        <div className="flex min-h-[280px] flex-col items-center justify-center gap-1.5 bg-white text-center">
+          <p className="text-sm font-medium text-gray-400">No dated cards this month</p>
+          <p className="text-xs text-gray-300">
             Add due dates or start/end dates to see them here
           </p>
         </div>

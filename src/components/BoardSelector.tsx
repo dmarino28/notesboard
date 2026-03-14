@@ -124,16 +124,16 @@ export function BoardSelector({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-white/[0.09] bg-neutral-900 shadow-2xl shadow-black/60">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-gray-200 bg-white shadow-elevated">
           {/* Search */}
-          <div className="border-b border-white/[0.07] p-2">
+          <div className="border-b border-gray-100 p-2">
             <input
               ref={searchRef}
               type="text"
               placeholder="Search boards…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-white/[0.07] bg-neutral-800/70 px-3 py-1.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-800 outline-none placeholder:text-gray-400 transition-colors focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-400/20"
               onKeyDown={(e) => {
                 if (e.key === "Escape") closePopover();
               }}
@@ -143,7 +143,7 @@ export function BoardSelector({
           {/* Board list */}
           <ul className="max-h-60 overflow-y-auto py-1">
             {filteredBoards.length === 0 && (
-              <li className="px-3 py-3 text-center text-xs text-neutral-600">No boards found</li>
+              <li className="px-3 py-3 text-center text-xs text-gray-400">No boards found</li>
             )}
             {filteredBoards.map((board) => {
               const isCurrent = board.id === currentBoardId;
@@ -155,7 +155,7 @@ export function BoardSelector({
                   {isEditing ? (
                     <div className="flex items-center gap-1 px-2 py-1">
                       <input
-                        className="flex-1 rounded-md border border-white/[0.10] bg-neutral-800 px-2 py-1 text-sm text-neutral-100 outline-none focus:border-indigo-500/40"
+                        className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
                         autoFocus
@@ -165,22 +165,22 @@ export function BoardSelector({
                         }}
                       />
                       <button
-                        className="shrink-0 rounded-md px-2 py-1 text-xs text-neutral-200 transition-colors hover:bg-white/[0.06] disabled:opacity-50"
+                        className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-50"
                         onClick={() => void handleRename(board.id)}
                         disabled={saving || !editName.trim()}
                       >
                         Save
                       </button>
                       <button
-                        className="shrink-0 text-xs text-neutral-500 hover:text-neutral-300"
+                        className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
                         onClick={() => setEditingId(null)}
                       >
                         ✕
                       </button>
                     </div>
                   ) : isDeleting ? (
-                    <div className="mx-2 my-1 space-y-1.5 rounded-lg bg-neutral-800/80 p-2.5">
-                      <p className="text-xs text-neutral-300">
+                    <div className="mx-2 my-1 space-y-1.5 rounded-lg border border-red-100 bg-red-50 p-2.5">
+                      <p className="text-xs text-gray-700">
                         Delete &quot;{board.name}&quot;? All columns and cards will be lost.
                       </p>
                       <div className="flex gap-2">
@@ -192,7 +192,7 @@ export function BoardSelector({
                           {saving ? "Deleting…" : "Delete"}
                         </button>
                         <button
-                          className="text-xs text-neutral-400 hover:text-neutral-200"
+                          className="text-xs text-gray-500 hover:text-gray-700"
                           onClick={() => setDeletingId(null)}
                         >
                           Cancel
@@ -201,10 +201,10 @@ export function BoardSelector({
                     </div>
                   ) : (
                     <div
-                      className={`group flex items-center gap-2 px-2 py-1.5 mx-1 rounded-lg ${
+                      className={`group mx-1 flex items-center gap-2 rounded-lg px-2 py-1.5 ${
                         isCurrent
-                          ? "bg-white/[0.06] text-neutral-100"
-                          : "text-neutral-300 hover:bg-white/[0.04] hover:text-neutral-100"
+                          ? "bg-indigo-50 text-gray-900"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                       }`}
                     >
                       <button
@@ -212,7 +212,7 @@ export function BoardSelector({
                         onClick={() => !isCurrent && handleSwitch(board.id)}
                       >
                         {isCurrent && (
-                          <span className="shrink-0 text-indigo-400">
+                          <span className="shrink-0 text-indigo-600">
                             <CheckIcon />
                           </span>
                         )}
@@ -220,14 +220,14 @@ export function BoardSelector({
                       </button>
                       <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <button
-                          className="rounded p-0.5 text-neutral-500 transition-colors hover:text-neutral-300"
+                          className="rounded p-0.5 text-gray-400 transition-colors hover:text-gray-700"
                           onClick={() => startEdit(board)}
                           title="Rename"
                         >
                           <PencilIcon />
                         </button>
                         <button
-                          className="rounded p-0.5 text-neutral-600 transition-colors hover:text-red-400"
+                          className="rounded p-0.5 text-gray-400 transition-colors hover:text-red-500"
                           onClick={() => {
                             setDeletingId(board.id);
                             setEditingId(null);
@@ -245,10 +245,10 @@ export function BoardSelector({
           </ul>
 
           {/* Create new board */}
-          <div className="border-t border-white/[0.07] p-2">
+          <div className="border-t border-gray-100 p-2">
             <div className="flex gap-1.5">
               <input
-                className="flex-1 rounded-lg border border-white/[0.07] bg-neutral-800/70 px-3 py-1.5 text-sm text-neutral-200 outline-none placeholder:text-neutral-600 focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20"
+                className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-800 outline-none placeholder:text-gray-400 transition-colors focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-400/20"
                 placeholder="New board name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}

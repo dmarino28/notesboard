@@ -43,12 +43,17 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
 
   const authEl = userEmail ? (
     <div className="flex items-center gap-2">
-      <span className="hidden max-w-[140px] truncate text-[11px] text-gray-500 sm:inline">
-        {userEmail}
-      </span>
+      <div className="hidden items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 sm:flex">
+        <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[8px] font-semibold text-indigo-600">
+          {userEmail[0].toUpperCase()}
+        </div>
+        <span className="max-w-[120px] truncate text-[11px] text-gray-600">
+          {userEmail}
+        </span>
+      </div>
       <button
         type="button"
-        className="text-[11px] text-gray-500 transition-colors hover:text-gray-700"
+        className="text-[11px] text-gray-400 transition-colors hover:text-gray-600"
         onClick={() => supabase.auth.signOut()}
       >
         Sign out
@@ -81,8 +86,8 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
                 href={href}
                 className={`whitespace-nowrap rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
                   isActive(label, href)
-                    ? "bg-gray-100 text-gray-800 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-white text-indigo-700 shadow-[0_1px_5px_rgba(0,0,0,0.13)]"
+                    : "text-gray-500 hover:text-gray-800"
                 }`}
               >
                 {label}
@@ -93,17 +98,17 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
       </div>
 
       {/* ── Desktop: single row (hidden on mobile) ───────────────────────────── */}
-      <div className="relative hidden h-[52px] items-center px-4 sm:flex">
-        {/* Center: segmented nav */}
-        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-[10px] bg-gray-100 p-0.5">
+      <div className="relative hidden h-[56px] items-center px-4 sm:flex">
+        {/* Center: segmented nav — matches BoardTopBar exactly */}
+        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-[10px] bg-black/[0.07] p-0.5 ring-1 ring-inset ring-black/[0.04]">
           {views.map(({ label, href }) => (
             <Link
               key={label}
               href={href}
               className={`rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
                 isActive(label, href)
-                  ? "bg-white text-gray-800 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "bg-white text-indigo-600 shadow-[0_1px_0_rgba(0,0,0,0.06),0_2px_10px_rgba(0,0,0,0.14)] ring-1 ring-inset ring-black/[0.05]"
+                  : "text-gray-500 hover:text-gray-800"
               }`}
             >
               {label}

@@ -11,26 +11,26 @@ export function CalendarHeader({ currentMonth, onPrev, onToday, onNext }: Props)
   const label = currentMonth.toLocaleString(undefined, { month: "long", year: "numeric" });
 
   return (
-    <div className="mb-3 flex items-center gap-2 rounded-xl border border-white/[0.07] bg-neutral-900/40 px-4 py-2.5">
-      <h2 className="flex-1 text-sm font-semibold tracking-tight text-neutral-100">{label}</h2>
+    <div className="mb-3 flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
+      <h2 className="flex-1 text-sm font-semibold tracking-tight text-gray-900">{label}</h2>
       <div className="flex items-center gap-1">
         <button
           onClick={onPrev}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors duration-150 hover:bg-white/[0.06] hover:text-neutral-200"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-700"
           aria-label="Previous month"
         >
           <ChevronLeftIcon />
         </button>
         <button
           onClick={onNext}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors duration-150 hover:bg-white/[0.06] hover:text-neutral-200"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-700"
           aria-label="Next month"
         >
           <ChevronRightIcon />
         </button>
         <button
           onClick={onToday}
-          className="ml-1 rounded-lg border border-white/[0.10] px-3 py-1 text-xs text-neutral-400 transition-colors duration-150 hover:border-white/[0.18] hover:text-neutral-200"
+          className="ml-1 rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 transition-colors duration-150 hover:border-gray-300 hover:text-gray-700"
         >
           Today
         </button>

@@ -31,15 +31,6 @@ function startOfDayMs(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
-/**
- * Date → x-position math:
- *   leftPct  = (clampedStartMs - rangeStartMs) / totalMs * 100
- *   widthPct = (clampedEndMs   - clampedStartMs) / totalMs * 100
- *
- * For events we work in day boundaries (midnight-to-midnight).
- * For due dates we place a point marker at the midday of the due-date column.
- * The today line likewise sits at midday of today's column.
- */
 function computeBar(note: NoteRow, rangeStartMs: number, rangeEndMs: number): BarInfo | null {
   const totalMs = rangeEndMs - rangeStartMs;
 
@@ -131,19 +122,19 @@ function EventBar({
 
   return (
     <div
-      className="absolute inset-y-[18%] z-[2] cursor-pointer rounded-sm bg-indigo-500/70 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/90"
+      className="absolute inset-y-[18%] z-[2] cursor-pointer rounded-sm bg-indigo-500 ring-1 ring-indigo-400/30 transition-colors hover:bg-indigo-600"
       style={{ left: `${bar.leftPct}%`, width: `${Math.max(bar.widthPct, 0.4)}%` }}
       onClick={() => onNoteClick(note.id)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {wide && (
-        <span className="absolute inset-0 flex items-center overflow-hidden px-1.5 text-[10px] leading-none text-white/90 select-none">
+        <span className="absolute inset-0 flex items-center overflow-hidden px-1.5 text-[10px] leading-none text-white select-none">
           {note.content}
         </span>
       )}
       {hovered && (
-        <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 max-w-xs whitespace-pre-wrap rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-100 shadow-xl ring-1 ring-neutral-700">
+        <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 max-w-xs whitespace-pre-wrap rounded-md bg-gray-800 px-2.5 py-1.5 text-xs text-white shadow-xl ring-1 ring-gray-700">
           {tooltip}
         </div>
       )}
@@ -171,9 +162,9 @@ function DueMarker({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="h-3 w-3 rounded-full border-2 border-neutral-500/60 bg-neutral-800 transition-colors hover:border-neutral-400/80 hover:bg-neutral-700" />
+      <div className="h-3 w-3 rounded-full border-2 border-gray-400 bg-gray-200 transition-colors hover:border-gray-500 hover:bg-gray-300" />
       {hovered && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 max-w-xs whitespace-pre-wrap rounded-md bg-neutral-800 px-2.5 py-1.5 text-xs text-neutral-100 shadow-xl ring-1 ring-neutral-700">
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 max-w-xs whitespace-pre-wrap rounded-md bg-gray-800 px-2.5 py-1.5 text-xs text-white shadow-xl ring-1 ring-gray-700">
           {tooltip}
         </div>
       )}
@@ -215,12 +206,12 @@ export function TimelineGrid({
   }, [notes, boardMap, rangeStartMs, rangeEndMs]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.08] text-sm">
+    <div className="overflow-hidden rounded-xl border border-gray-200 text-sm shadow-sm">
       {/* ── Sticky axis header ── */}
-      <div className="sticky top-0 z-10 flex border-b border-white/[0.07] bg-neutral-900/80">
+      <div className="sticky top-0 z-10 flex border-b border-gray-200 bg-gray-50/90 backdrop-blur-sm">
         {/* Label column */}
         <div
-          className="shrink-0 border-r border-white/[0.07] px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-600"
+          className="shrink-0 border-r border-gray-200 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-gray-400"
           style={{ width: NOTE_COL_W }}
         >
           Note
@@ -229,7 +220,7 @@ export function TimelineGrid({
         {/* Day cells */}
         <div className="relative min-w-0 flex-1">
           <div
-            className="grid h-full divide-x divide-white/[0.04]"
+            className="grid h-full divide-x divide-gray-100"
             style={{ gridTemplateColumns: `repeat(${numDays}, 1fr)` }}
           >
             {days.map((d) => {
@@ -238,7 +229,7 @@ export function TimelineGrid({
                 <div
                   key={d.toISOString()}
                   className={`py-2 text-center text-[10px] leading-tight ${
-                    isToday ? "font-semibold text-indigo-400" : "text-neutral-600"
+                    isToday ? "font-semibold text-indigo-600" : "text-gray-400"
                   }`}
                 >
                   {formatDayLabel(d, numDays)}
@@ -249,7 +240,7 @@ export function TimelineGrid({
           {/* Today tick in header */}
           {showToday && (
             <div
-              className="pointer-events-none absolute inset-y-0 w-px bg-indigo-500/30"
+              className="pointer-events-none absolute inset-y-0 w-px bg-indigo-400/50"
               style={{ left: `${todayPct}%` }}
             />
           )}
@@ -257,9 +248,9 @@ export function TimelineGrid({
       </div>
 
       {/* ── Body ── */}
-      <div className="bg-neutral-950">
+      <div className="bg-white">
         {groups.length === 0 && (
-          <div className="flex items-center justify-center py-20 text-sm text-neutral-500">
+          <div className="flex items-center justify-center py-20 text-sm text-gray-400">
             No items visible in this range
           </div>
         )}
@@ -267,9 +258,9 @@ export function TimelineGrid({
         {groups.map(({ board, notes: boardNotes }) => (
           <div key={board.id}>
             {/* Board header */}
-            <div className="flex items-center gap-2 border-b border-white/[0.05] bg-neutral-900/30 px-3 py-1.5">
-              <span className="text-xs font-semibold text-neutral-400">{board.name}</span>
-              <span className="text-[11px] text-neutral-600">({boardNotes.length})</span>
+            <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5">
+              <span className="text-xs font-semibold text-gray-600">{board.name}</span>
+              <span className="text-[11px] text-gray-400">({boardNotes.length})</span>
             </div>
 
             {/* Note rows */}
@@ -281,11 +272,11 @@ export function TimelineGrid({
               return (
                 <div
                   key={note.id}
-                  className="flex min-h-[30px] border-b border-white/[0.04] hover:bg-neutral-900/25"
+                  className="flex min-h-[30px] border-b border-gray-100 hover:bg-gray-50"
                 >
                   {/* Title column */}
                   <div
-                    className="shrink-0 border-r border-white/[0.05] px-2 py-1"
+                    className="shrink-0 border-r border-gray-100 px-2 py-1"
                     style={{ width: NOTE_COL_W }}
                   >
                     <button
@@ -300,7 +291,7 @@ export function TimelineGrid({
                           style={{ backgroundColor: l.color }}
                         />
                       ))}
-                      <span className="truncate text-xs text-neutral-400 hover:text-neutral-200">
+                      <span className="truncate text-xs text-gray-500 hover:text-gray-800">
                         {note.content}
                       </span>
                     </button>
@@ -313,7 +304,7 @@ export function TimelineGrid({
                       i === 0 ? null : (
                         <div
                           key={i}
-                          className="pointer-events-none absolute inset-y-0 w-px bg-white/[0.03]"
+                          className="pointer-events-none absolute inset-y-0 w-px bg-gray-100"
                           style={{ left: `${(i / numDays) * 100}%` }}
                         />
                       ),
@@ -322,7 +313,7 @@ export function TimelineGrid({
                     {/* Today line */}
                     {showToday && (
                       <div
-                        className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-indigo-500/20"
+                        className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-indigo-400/30"
                         style={{ left: `${todayPct}%` }}
                       />
                     )}

@@ -1,4 +1,6 @@
 import { supabase } from "./supabase";
+import { bucketKeyForDueDate, type WeekEndDay } from "./dateUtils";
+export type { WeekEndDay };
 
 export type ActionState = "needs_action" | "waiting" | "done";
 export type ActionMode = "timed" | "flagged";
@@ -38,7 +40,10 @@ export type MyActionsResult = {
   today: BucketedNote[];
   tomorrow: BucketedNote[];
   this_week: BucketedNote[];
-  beyond: BucketedNote[];
+  /** Cards with due_date beyond the user's configured week end. */
+  later: BucketedNote[];
+  /** needs_action cards with no personal due date — tracked but not scheduled. */
+  tracking: BucketedNote[];
   waiting: BucketedNote[];
   done: BucketedNote[];
   // Flagged items (action_mode = 'flagged'), rendered by group
@@ -217,12 +222,58 @@ export async function updateNoteDueDate(
   }
 }
 
-export async function fetchMyActions(): Promise<MyActionsResult | null> {
+export async function fetchMyActions(weekEndDay: WeekEndDay = "friday"): Promise<MyActionsResult | null> {
   const headers = await getAuthHeaders();
   try {
-    const res = await fetch("/api/actions/my", { headers });
+    const params = new URLSearchParams({ week_end: weekEndDay });
+    const res = await fetch(`/api/actions/my?${params.toString()}`, { headers });
     if (!res.ok) return null;
     return (await res.json()) as MyActionsResult;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches all notes with due dates across all boards (All Actions scope).
+ * Buckets by notes.due_date using the user's week-end preference.
+ * Does NOT read or create note_user_actions rows.
+ */
+export async function fetchAllActions(weekEndDay: WeekEndDay = "friday"): Promise<MyActionsResult | null> {
+  try {
+    const { data: notes, error } = await supabase
+      .from("notes")
+      .select("id, content, due_date, updated_at")
+      .not("due_date", "is", null)
+      .eq("archived", false)
+      .order("due_date", { ascending: true });
+
+    if (error) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result: MyActionsResult = {
+      overdue: [], today: [], tomorrow: [], this_week: [], later: [],
+      tracking: [], waiting: [], done: [], flagged: [],
+    };
+
+    for (const note of notes ?? []) {
+      const card: BucketedNote = {
+        note_id: note.id as string,
+        content: note.content as string,
+        action_state: "needs_action",
+        action_mode: "timed",
+        due_date: note.due_date as string | null,
+        private_tags: [],
+        is_inbox: false,
+        updated_at: (note.updated_at as string | null) ?? null,
+      };
+      const bucket = bucketKeyForDueDate(card.due_date, today, weekEndDay);
+      result[bucket].push(card);
+    }
+
+    return result;
   } catch {
     return null;
   }

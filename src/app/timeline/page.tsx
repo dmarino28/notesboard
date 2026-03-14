@@ -203,16 +203,16 @@ export default function TimelinePage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950">
-        <p className="text-neutral-500">Loading timeline…</p>
+      <div className="flex h-screen items-center justify-center bg-page">
+        <p className="text-gray-400">Loading timeline…</p>
       </div>
     );
   }
 
   if (fetchError) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950">
-        <p className="text-red-400">Error: {fetchError}</p>
+      <div className="flex h-screen items-center justify-center bg-page">
+        <p className="text-red-500">Error: {fetchError}</p>
       </div>
     );
   }
@@ -220,14 +220,14 @@ export default function TimelinePage() {
   const boardHref = boards.length > 0 ? `/board/${boards[0].id}` : "/";
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+    <div className="min-h-screen bg-page text-gray-900">
       {/* Shared nav — same segmented control + auth widget as board and actions */}
       <SharedTopBar boardHref={boardHref} />
 
       <div className="mx-auto max-w-[1600px] px-4 py-4">
         {/* Toast */}
         {toast && (
-          <div className="mb-3 rounded-md bg-red-900/80 px-4 py-2 text-sm text-red-200">
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
             {toast}
           </div>
         )}
@@ -243,17 +243,17 @@ export default function TimelinePage() {
         />
 
         {/* Range controls — sticky; overflow-x-auto on mobile to prevent wrapping */}
-        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-2 overflow-x-auto border-b border-white/[0.07] bg-neutral-950 px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* Range type selector */}
-          <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+        <div className="sticky top-0 z-20 -mx-4 flex items-center gap-2 overflow-x-auto border-b border-gray-200 bg-page px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Range type selector — matches BoardTopBar segmented control */}
+          <div className="flex shrink-0 items-center gap-0.5 rounded-[10px] bg-black/[0.07] p-0.5 ring-1 ring-inset ring-black/[0.04]">
             {(["7d", "30d", "month"] as RangeType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => switchRangeType(t)}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors duration-150 ${
+                className={`rounded-[8px] px-3 py-1 text-xs font-medium transition-all duration-150 ${
                   rangeType === t
-                    ? "bg-neutral-700 text-neutral-100 shadow-sm"
-                    : "text-neutral-500 hover:text-neutral-200"
+                    ? "bg-white text-gray-800 shadow-[0_1px_0_rgba(0,0,0,0.06),0_2px_10px_rgba(0,0,0,0.10)] ring-1 ring-inset ring-black/[0.05]"
+                    : "text-gray-500 hover:text-gray-800"
                 }`}
               >
                 {t === "7d" ? "7 days" : t === "30d" ? "30 days" : "Month"}
@@ -265,27 +265,27 @@ export default function TimelinePage() {
           <div className="flex shrink-0 items-center gap-0.5">
             <button
               onClick={prev}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
               aria-label="Previous"
             >
               <ChevronLeftIcon />
             </button>
             <button
               onClick={goToday}
-              className="rounded-md border border-white/[0.08] px-2.5 py-1 text-xs text-neutral-500 transition-colors hover:border-white/[0.14] hover:text-neutral-200"
+              className="rounded-md border border-gray-200 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700"
             >
               Today
             </button>
             <button
               onClick={next}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
               aria-label="Next"
             >
               <ChevronRightIcon />
             </button>
           </div>
 
-          <span className="shrink-0 text-sm font-medium text-neutral-200">
+          <span className="shrink-0 text-sm font-semibold text-gray-800">
             {formatRangeLabel(rangeType, rangeStart, rangeEnd)}
           </span>
         </div>

@@ -160,33 +160,52 @@ export function NoteEntryRow({
     setAutocomplete(match);
   }, [entry.content, isFocused, boards, userAliases]);
 
+  // Accept the current autocomplete suggestion (replaces typed prefix/alias with full board name)
+  const acceptAutocomplete = useCallback(() => {
+    if (!autocomplete || !textareaRef.current) return;
+    const ta = textareaRef.current;
+    if (autocomplete.kind === "alias" && !autocomplete.isConfirmed && onConfirmAlias) {
+      onConfirmAlias(autocomplete.aliasText, autocomplete.board.id);
+    }
+    const lastWord = getLastPartialWord(ta.value);
+    const newContent =
+      ta.value.slice(0, ta.value.length - lastWord.length) + autocomplete.board.name;
+    onChange(entry.id, newContent);
+    setAutocomplete(null);
+  }, [autocomplete, entry.id, onChange, onConfirmAlias]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       const ta = e.currentTarget;
 
+      // Tab / Shift+Tab → always indent/unindent (never accepts autocomplete)
       if (e.key === "Tab") {
         e.preventDefault();
-        // Shift+Tab always unindents — never accepts autocomplete
-        if (!e.shiftKey && autocomplete) {
-          // For unconfirmed alias candidates: save the alias before inserting
-          if (autocomplete.kind === "alias" && !autocomplete.isConfirmed && onConfirmAlias) {
-            onConfirmAlias(autocomplete.aliasText, autocomplete.board.id);
-          }
-          // Insert full board name (replaces the typed prefix or alias)
-          const lastWord = getLastPartialWord(ta.value);
-          const newContent =
-            ta.value.slice(0, ta.value.length - lastWord.length) + autocomplete.board.name;
-          onChange(entry.id, newContent);
-          setAutocomplete(null);
+        onIndent(entry.id, e.shiftKey ? "out" : "in");
+        return;
+      }
+
+      // Escape → dismiss autocomplete suggestion
+      if (e.key === "Escape" && autocomplete) {
+        setAutocomplete(null);
+        return;
+      }
+
+      // Enter → accept autocomplete if active, else split entry
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (autocomplete) {
+          acceptAutocomplete();
         } else {
-          onIndent(entry.id, e.shiftKey ? "out" : "in");
+          onEnter(entry.id, ta.selectionStart);
         }
         return;
       }
 
-      if (e.key === "Enter" && !e.shiftKey) {
+      // ArrowRight at end of line → accept autocomplete if active
+      if (e.key === "ArrowRight" && ta.selectionStart === ta.value.length && autocomplete) {
         e.preventDefault();
-        onEnter(entry.id, ta.selectionStart);
+        acceptAutocomplete();
         return;
       }
 
@@ -215,7 +234,7 @@ export function NoteEntryRow({
         return;
       }
     },
-    [entry.id, autocomplete, onChange, onEnter, onIndent, onBackspace, onArrow]
+    [entry.id, autocomplete, acceptAutocomplete, onEnter, onIndent, onBackspace, onArrow]
   );
 
   // ─── Signal popover ────────────────────────────────────────────────────────
@@ -376,27 +395,26 @@ export function NoteEntryRow({
                 onBlur={(e) => onBlur(entry.id, e.target.value)}
               />
 
-              {autocomplete && (
-                <div className="flex items-center gap-1.5 pb-0.5 pt-0.5">
-                  {autocomplete.kind === "alias" && (
-                    <span className="text-[10px] text-gray-400">
-                      {autocomplete.aliasText} →
+              {autocomplete && (() => {
+                const boardHex = resolveBoardHex(autocomplete.board.id, boards) ?? "#6366f1";
+                return (
+                  <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 pb-0.5 pt-0.5">
+                    {autocomplete.kind === "alias" && (
+                      <span className="text-[10px] font-medium" style={{ color: boardHex, opacity: 0.7 }}>
+                        {autocomplete.aliasText} →
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400">Switch to board:</span>
+                    <span className="text-[11px] font-semibold" style={{ color: boardHex }}>
+                      {autocomplete.board.name}
                     </span>
-                  )}
-                  <span
-                    className="text-[11px] font-medium"
-                    style={{ color: resolveBoardHex(autocomplete.board.id, boards) ?? "#6366f1" }}
-                  >
-                    {autocomplete.board.name}
-                  </span>
-                  {autocomplete.kind === "alias" && !autocomplete.isConfirmed && (
-                    <span className="text-[10px] text-gray-400 italic">confirm</span>
-                  )}
-                  <kbd className="inline-flex items-center rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-400">
-                    ⇥
-                  </kbd>
-                </div>
-              )}
+                    {autocomplete.kind === "alias" && !autocomplete.isConfirmed && (
+                      <span className="text-[10px] text-gray-400 italic">· confirm shorthand</span>
+                    )}
+                    <span className="text-[10px] text-gray-300">· Enter ↵ · Esc</span>
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>

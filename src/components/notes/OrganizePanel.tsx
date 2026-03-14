@@ -35,6 +35,7 @@ const TYPE_ICONS: Record<AISuggestion["type"], string> = {
 export function OrganizePanel({ suggestions, onApply, onIgnore, onClose }: Props) {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [applyingAll, setApplyingAll] = useState(false);
+  const [confirmApplyAll, setConfirmApplyAll] = useState(false);
 
   const pendingSuggestions = suggestions.filter((s) => s.status === "pending");
   const appliedSuggestions = suggestions.filter((s) => s.status === "applied");
@@ -49,6 +50,13 @@ export function OrganizePanel({ suggestions, onApply, onIgnore, onClose }: Props
   }
 
   async function handleApplyAll() {
+    if (!confirmApplyAll) {
+      setConfirmApplyAll(true);
+      // Auto-reset after 3 s if user doesn't confirm
+      setTimeout(() => setConfirmApplyAll(false), 3000);
+      return;
+    }
+    setConfirmApplyAll(false);
     setApplyingAll(true);
     try {
       for (const s of pendingSuggestions) {
@@ -128,9 +136,17 @@ export function OrganizePanel({ suggestions, onApply, onIgnore, onClose }: Props
             type="button"
             onClick={() => void handleApplyAll()}
             disabled={applyingAll}
-            className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-60"
+            className={`w-full rounded-lg py-2 text-sm font-medium text-white transition-colors disabled:opacity-60 ${
+              confirmApplyAll
+                ? "bg-orange-500 hover:bg-orange-400"
+                : "bg-indigo-600 hover:bg-indigo-500"
+            }`}
           >
-            {applyingAll ? "Applying…" : `Apply All (${pendingSuggestions.length})`}
+            {applyingAll
+              ? "Applying…"
+              : confirmApplyAll
+              ? `Confirm? Apply all ${pendingSuggestions.length}`
+              : `Apply All (${pendingSuggestions.length})`}
           </button>
         </div>
       )}
@@ -197,7 +213,7 @@ function SuggestionCard({
               {suggestion.cardContent && (
                 <p className="font-medium">{suggestion.cardContent}</p>
               )}
-              {suggestion.cardDescription && (
+              {suggestion.cardDescription && suggestion.cardDescription !== suggestion.cardContent && (
                 <p className="mt-1 text-gray-500">{suggestion.cardDescription}</p>
               )}
             </div>

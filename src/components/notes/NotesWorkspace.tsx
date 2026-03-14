@@ -37,6 +37,9 @@ type Props = {
 
 export function NotesWorkspace({ initialEntries, boards }: Props) {
   const [entries, setEntries] = useState<NoteEntryWithSignals[]>(initialEntries);
+  // Ref kept in sync with state so callbacks always see latest entries without stale closures
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
   const [view, setView] = useState<ViewMode>("all");
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -181,6 +184,7 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
 
   const handleEnter = useCallback(
     (id: string, cursorPos: number) => {
+      const entries = entriesRef.current;
       const idx = entries.findIndex((e) => e.id === id);
       if (idx === -1) return;
 
@@ -258,11 +262,12 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
         }
       })();
     },
-    [entries, enrichEntry, recomputeContext]
+    [enrichEntry, recomputeContext]
   );
 
   const handleBackspace = useCallback(
     (id: string, isEmpty: boolean) => {
+      const entries = entriesRef.current;
       const idx = entries.findIndex((e) => e.id === id);
       if (idx === -1) return;
 
@@ -281,7 +286,7 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
         setFocusedId(entries[idx - 1].id);
       }
     },
-    [entries]
+    []
   );
 
   const handleIndent = useCallback(
@@ -297,7 +302,7 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
         })
       );
       if (!isTemp(id)) {
-        const entry = entries.find((e) => e.id === id);
+        const entry = entriesRef.current.find((e) => e.id === id);
         if (!entry) return;
         const newLevel =
           direction === "in"
@@ -310,18 +315,19 @@ export function NotesWorkspace({ initialEntries, boards }: Props) {
         });
       }
     },
-    [entries]
+    []
   );
 
   const handleArrow = useCallback(
     (id: string, direction: "up" | "down") => {
+      const entries = entriesRef.current;
       const idx = entries.findIndex((e) => e.id === id);
       if (idx === -1) return;
       const target =
         direction === "up" ? entries[idx - 1] : entries[idx + 1];
       if (target) setFocusedId(target.id);
     },
-    [entries]
+    []
   );
 
   const handleSelect = useCallback((id: string) => {

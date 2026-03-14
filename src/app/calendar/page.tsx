@@ -158,16 +158,16 @@ export default function CalendarPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950">
-        <p className="text-neutral-500">Loading calendar…</p>
+      <div className="flex h-screen items-center justify-center bg-page">
+        <p className="text-gray-400">Loading calendar…</p>
       </div>
     );
   }
 
   if (fetchError) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950">
-        <p className="text-red-400">Error: {fetchError}</p>
+      <div className="flex h-screen items-center justify-center bg-page">
+        <p className="text-red-500">Error: {fetchError}</p>
       </div>
     );
   }
@@ -175,14 +175,14 @@ export default function CalendarPage() {
   const boardHref = boards.length > 0 ? `/board/${boards[0].id}` : "/";
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+    <div className="min-h-screen bg-page text-gray-900">
       {/* Shared nav — same segmented control + auth widget as board and actions */}
       <SharedTopBar boardHref={boardHref} />
 
       <div className="mx-auto max-w-7xl px-4 py-4">
         {/* Toast */}
         {toast && (
-          <div className="mb-3 rounded-md bg-red-900/80 px-4 py-2 text-sm text-red-200">
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
             {toast}
           </div>
         )}

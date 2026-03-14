@@ -19,12 +19,12 @@ function getChipClass(type: DayItem["type"], note: DayItem["note"]): string {
   const isOverdue =
     type === "due" && note.due_date !== null && new Date(note.due_date) < new Date();
   if (type === "event") {
-    return "border border-indigo-500/20 bg-indigo-950/50 text-indigo-200 hover:bg-indigo-900/50 hover:border-indigo-500/35";
+    return "border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300";
   }
   if (isOverdue) {
-    return "border border-red-500/20 bg-red-950/40 text-red-300 hover:bg-red-950/60 hover:border-red-500/35";
+    return "border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:border-red-300";
   }
-  return "border border-white/[0.07] bg-neutral-900/60 text-neutral-300 hover:bg-neutral-800/70 hover:border-white/[0.13]";
+  return "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300";
 }
 
 export function CalendarDayCell({
@@ -98,10 +98,10 @@ export function CalendarDayCell({
       ref={cellRef}
       className={`relative min-h-[96px] border-b border-r p-1 transition-colors duration-150 ${
         isToday
-          ? "border-white/[0.06] bg-indigo-500/[0.04] ring-1 ring-inset ring-indigo-500/25"
+          ? "border-gray-100 bg-indigo-50/50 ring-1 ring-inset ring-indigo-200/60"
           : isCurrentMonth
-            ? "border-white/[0.06] bg-neutral-950/60"
-            : "border-white/[0.04] bg-neutral-900/15"
+            ? "border-gray-100 bg-white"
+            : "border-gray-100 bg-gray-50/60"
       }`}
     >
       {/* Day number */}
@@ -111,8 +111,8 @@ export function CalendarDayCell({
             isToday
               ? "bg-indigo-500 text-white"
               : isCurrentMonth
-                ? "text-neutral-400"
-                : "text-neutral-700"
+                ? "text-gray-500"
+                : "text-gray-300"
           }`}
         >
           {date.getDate()}
@@ -120,7 +120,7 @@ export function CalendarDayCell({
       </div>
 
       {/* Visible chips */}
-      <div className={`space-y-0.5 ${!isCurrentMonth ? "opacity-40" : ""}`}>
+      <div className={`space-y-0.5 ${!isCurrentMonth ? "opacity-50" : ""}`}>
         {items
           .slice(0, MAX_VISIBLE)
           .map((item) =>
@@ -130,7 +130,7 @@ export function CalendarDayCell({
         {overflow > 0 && (
           <button
             onClick={openPopover}
-            className="w-full text-left text-[10px] text-neutral-600 transition-colors hover:text-neutral-400"
+            className="w-full text-left text-[10px] text-gray-400 transition-colors hover:text-gray-600"
           >
             +{overflow} more
           </button>
@@ -141,9 +141,9 @@ export function CalendarDayCell({
       {popoverOpen && overflow > 0 && popoverPos && (
         <div
           style={{ position: "fixed", top: popoverPos.top, left: popoverPos.left }}
-          className="z-[200] w-52 space-y-1 rounded-xl border border-white/[0.10] bg-neutral-900 p-2 shadow-2xl shadow-black/50"
+          className="z-[200] w-52 space-y-1 rounded-xl border border-gray-200 bg-white p-2 shadow-elevated"
         >
-          <p className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wide text-neutral-600">
+          <p className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wide text-gray-400">
             {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </p>
           {items.slice(MAX_VISIBLE).map((item) =>

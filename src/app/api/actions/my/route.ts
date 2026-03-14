@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 import type { BucketedNote, MyActionsResult } from "@/lib/userActions";
+import type { WeekEndDay } from "@/lib/dateUtils";
+import { upcomingWeekEndDate } from "@/lib/dateUtils";
 
 type RawActionRow = {
   note_id: string;
@@ -29,15 +31,7 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
-/** Upcoming Friday — returns today if today is Friday. */
-function upcomingFriday(from: Date): Date {
-  const d = new Date(from);
-  const day = d.getDay(); // 0=Sun … 5=Fri
-  if (day === 5) return d;
-  const daysUntil = (5 - day + 7) % 7;
-  d.setDate(d.getDate() + daysUntil);
-  return d;
-}
+const VALID_WEEK_ENDS = new Set<string>(["friday", "saturday", "sunday"]);
 
 export async function GET(req: NextRequest) {
   const auth = await getAuthedSupabase(req);
@@ -45,6 +39,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { client } = auth;
+
+  // Read user's week-end preference from query param (passed by client).
+  const rawWeekEnd = req.nextUrl.searchParams.get("week_end") ?? "friday";
+  const weekEndDay: WeekEndDay = VALID_WEEK_ENDS.has(rawWeekEnd)
+    ? (rawWeekEnd as WeekEndDay)
+    : "friday";
 
   const { data, error } = await client
     .from("note_user_actions")
@@ -81,14 +81,15 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  const thisFriday = upcomingFriday(todayStart);
+  const thisWeekEnd = upcomingWeekEndDate(todayStart, weekEndDay);
 
   const result: MyActionsResult = {
     overdue: [],
     today: [],
     tomorrow: [],
     this_week: [],
-    beyond: [],
+    later: [],
+    tracking: [],
     waiting: [],
     done: [],
     flagged: [],
@@ -98,7 +99,6 @@ export async function GET(req: NextRequest) {
     const note = resolveNote(row.notes);
     if (!note) continue;
 
-    // Canonical due date: notes.due_date only.
     const dueDate = note.due_date;
     const action_mode = (row.action_mode === "flagged" ? "flagged" : "timed") as BucketedNote["action_mode"];
 
@@ -127,7 +127,8 @@ export async function GET(req: NextRequest) {
     } else {
       // needs_action: bucket by notes.due_date
       if (!dueDate) {
-        result.beyond.push(card);
+        // No due date — goes to Tracking (unscheduled personal actions)
+        result.tracking.push(card);
         continue;
       }
       const [y, m, d] = dueDate.split("T")[0].split("-").map(Number);
@@ -139,10 +140,10 @@ export async function GET(req: NextRequest) {
         result.today.push(card);
       } else if (sameDay(due, tomorrowStart)) {
         result.tomorrow.push(card);
-      } else if (due <= thisFriday) {
+      } else if (due <= thisWeekEnd) {
         result.this_week.push(card);
       } else {
-        result.beyond.push(card);
+        result.later.push(card);
       }
     }
   }

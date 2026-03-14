@@ -1,7 +1,8 @@
 "use client";
 
 // ActionsBoard — personal action items.
-// Timed section: 5-column kanban (Overdue/Today/Tomorrow/This Week/Later) + Waiting/Done trays.
+// Timed section: 5-column kanban (Overdue/Today/Tomorrow/This Week/Later).
+// State trays: Waiting, Done, Tracking (full-width, collapsible).
 // Flagged section: accordion groups by tag-def + General.
 
 import { useRef, useState } from "react";
@@ -26,7 +27,8 @@ import type {
 } from "@/lib/userActions";
 import { DEFAULT_FILTERS } from "@/lib/userActions";
 import { useActions } from "@/lib/ActionContext";
-import { timedLabelForDueDate, relativeTimeShort, isWithin24h } from "@/lib/dateUtils";
+import { timedLabelForDueDate, relativeTimeShort, isWithin24h, upcomingWeekEndStr, type WeekEndDay } from "@/lib/dateUtils";
+import { bucketKeyForDueDate } from "@/lib/dateUtils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,8 @@ type Props = {
   filters: ViewFilters;
   savedViews: SavedView[];
   activeViewId: string | null;
+  scope: "my" | "all";
+  weekEndDay: WeekEndDay;
   onOpenCard: (noteId: string) => void;
   onFiltersChange: (f: ViewFilters) => void;
   onSaveView: (name: string) => void;
@@ -46,21 +50,23 @@ type Props = {
   onManageGroups: () => void;
   onCheckWaiting?: () => void;
   checkWaitingBusy?: boolean;
+  onScopeChange: (scope: "my" | "all") => void;
+  onWeekEndChange: (day: WeekEndDay) => void;
   onCardDrop: (noteId: string, targetBucket: string, newDate: string | null) => void;
   onCardDropToTray: (noteId: string, tray: "waiting" | "done") => void;
 };
 
-// ── Timed bucket column metadata ───────────────────────────────────────────────
+// ── Timed bucket column metadata ──────────────────────────────────────────────
 
 const TIMED_COLUMN_BUCKETS = [
   { key: "overdue",   label: "Overdue",   dotClass: "bg-red-400",     glow: "#ef4444" },
-  { key: "today",     label: "Today",     dotClass: "bg-amber-400",   glow: "#f59e0b" },
-  { key: "tomorrow",  label: "Tomorrow",  dotClass: "bg-orange-400",  glow: "#f97316" },
-  { key: "this_week", label: "This Week", dotClass: "bg-sky-400",     glow: "#38bdf8" },
-  { key: "beyond",    label: "Later",     dotClass: "bg-neutral-500", glow: "#64748b" },
+  { key: "today",     label: "Today",     dotClass: "bg-blue-400",    glow: "#3b82f6" },
+  { key: "tomorrow",  label: "Tomorrow",  dotClass: "bg-amber-400",   glow: "#f59e0b" },
+  { key: "this_week", label: "This Week", dotClass: "bg-emerald-400", glow: "#10b981" },
+  { key: "later",     label: "Later",     dotClass: "bg-slate-500",   glow: "#64748b" },
 ] as const;
 
-// ── Drop resolution ────────────────────────────────────────────────────────────
+// ── Date helpers ───────────────────────────────────────────────────────────────
 
 function fmtDate(d: Date): string {
   const y = d.getFullYear();
@@ -70,81 +76,36 @@ function fmtDate(d: Date): string {
 }
 
 /**
- * Returns the upcoming Friday, or today if today is already Friday.
- * Used as the anchor date for "This Week" drops.
+ * Returns the personal_due_date to set when a card is dropped on a bucket.
+ * Returns `undefined` for unknown targets (caller should ignore).
+ * Returns `null` to clear the due date (→ Tracking).
  */
-function upcomingFriday(from: Date): string {
-  const d = new Date(from);
-  const day = d.getDay(); // 0=Sun … 5=Fri … 6=Sat
-  if (day === 5) return fmtDate(d); // today is Friday → same day
-  const daysUntil = (5 - day + 7) % 7;
-  d.setDate(d.getDate() + daysUntil);
-  return fmtDate(d);
-}
-
-/**
- * Returns the personal_due_date to set when a card is dropped on a timed column.
- * Overdue is not a valid drop target — callers must guard before calling this.
- * Returns `undefined` for non-timed targets (caller should ignore).
- */
-function resolveDropDate(bucketKey: string): string | null | undefined {
+function resolveDropDate(bucketKey: string, weekEndDay: WeekEndDay): string | null | undefined {
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   switch (bucketKey) {
+    case "overdue": {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 1);
+      return fmtDate(d);
+    }
     case "today":    return fmtDate(today);
     case "tomorrow": {
       const d = new Date(today);
       d.setDate(d.getDate() + 1);
       return fmtDate(d);
     }
-    case "this_week": return upcomingFriday(today);
-    case "beyond":    return null; // clear personal due date
-    default:          return undefined;
+    case "this_week": return upcomingWeekEndStr(today, weekEndDay);
+    case "later": {
+      // One week past the upcoming week-end
+      const weekEndStr = upcomingWeekEndStr(today, weekEndDay);
+      const [y, m, d2] = weekEndStr.split("-").map(Number);
+      const weekEnd = new Date(y, m - 1, d2 + 7);
+      return fmtDate(weekEnd);
+    }
+    case "tracking": return null; // clear due date → goes to Tracking
+    default:         return undefined;
   }
-}
-
-/**
- * Derives the display bucket key from a card's effective due date.
- * This is the single source of truth for column membership — used to re-bucket
- * cards after optimistic updates without moving between server-returned arrays.
- *
- * Bucket rules (all calendar-day comparisons, no time component):
- *   overdue   — dueAt < startOfToday
- *   today     — same calendar day as today
- *   tomorrow  — today + 1
- *   this_week — tomorrow < dueAt <= upcoming Friday (inclusive)
- *   later     — dueAt is null OR dueAt > upcoming Friday
- */
-function bucketKeyForDueDate(
-  dueAt: string | null,
-  today: Date,
-): "overdue" | "today" | "tomorrow" | "this_week" | "later" {
-  if (!dueAt) return "later";
-  // Strip any time / timezone component so we always work with a local calendar day,
-  // regardless of whether notes.due_date is a Postgres date, timestamp, or timestamptz.
-  const datePart = dueAt.split("T")[0]; // "2026-02-27"
-  const parts = datePart.split("-").map(Number);
-  if (parts.length !== 3) return "later";
-  const due = new Date(parts[0], parts[1] - 1, parts[2]); // local midnight
-  if (isNaN(due.getTime())) return "later";
-
-  const startOfToday = new Date(today);
-  startOfToday.setHours(0, 0, 0, 0);
-
-  if (due < startOfToday) return "overdue";
-
-  const dueStr = fmtDate(due);
-  const todayStr = fmtDate(startOfToday);
-  const tomorrowDate = new Date(startOfToday);
-  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-  const tomorrowStr = fmtDate(tomorrowDate);
-
-  if (dueStr === todayStr) return "today";
-  if (dueStr === tomorrowStr) return "tomorrow";
-
-  const fridayStr = upcomingFriday(startOfToday);
-  if (dueStr <= fridayStr) return "this_week";
-
-  return "later";
 }
 
 // ── Sort helper ────────────────────────────────────────────────────────────────
@@ -152,8 +113,7 @@ function bucketKeyForDueDate(
 function sortCards(cards: BucketedNote[], sort: ViewFilters["sort"]): BucketedNote[] {
   if (sort === "due_asc") {
     return [...cards].sort((a, b) => {
-      if (a.due_date && b.due_date)
-        return a.due_date.localeCompare(b.due_date);
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
       if (a.due_date) return -1;
       if (b.due_date) return 1;
       return a.note_id.localeCompare(b.note_id);
@@ -171,6 +131,8 @@ export function ActionsBoard({
   filters,
   savedViews,
   activeViewId,
+  scope,
+  weekEndDay,
   onOpenCard,
   onFiltersChange,
   onSaveView,
@@ -180,11 +142,12 @@ export function ActionsBoard({
   onManageGroups,
   onCheckWaiting,
   checkWaitingBusy = false,
+  onScopeChange,
+  onWeekEndChange,
   onCardDrop,
   onCardDropToTray,
 }: Props) {
-  const defaultCollapsed = new Set<string>();
-  const [collapsed, setCollapsed] = useState<Set<string>>(defaultCollapsed);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {
     setCollapsed((prev) => {
@@ -215,12 +178,19 @@ export function ActionsBoard({
 
   const timedTotal =
     result.overdue.length + result.today.length + result.tomorrow.length +
-    result.this_week.length + result.beyond.length + result.waiting.length + result.done.length;
+    result.this_week.length + result.later.length + result.waiting.length + result.done.length;
   const flaggedTotal = result.flagged.length;
+  const trackingTotal = result.tracking.length;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Toolbar */}
+    <div className="flex h-full flex-col overflow-hidden" style={{ background: "#0d0f14" }}>
+      {/* Scope bar + toolbar */}
+      <ScopeBar
+        scope={scope}
+        weekEndDay={weekEndDay}
+        onScopeChange={onScopeChange}
+        onWeekEndChange={onWeekEndChange}
+      />
       <ActionsBoardToolbar
         filters={filters}
         savedViews={savedViews}
@@ -235,7 +205,7 @@ export function ActionsBoard({
         checkWaitingBusy={checkWaitingBusy}
       />
 
-      {/* Content */}
+      {/* Scrollable content */}
       <div className="min-h-0 flex-1 overflow-y-auto nb-scroll">
 
         {/* ── Timed section ── */}
@@ -246,13 +216,59 @@ export function ActionsBoard({
             </h2>
             <span className="text-[11px] text-neutral-700">{timedTotal}</span>
           </div>
-          <TimedKanban
-            result={result}
-            filters={filters}
+
+          {scope === "my" ? (
+            <TimedKanban
+              result={result}
+              filters={filters}
+              weekEndDay={weekEndDay}
+              onOpen={onOpenCard}
+              onCardDrop={onCardDrop}
+              onCardDropToTray={onCardDropToTray}
+            />
+          ) : (
+            <TimedReadOnly
+              result={result}
+              filters={filters}
+              weekEndDay={weekEndDay}
+              onOpen={onOpenCard}
+            />
+          )}
+        </div>
+
+        {/* ── State trays + Tracking ── */}
+        <div className="space-y-2 px-4 pb-4">
+          <CollapsibleTray
+            trayKey="waiting"
+            label="Waiting"
+            dotColor="#a78bfa"
+            cards={result.waiting}
+            collapsed={collapsed.has("waiting")}
+            onToggle={() => toggle("waiting")}
             onOpen={onOpenCard}
-            onCardDrop={onCardDrop}
-            onCardDropToTray={onCardDropToTray}
+            droppable={scope === "my"}
           />
+          <CollapsibleTray
+            trayKey="done"
+            label="Done"
+            dotColor="#34d399"
+            cards={result.done}
+            collapsed={collapsed.has("done")}
+            onToggle={() => toggle("done")}
+            onOpen={onOpenCard}
+            droppable={scope === "my"}
+          />
+          {scope === "my" && (
+            <TrackingTray
+              cards={sortCards(result.tracking, filters.sort)}
+              collapsed={collapsed.has("tracking")}
+              onToggle={() => toggle("tracking")}
+              onOpen={onOpenCard}
+              total={trackingTotal}
+              onCardDrop={onCardDrop}
+              weekEndDay={weekEndDay}
+            />
+          )}
         </div>
 
         {/* ── Flagged section ── */}
@@ -303,17 +319,71 @@ export function ActionsBoard({
   );
 }
 
-// ── Timed kanban (DnD owner) ───────────────────────────────────────────────────
+// ── Scope bar ─────────────────────────────────────────────────────────────────
+
+function ScopeBar({
+  scope,
+  weekEndDay,
+  onScopeChange,
+  onWeekEndChange,
+}: {
+  scope: "my" | "all";
+  weekEndDay: WeekEndDay;
+  onScopeChange: (s: "my" | "all") => void;
+  onWeekEndChange: (d: WeekEndDay) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-white/[0.04] px-4 py-2">
+      {/* Scope toggle */}
+      <div className="flex items-center gap-0.5 rounded-[9px] bg-white/[0.04] p-0.5 ring-1 ring-inset ring-white/[0.03]">
+        {(["my", "all"] as const).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onScopeChange(s)}
+            className={`rounded-[7px] px-3 py-1 text-[11px] font-medium transition-all duration-150 ${
+              scope === s
+                ? "bg-white/[0.08] text-neutral-100 shadow-sm ring-1 ring-inset ring-white/[0.06]"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            {s === "my" ? "My Actions" : "All Actions"}
+          </button>
+        ))}
+      </div>
+
+      <span className="h-4 w-px bg-white/[0.06]" />
+
+      {/* Week-end preference */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-neutral-600">Week ends</span>
+        <select
+          value={weekEndDay}
+          onChange={(e) => onWeekEndChange(e.target.value as WeekEndDay)}
+          className="rounded-md border border-white/[0.06] bg-transparent px-1.5 py-0.5 text-[11px] text-neutral-400 outline-none transition-colors hover:border-white/[0.10] focus:border-indigo-500/40"
+        >
+          <option value="friday">Friday</option>
+          <option value="saturday">Saturday</option>
+          <option value="sunday">Sunday</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// ── Timed kanban (DnD owner — My Actions scope) ────────────────────────────────
 
 function TimedKanban({
   result,
   filters,
+  weekEndDay,
   onOpen,
   onCardDrop,
   onCardDropToTray,
 }: {
   result: MyActionsResult;
   filters: ViewFilters;
+  weekEndDay: WeekEndDay;
   onOpen: (noteId: string) => void;
   onCardDrop: (noteId: string, targetBucket: string, newDate: string | null) => void;
   onCardDropToTray: (noteId: string, tray: "waiting" | "done") => void;
@@ -337,22 +407,23 @@ function TimedKanban({
     const noteId = active.id as string;
     const targetBucket = over.id as string;
 
-    // Overdue is derived-only — not a valid drop target.
-    if (targetBucket === "overdue") return;
-
     if (targetBucket === "waiting" || targetBucket === "done") {
       onCardDropToTray(noteId, targetBucket);
       return;
     }
 
-    const newDate = resolveDropDate(targetBucket);
+    if (targetBucket === "tracking") {
+      onCardDrop(noteId, "tracking", null);
+      return;
+    }
+
+    const newDate = resolveDropDate(targetBucket, weekEndDay);
     if (newDate !== undefined) {
       onCardDrop(noteId, targetBucket, newDate);
     }
   }
 
-  // Flatten all timed cards and re-bucket from effective_due_date.
-  // Column membership is always derived — never dependent on the server's original array.
+  // Flatten all timed + tracking cards and re-bucket from effective due_date.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const allTimedCards = [
@@ -360,30 +431,20 @@ function TimedKanban({
     ...result.today,
     ...result.tomorrow,
     ...result.this_week,
-    ...result.beyond,
+    ...result.later,
+    ...result.tracking,
   ];
   const derivedBuckets: Record<string, BucketedNote[]> = {
-    overdue: [], today: [], tomorrow: [], this_week: [], beyond: [],
+    overdue: [], today: [], tomorrow: [], this_week: [], later: [], tracking: [],
   };
 
-  // ── DEBUG (remove after verification) ──────────────────────────────────────
-  if (allTimedCards.length > 0) {
-    const sample = allTimedCards[0];
-    const tomorrowDbg = new Date(today); tomorrowDbg.setDate(today.getDate() + 1);
-    const todayKey   = fmtDate(today);
-    const tomorrowKey = fmtDate(tomorrowDbg);
-    const fridayKey  = upcomingFriday(today);
-    const dueKey     = sample.due_date ? sample.due_date.split("T")[0] : null;
-    const bucket     = bucketKeyForDueDate(sample.due_date, today);
-    console.debug("[ActionsBoard] sample note:", { note_id: sample.note_id, due_date: sample.due_date });
-    console.debug("[ActionsBoard] keys:", { todayKey, tomorrowKey, fridayKey, dueKey });
-    console.debug("[ActionsBoard] chosen bucket:", bucket);
-  }
-  // ── end DEBUG ───────────────────────────────────────────────────────────────
-
   for (const card of allTimedCards) {
-    const key = bucketKeyForDueDate(card.due_date, today);
-    derivedBuckets[key === "later" ? "beyond" : key].push(card);
+    if (!card.due_date) {
+      derivedBuckets["tracking"].push(card);
+    } else {
+      const key = bucketKeyForDueDate(card.due_date, today, weekEndDay);
+      derivedBuckets[key].push(card);
+    }
   }
 
   return (
@@ -403,30 +464,10 @@ function TimedKanban({
         ))}
       </div>
 
-      {/* 2 state trays */}
-      <div className="flex gap-2.5 px-4 pb-4">
-        <StateTray
-          trayKey="waiting"
-          label="Waiting"
-          dotClass="bg-purple-400"
-          glow="#a78bfa"
-          cards={result.waiting}
-          onOpen={onOpen}
-        />
-        <StateTray
-          trayKey="done"
-          label="Done"
-          dotClass="bg-emerald-400"
-          glow="#34d399"
-          cards={result.done}
-          onOpen={onOpen}
-        />
-      </div>
-
       {/* Drag overlay — lifted ghost card */}
       <DragOverlay dropAnimation={null}>
         {activeCard && (
-          <div className="w-48 rotate-1 rounded-xl border border-indigo-400/25 bg-neutral-800/95 px-3 py-2.5 shadow-2xl shadow-black/70 ring-1 ring-white/[0.06] backdrop-blur-sm">
+          <div className="w-48 rotate-1 rounded-xl border border-white/[0.10] bg-gradient-to-b from-neutral-800 to-neutral-900 px-3 py-2.5 shadow-2xl shadow-black/70">
             <p className="line-clamp-3 text-[13px] leading-snug text-neutral-100">
               {activeCard.content}
             </p>
@@ -434,6 +475,53 @@ function TimedKanban({
         )}
       </DragOverlay>
     </DndContext>
+  );
+}
+
+// ── Timed read-only (All Actions scope — no DnD) ───────────────────────────────
+
+function TimedReadOnly({
+  result,
+  filters,
+  weekEndDay,
+  onOpen,
+}: {
+  result: MyActionsResult;
+  filters: ViewFilters;
+  weekEndDay: WeekEndDay;
+  onOpen: (noteId: string) => void;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const allCards = [
+    ...result.overdue, ...result.today, ...result.tomorrow,
+    ...result.this_week, ...result.later,
+  ];
+  const derivedBuckets: Record<string, BucketedNote[]> = {
+    overdue: [], today: [], tomorrow: [], this_week: [], later: [],
+  };
+  for (const card of allCards) {
+    if (card.due_date) {
+      const key = bucketKeyForDueDate(card.due_date, today, weekEndDay);
+      derivedBuckets[key].push(card);
+    }
+  }
+
+  return (
+    <div className="flex gap-2.5 overflow-x-auto px-4 pb-3 nb-board-scroll">
+      {TIMED_COLUMN_BUCKETS.map((b) => (
+        <KanbanColumn
+          key={b.key}
+          bucketKey={b.key}
+          label={b.label}
+          dotClass={b.dotClass}
+          glow={b.glow}
+          cards={sortCards(derivedBuckets[b.key] ?? [], filters.sort)}
+          onOpen={onOpen}
+          readOnly
+        />
+      ))}
+    </div>
   );
 }
 
@@ -446,6 +534,7 @@ function KanbanColumn({
   glow,
   cards,
   onOpen,
+  readOnly = false,
 }: {
   bucketKey: string;
   label: string;
@@ -453,21 +542,22 @@ function KanbanColumn({
   glow: string;
   cards: BucketedNote[];
   onOpen: (noteId: string) => void;
+  readOnly?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: bucketKey });
 
   return (
     <div
-      ref={setNodeRef}
+      ref={readOnly ? undefined : setNodeRef}
       className={`flex min-w-[180px] flex-1 flex-col rounded-xl border transition-all duration-300 ${
-        isOver
-          ? "border-white/[0.13] scale-[1.01]"
-          : "border-white/[0.05]"
+        isOver && !readOnly
+          ? "border-white/[0.12] scale-[1.01]"
+          : "border-white/[0.06]"
       }`}
       style={{
-        background: isOver
-          ? `radial-gradient(ellipse at 50% 105%, ${glow}20 0%, transparent 62%), rgb(19 20 22)`
-          : `radial-gradient(ellipse at 50% 105%, ${glow}0e 0%, transparent 62%), rgb(19 20 22)`,
+        background: isOver && !readOnly
+          ? `radial-gradient(ellipse at 50% 110%, ${glow}22 0%, transparent 65%), #13151f`
+          : `radial-gradient(ellipse at 50% 110%, ${glow}0d 0%, transparent 65%), #13151f`,
       }}
     >
       {/* Header */}
@@ -481,69 +571,76 @@ function KanbanColumn({
         </span>
       </div>
 
-      {/* Card stack — min height keeps column droppable when empty */}
+      {/* Card stack */}
       <div className="flex min-h-[180px] flex-1 flex-col gap-1.5 px-2 pb-2">
-        {cards.map((card) => (
-          <DraggableCard key={card.note_id} card={card} onOpen={onOpen} />
-        ))}
+        {cards.map((card) =>
+          readOnly ? (
+            <ActionCardItem key={card.note_id} card={card} onOpen={onOpen} />
+          ) : (
+            <DraggableCard key={card.note_id} card={card} onOpen={onOpen} />
+          )
+        )}
       </div>
     </div>
   );
 }
 
-// ── State tray (droppable, cards not draggable) ────────────────────────────────
+// ── Collapsible tray (Waiting / Done) ─────────────────────────────────────────
 
-function StateTray({
+function CollapsibleTray({
   trayKey,
   label,
-  dotClass,
-  glow,
+  dotColor,
   cards,
+  collapsed,
+  onToggle,
   onOpen,
+  droppable = true,
 }: {
   trayKey: string;
   label: string;
-  dotClass: string;
-  glow: string;
+  dotColor: string;
   cards: BucketedNote[];
+  collapsed: boolean;
+  onToggle: () => void;
   onOpen: (noteId: string) => void;
+  droppable?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: trayKey });
 
   return (
     <div
-      ref={setNodeRef}
-      className={`flex-1 rounded-xl border transition-all duration-300 ${
-        isOver
-          ? "border-white/[0.13] scale-[1.005]"
-          : "border-white/[0.05]"
+      ref={droppable ? setNodeRef : undefined}
+      className={`rounded-xl border transition-all duration-300 ${
+        isOver ? "border-white/[0.12]" : "border-white/[0.05]"
       }`}
       style={{
         background: isOver
-          ? `radial-gradient(ellipse at 50% 110%, ${glow}1c 0%, transparent 55%), rgb(19 20 22)`
-          : `radial-gradient(ellipse at 50% 110%, ${glow}0a 0%, transparent 55%), rgb(19 20 22)`,
+          ? `radial-gradient(ellipse at 50% 110%, ${dotColor}1c 0%, transparent 55%), #13151f`
+          : "#13151f",
       }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-1.5 px-3 py-2">
-        <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotClass}`} />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
           {label}
         </span>
-        <span className="ml-auto text-[11px] tabular-nums text-neutral-700">
-          {cards.length || ""}
-        </span>
-      </div>
+        <span className="text-[11px] text-neutral-700">{cards.length || ""}</span>
+        <span className="ml-auto text-[10px] text-neutral-700">{collapsed ? "▸" : "▾"}</span>
+      </button>
 
-      {/* Cards (horizontal scroll for compactness) */}
-      {cards.length > 0 && (
+      {!collapsed && cards.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-2 pb-2">
           {cards.map((card) => (
             <button
               key={card.note_id}
               type="button"
               onClick={() => onOpen(card.note_id)}
-              className="w-full rounded-lg border border-white/[0.05] bg-neutral-800/30 px-2.5 py-1.5 text-left transition-colors hover:bg-neutral-800/60"
+              className="w-full rounded-lg border border-white/[0.04] bg-neutral-800/30 px-2.5 py-1.5 text-left transition-colors hover:bg-neutral-800/60"
             >
               <p className="line-clamp-2 text-[12px] leading-snug text-neutral-400">
                 {card.content}
@@ -553,13 +650,78 @@ function StateTray({
         </div>
       )}
 
-      {/* Drop hint when empty */}
-      {cards.length === 0 && (
-        <p className={`px-3 pb-2.5 text-[11px] transition-colors ${
-          isOver ? "text-neutral-500" : "text-neutral-800"
-        }`}>
+      {!collapsed && cards.length === 0 && (
+        <p className={`px-3 pb-2.5 text-[11px] transition-colors ${isOver ? "text-neutral-500" : "text-neutral-800"}`}>
           Drop here
         </p>
+      )}
+    </div>
+  );
+}
+
+// ── Tracking tray (draggable cards, droppable) ────────────────────────────────
+
+function TrackingTray({
+  cards,
+  collapsed,
+  onToggle,
+  onOpen,
+  total,
+  onCardDrop,
+  weekEndDay,
+}: {
+  cards: BucketedNote[];
+  collapsed: boolean;
+  onToggle: () => void;
+  onOpen: (noteId: string) => void;
+  total: number;
+  onCardDrop: (noteId: string, targetBucket: string, newDate: string | null) => void;
+  weekEndDay: WeekEndDay;
+}) {
+  // weekEndDay kept in props for future use (drag from tray to column)
+  void weekEndDay;
+  const { setNodeRef, isOver } = useDroppable({ id: "tracking" });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-xl border transition-all duration-300 ${
+        isOver ? "border-white/[0.12]" : "border-white/[0.05]"
+      }`}
+      style={{
+        background: isOver
+          ? "radial-gradient(ellipse at 50% 110%, #6366f11c 0%, transparent 55%), #13151f"
+          : "#13151f",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-indigo-500/70" />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+          Tracking
+        </span>
+        <span className="text-[11px] text-neutral-700">{total || ""}</span>
+        <span className="text-[10px] text-neutral-700 ml-1">· no due date</span>
+        <span className="ml-auto text-[10px] text-neutral-700">{collapsed ? "▸" : "▾"}</span>
+      </button>
+
+      {!collapsed && (
+        <div className="px-2 pb-2">
+          {cards.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {cards.map((card) => (
+                <DraggableCard key={card.note_id} card={card} onOpen={onOpen} />
+              ))}
+            </div>
+          ) : (
+            <p className={`px-1 pb-1.5 text-[11px] transition-colors ${isOver ? "text-neutral-500" : "text-neutral-800"}`}>
+              Drop here to unschedule
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -706,10 +868,7 @@ function ActionsBoardToolbar({
               <div key={v.id} className="flex items-center">
                 <button
                   type="button"
-                  onClick={() => {
-                    onLoadView(v);
-                    setViewDropOpen(false);
-                  }}
+                  onClick={() => { onLoadView(v); setViewDropOpen(false); }}
                   className={`flex-1 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-white/[0.04] ${
                     activeViewId === v.id ? "text-indigo-300" : "text-neutral-400"
                   }`}
@@ -718,10 +877,7 @@ function ActionsBoardToolbar({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    onDeleteView(v.id);
-                    setViewDropOpen(false);
-                  }}
+                  onClick={() => { onDeleteView(v.id); setViewDropOpen(false); }}
                   className="pr-3 text-[10px] text-neutral-700 transition-colors hover:text-red-400"
                   title="Delete view"
                 >
@@ -737,10 +893,7 @@ function ActionsBoardToolbar({
       {!activeViewId && hasActiveFilters && !savingView && (
         <button
           type="button"
-          onClick={() => {
-            setSavingView(true);
-            setTimeout(() => saveInputRef.current?.focus(), 0);
-          }}
+          onClick={() => { setSavingView(true); setTimeout(() => saveInputRef.current?.focus(), 0); }}
           className="rounded-md border border-dashed border-white/[0.07] px-2.5 py-1 text-[11px] text-neutral-600 transition-colors hover:border-white/[0.12] hover:text-neutral-400"
         >
           Save view
@@ -756,10 +909,7 @@ function ActionsBoardToolbar({
             onChange={(e) => setNewViewName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSaveView();
-              if (e.key === "Escape") {
-                setSavingView(false);
-                setNewViewName("");
-              }
+              if (e.key === "Escape") { setSavingView(false); setNewViewName(""); }
             }}
           />
           <button
@@ -772,10 +922,7 @@ function ActionsBoardToolbar({
           </button>
           <button
             type="button"
-            onClick={() => {
-              setSavingView(false);
-              setNewViewName("");
-            }}
+            onClick={() => { setSavingView(false); setNewViewName(""); }}
             className="text-[11px] text-neutral-600 hover:text-neutral-400"
           >
             ✕
@@ -825,10 +972,7 @@ function ActionsBoardToolbar({
               {filters.categories.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    onFiltersChange({ ...filters, categories: [] });
-                    setCatOpen(false);
-                  }}
+                  onClick={() => { onFiltersChange({ ...filters, categories: [] }); setCatOpen(false); }}
                   className="mt-1 w-full border-t border-white/[0.04] px-3 py-1 text-left text-[11px] text-neutral-600 transition-colors hover:text-neutral-400"
                 >
                   Clear
@@ -843,12 +987,7 @@ function ActionsBoardToolbar({
       <select
         className="rounded-md border border-white/[0.07] bg-neutral-900 px-2 py-1 text-[11px] text-neutral-400 outline-none transition-colors hover:border-white/[0.12] focus:border-indigo-500/40"
         value={filters.dueFilter}
-        onChange={(e) =>
-          onFiltersChange({
-            ...filters,
-            dueFilter: e.target.value as ViewFilters["dueFilter"],
-          })
-        }
+        onChange={(e) => onFiltersChange({ ...filters, dueFilter: e.target.value as ViewFilters["dueFilter"] })}
       >
         <option value="all">Due: All</option>
         <option value="overdue">Overdue</option>
@@ -860,9 +999,7 @@ function ActionsBoardToolbar({
       <select
         className="rounded-md border border-white/[0.07] bg-neutral-900 px-2 py-1 text-[11px] text-neutral-400 outline-none transition-colors hover:border-white/[0.12] focus:border-indigo-500/40"
         value={filters.sort}
-        onChange={(e) =>
-          onFiltersChange({ ...filters, sort: e.target.value as ViewFilters["sort"] })
-        }
+        onChange={(e) => onFiltersChange({ ...filters, sort: e.target.value as ViewFilters["sort"] })}
       >
         <option value="due_asc">Sort: Due date</option>
         <option value="added_asc">Sort: Date added</option>
@@ -877,7 +1014,6 @@ function ActionsBoardToolbar({
         onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
       />
 
-      {/* Clear all filters */}
       {hasActiveFilters && (
         <button
           type="button"
@@ -925,9 +1061,7 @@ function FlaggedGroup({
           {label}
         </span>
         <span className="text-[11px] text-neutral-600">{cards.length}</span>
-        <span className="ml-auto text-[10px] text-neutral-700">
-          {collapsed ? "▸" : "▾"}
-        </span>
+        <span className="ml-auto text-[10px] text-neutral-700">{collapsed ? "▸" : "▾"}</span>
       </button>
 
       {!collapsed && (
@@ -965,30 +1099,22 @@ function ActionCardItem({
     done: "Done",
   };
 
-  // Unseen dot
   const awareness = awarenessMap[card.note_id];
   const isUnseen = Boolean(
     card.updated_at &&
-    (
-      !awareness ||
-      awareness.last_viewed_at === null ||
-      card.updated_at > awareness.last_viewed_at
-    ),
+    (!awareness || awareness.last_viewed_at === null || card.updated_at > awareness.last_viewed_at),
   );
 
-  // Timed label: only for active (needs_action) cards; done cards keep "Was due {date}"
   const timedLabel =
     card.action_state === "needs_action" ? timedLabelForDueDate(card.due_date) : null;
 
-  // Last updated display
   const displayIsRecent = card.updated_at ? isWithin24h(card.updated_at) : false;
 
   return (
     <li
       onClick={() => onOpen(card.note_id)}
-      className="relative cursor-pointer rounded-xl border border-white/[0.07] bg-neutral-800/60 p-3 shadow-sm shadow-black/30 transition-all duration-150 ease-out hover:scale-[1.01] hover:border-white/[0.12] hover:bg-neutral-800/80 hover:shadow-md hover:shadow-black/40"
+      className="relative cursor-pointer rounded-xl border border-white/[0.06] bg-gradient-to-b from-neutral-800/70 to-neutral-900/80 p-3 transition-all duration-150 ease-out hover:border-white/[0.11] hover:from-neutral-800/90 hover:to-neutral-900 hover:-translate-y-px hover:shadow-md hover:shadow-black/30"
     >
-      {/* Per-user unseen dot */}
       {isUnseen && (
         <span
           className="pointer-events-none absolute right-2 top-2 h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"
@@ -1014,7 +1140,6 @@ function ActionCardItem({
           </span>
         )}
 
-        {/* Active cards: timed label pill. Done cards: "Was due {date}". */}
         {timedLabel && (
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${timedLabel.badgeClass}`}>
             {timedLabel.label}
@@ -1044,11 +1169,8 @@ function ActionCardItem({
           </>
         )}
 
-        {/* Last updated — green + semi-bold if within 24h */}
         {card.updated_at && (
-          <span
-            className={`text-[10px] ${displayIsRecent ? "font-medium text-emerald-600" : "text-neutral-700"}`}
-          >
+          <span className={`text-[10px] ${displayIsRecent ? "font-medium text-emerald-600" : "text-neutral-700"}`}>
             {relativeTimeShort(card.updated_at)}
           </span>
         )}

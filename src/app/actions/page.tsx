@@ -38,11 +38,13 @@ import { ActionsBoard } from "@/components/ActionsBoard";
 import { ManageGroupsModal } from "@/components/ManageGroupsModal";
 import { QuickActionModal } from "@/components/QuickActionModal";
 import { SharedTopBar } from "@/components/SharedTopBar";
+import { getWeekEndPreference, setWeekEndPreference, type WeekEndDay } from "@/lib/userPreferences";
+import { fetchAllActions } from "@/lib/userActions";
 
 // ── All bucket keys ────────────────────────────────────────────────────────────
 
 const TIMED_BUCKET_KEYS: Array<keyof MyActionsResult> = [
-  "overdue", "today", "tomorrow", "this_week", "beyond", "waiting", "done",
+  "overdue", "today", "tomorrow", "this_week", "later", "tracking", "waiting", "done",
 ];
 
 const ALL_BUCKET_KEYS: Array<keyof MyActionsResult> = [...TIMED_BUCKET_KEYS, "flagged"];
@@ -85,7 +87,8 @@ function applyFiltersToResult(result: MyActionsResult, filters: ViewFilters): My
     today:      result.today.filter(filterTimedCard),
     tomorrow:   result.tomorrow.filter(filterTimedCard),
     this_week:  result.this_week.filter(filterTimedCard),
-    beyond:     result.beyond.filter(filterTimedCard),
+    later:      result.later.filter(filterTimedCard),
+    tracking:   result.tracking.filter(filterCard),
     waiting:    result.waiting.filter(filterTimedCard),
     done:       result.done.filter(filterTimedCard),
     flagged:    result.flagged.filter(filterCard),
@@ -123,6 +126,10 @@ export default function ActionsPage() {
   const [showManageGroups, setShowManageGroups] = useState(false);
   const [checkWaitingBusy, setCheckWaitingBusy] = useState(false);
 
+  // Week-end preference + scope
+  const [weekEndDay, setWeekEndDay] = useState<WeekEndDay>("friday");
+  const [scope, setScope] = useState<"my" | "all">("my");
+
   // Card detail modal
   const [modalNote, setModalNote] = useState<NoteRow | null>(null);
   const [modalNoteId, setModalNoteId] = useState<string | null>(null);
@@ -135,11 +142,25 @@ export default function ActionsPage() {
     });
   }, []);
 
+  // Load week-end preference once on mount
+  useEffect(() => {
+    getWeekEndPreference().then(setWeekEndDay);
+  }, []);
+
+  // Reload All Actions data when scope or weekEndDay changes
+  useEffect(() => {
+    if (scope === "all" && user) {
+      void fetchAllActions(weekEndDay).then((data) => {
+        if (data) setRawResult(data);
+      });
+    }
+  }, [scope, weekEndDay, user]);
+
   async function loadActions() {
     setLoading(true);
     setFetchError(null);
     const [data, views, defs] = await Promise.all([
-      fetchMyActions(),
+      fetchMyActions(weekEndDay),
       fetchSavedViews(),
       fetchTagDefs(),
     ]);
@@ -286,7 +307,7 @@ export default function ActionsPage() {
     }));
     void patchNoteAction(noteId, { action_mode: mode }).then(() => void loadActions());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [weekEndDay]);
 
   /** Updates notes.due_date (canonical). ActionsBoard derives column from this. */
   const handleDueDateChange = useCallback((noteId: string, date: string | null) => {
@@ -385,6 +406,21 @@ export default function ActionsPage() {
     if (def) setTagDefs((prev) => [...prev, def]);
     return def;
   }, []);
+
+  const handleWeekEndChange = useCallback(async (day: WeekEndDay) => {
+    setWeekEndDay(day);
+    await setWeekEndPreference(day);
+    void loadActions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleScopeChange = useCallback((newScope: "my" | "all") => {
+    setScope(newScope);
+    if (newScope === "my") {
+      void loadActions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekEndDay]);
 
   // ── Card click → open modal ────────────────────────────────────────────────
 
@@ -499,7 +535,7 @@ export default function ActionsPage() {
   const boardHref = boards.length > 0 ? `/board/${boards[0].id}` : "/";
 
   const EMPTY_RESULT: MyActionsResult = {
-    overdue: [], today: [], tomorrow: [], this_week: [], beyond: [], waiting: [], done: [], flagged: [],
+    overdue: [], today: [], tomorrow: [], this_week: [], later: [], tracking: [], waiting: [], done: [], flagged: [],
   };
 
   return (
@@ -516,22 +552,19 @@ export default function ActionsPage() {
         onCreateTagDef: handleCreateTagDef,
       }}
     >
-      <div className="flex h-screen flex-col overflow-hidden bg-neutral-950">
+      <div className="flex h-screen flex-col overflow-hidden bg-page">
         <SharedTopBar boardHref={boardHref} />
 
-        <div
-          className="min-h-0 flex-1 overflow-hidden"
-          style={{ background: "linear-gradient(150deg, #1b1e2e 0%, #13151f 60%, #101218 100%)" }}
-        >
+        <div className="min-h-0 flex-1 overflow-hidden bg-page">
           {authLoading || loading ? (
             <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-neutral-500">Loading…</p>
+              <p className="text-sm text-gray-400">Loading…</p>
             </div>
           ) : !user ? (
             <div className="flex h-full items-center justify-center">
-              <div className="rounded-xl border border-white/[0.07] bg-neutral-900/60 p-6 text-center">
-                <p className="text-sm text-neutral-400">Sign in to use My Actions.</p>
-                <p className="mt-1 text-xs text-neutral-600">
+              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-panel">
+                <p className="text-sm text-gray-600">Sign in to use My Actions.</p>
+                <p className="mt-1 text-xs text-gray-400">
                   Actions are personal and require authentication.
                 </p>
                 <Link
@@ -544,8 +577,8 @@ export default function ActionsPage() {
             </div>
           ) : fetchError ? (
             <div className="flex h-full items-center justify-center">
-              <div className="rounded-xl border border-white/[0.07] bg-neutral-900/60 p-6 text-center">
-                <p className="text-sm text-neutral-400">{fetchError}</p>
+              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-panel">
+                <p className="text-sm text-gray-600">{fetchError}</p>
                 <button
                   type="button"
                   onClick={() => void loadActions()}
@@ -570,6 +603,10 @@ export default function ActionsPage() {
               onDeleteView={handleDeleteView}
               onQuickAction={() => setShowQuickAction(true)}
               onManageGroups={() => setShowManageGroups(true)}
+              scope={scope}
+              weekEndDay={weekEndDay}
+              onScopeChange={handleScopeChange}
+              onWeekEndChange={handleWeekEndChange}
               onCheckWaiting={handlePollWaiting}
               checkWaitingBusy={checkWaitingBusy}
               onCardDrop={handleCardDrop}

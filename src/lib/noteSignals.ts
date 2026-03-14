@@ -38,6 +38,8 @@ export interface BoardRef {
 
 export const MILESTONE_TERMS: string[] = [
   "campaign overview",
+  "campaign launch",
+  "release window",
   "creative lock",
   "artwork lock",
   "trailer debut",
@@ -57,6 +59,7 @@ export const MILESTONE_TERMS: string[] = [
   "screening",
   "certification",
   "censorship",
+  "announce",
   "trailer",
   "teaser",
   "poster",
@@ -64,7 +67,10 @@ export const MILESTONE_TERMS: string[] = [
   "junket",
   "release",
   "overview",
+  "launch",
+  "drops",
   "award",
+  "campaign",
 ];
 
 export const MARKET_TERMS: string[] = [
@@ -105,8 +111,12 @@ export const CHANNEL_TERMS: string[] = [
   "partnership",
   "promotions",
   "promotion",
+  "Instagram",
+  "TikTok",
+  "YouTube",
   "creative",
   "digital",
+  "Reddit",
   "social",
   "events",
   "retail",

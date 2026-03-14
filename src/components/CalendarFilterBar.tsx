@@ -57,20 +57,20 @@ export function CalendarFilterBar({
     filters.showArchived;
 
   return (
-    <div className="mb-4 space-y-2.5 rounded-xl border border-white/[0.07] bg-neutral-900/50 p-3 text-sm">
+    <div className="mb-4 space-y-2.5 rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-sm">
       {/* Row 1: Boards + Labels + Type */}
       <div className="flex flex-wrap gap-4">
         {/* Boards */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
             Boards
           </span>
           <button
             onClick={() => patch({ boardIds: [] })}
             className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-150 ${
               allBoards
-                ? "bg-neutral-700 font-medium text-neutral-100"
-                : "bg-white/[0.04] text-neutral-500 hover:bg-white/[0.07] hover:text-neutral-300"
+                ? "bg-gray-800 font-medium text-white"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
             }`}
           >
             All
@@ -81,8 +81,8 @@ export function CalendarFilterBar({
               onClick={() => toggleBoard(board.id)}
               className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-150 ${
                 isBoardOn(board.id)
-                  ? "border border-indigo-500/25 bg-indigo-500/15 font-medium text-indigo-300"
-                  : "bg-white/[0.04] text-neutral-500 hover:bg-white/[0.07] hover:text-neutral-300"
+                  ? "border border-indigo-200 bg-indigo-50 font-medium text-indigo-700"
+                  : "border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700"
               }`}
             >
               {board.name}
@@ -93,7 +93,7 @@ export function CalendarFilterBar({
         {/* Labels */}
         {labels.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
               Labels
             </span>
             {labels.map((label) => {
@@ -103,7 +103,7 @@ export function CalendarFilterBar({
                   key={label.id}
                   onClick={() => toggleLabel(label.id)}
                   className={`rounded-full px-2.5 py-0.5 text-xs font-medium text-white transition-opacity duration-150 ${
-                    on ? "opacity-100 ring-1 ring-white/25" : "opacity-35 hover:opacity-60"
+                    on ? "opacity-100 ring-1 ring-black/10" : "opacity-40 hover:opacity-70"
                   }`}
                   style={{ backgroundColor: label.color }}
                 >
@@ -116,7 +116,7 @@ export function CalendarFilterBar({
 
         {/* Type */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
             Type
           </span>
           {(
@@ -131,8 +131,8 @@ export function CalendarFilterBar({
               onClick={() => patch({ type: v })}
               className={`rounded-lg px-2.5 py-0.5 text-xs transition-colors duration-150 ${
                 filters.type === v
-                  ? "bg-neutral-700/80 font-medium text-neutral-100"
-                  : "text-neutral-500 hover:text-neutral-200"
+                  ? "bg-gray-100 font-medium text-gray-800"
+                  : "text-gray-500 hover:text-gray-800"
               }`}
             >
               {label}
@@ -143,7 +143,7 @@ export function CalendarFilterBar({
 
       {/* Row 2: Time-state toggles */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
           Due:
         </span>
         {(
@@ -158,15 +158,15 @@ export function CalendarFilterBar({
             onClick={() => toggleTime(key)}
             className={`rounded-lg border px-2 py-0.5 text-xs transition-colors duration-150 ${
               filters.timeState[key]
-                ? "border-red-500/30 bg-red-950/40 text-red-300"
-                : "border-white/[0.08] text-neutral-600 hover:border-white/[0.14] hover:text-neutral-300"
+                ? "border-red-200 bg-red-50 text-red-600"
+                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
             }`}
           >
             {label}
           </button>
         ))}
 
-        <span className="ml-2 text-[11px] font-medium uppercase tracking-wide text-neutral-600">
+        <span className="ml-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">
           Events:
         </span>
         {(
@@ -181,8 +181,8 @@ export function CalendarFilterBar({
             onClick={() => toggleTime(key)}
             className={`rounded-lg border px-2 py-0.5 text-xs transition-colors duration-150 ${
               filters.timeState[key]
-                ? "border-indigo-500/30 bg-indigo-950/40 text-indigo-300"
-                : "border-white/[0.08] text-neutral-600 hover:border-white/[0.14] hover:text-neutral-300"
+                ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
             }`}
           >
             {label}
@@ -196,8 +196,8 @@ export function CalendarFilterBar({
           onClick={() => patch({ showArchived: !filters.showArchived })}
           className={`rounded-lg border px-2 py-0.5 text-xs transition-colors duration-150 ${
             filters.showArchived
-              ? "border-white/[0.14] text-neutral-200"
-              : "border-white/[0.08] text-neutral-600 hover:text-neutral-300"
+              ? "border-gray-300 text-gray-700"
+              : "border-gray-200 text-gray-500 hover:text-gray-700"
           }`}
         >
           {filters.showArchived ? "Showing archived" : "Show archived"}
@@ -206,13 +206,13 @@ export function CalendarFilterBar({
         {hasActiveFilters && (
           <button
             onClick={() => onChange({ ...DEFAULT_FILTERS })}
-            className="text-xs text-neutral-600 underline underline-offset-2 transition-colors hover:text-neutral-400"
+            className="text-xs text-gray-400 underline underline-offset-2 transition-colors hover:text-gray-600"
           >
             Clear filters
           </button>
         )}
 
-        <span className="ml-auto text-[11px] text-neutral-600">
+        <span className="ml-auto text-[11px] text-gray-400">
           {shownCount === totalCount
             ? `${shownCount} items`
             : `${shownCount} / ${totalCount} shown`}
