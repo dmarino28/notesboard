@@ -20,6 +20,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     inferred_board_id?: string | null;
     context_source?: string;
     status?: string;
+    /** When true, skip automatic board routing from signal detection. */
+    no_auto_route?: boolean;
   };
 
   try {
@@ -43,16 +45,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const { data: boards } = await client.from("boards").select("id, name");
     newSignals = detectSignals(body.content, boards ?? []);
 
-    // Update context from fresh signals
+    // Only auto-route to a board if the caller has not suppressed it.
+    // Quick Notes workspace always passes no_auto_route=true.
     const boardSig = newSignals.find((s) => s.type === "board");
-    if (boardSig) {
+    if (boardSig && !body.no_auto_route) {
       updatePayload.explicit_board_id = boardSig.value;
       updatePayload.inferred_board_id = null;
       updatePayload.context_source = "direct_match";
-    } else if (!body.explicit_board_id && !body.inferred_board_id) {
-      // Only clear if not explicitly provided
-      updatePayload.explicit_board_id = null;
-      updatePayload.context_source = "unknown";
     }
   }
 

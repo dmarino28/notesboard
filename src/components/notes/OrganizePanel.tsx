@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { AISuggestion } from "@/lib/ai/noteOrganize";
 
 type Props = {
@@ -8,6 +8,8 @@ type Props = {
   onApply: (suggestion: AISuggestion) => Promise<void>;
   onIgnore: (localId: string) => void;
   onClose: () => void;
+  /** Called with the source entry IDs of the last applied batch to allow undo. */
+  onUndoBatch?: (entryIds: string[]) => void;
 };
 
 const CONFIDENCE_STYLES = {
@@ -32,10 +34,17 @@ const TYPE_ICONS: Record<AISuggestion["type"], string> = {
   attach_note_reference: "↗",
 };
 
-export function OrganizePanel({ suggestions, onApply, onIgnore, onClose }: Props) {
+export function OrganizePanel({ suggestions, onApply, onIgnore, onClose, onUndoBatch }: Props) {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [applyingAll, setApplyingAll] = useState(false);
   const [confirmApplyAll, setConfirmApplyAll] = useState(false);
+  const [lastBatchIds, setLastBatchIds] = useState<string[]>([]);
+  const [undoVisible, setUndoVisible] = useState(false);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    return () => clearTimeout(undoTimerRef.current);
+  }, []);
 
   const pendingSuggestions = suggestions.filter((s) => s.status === "pending");
   const appliedSuggestions = suggestions.filter((s) => s.status === "applied");
@@ -56,15 +65,31 @@ export function OrganizePanel({ suggestions, onApply, onIgnore, onClose }: Props
       setTimeout(() => setConfirmApplyAll(false), 3000);
       return;
     }
+    // Capture source entry IDs before applying (suggestions move to applied state after).
+    const batchIds = pendingSuggestions.flatMap((s) => s.sourceEntryIds);
     setConfirmApplyAll(false);
     setApplyingAll(true);
     try {
       for (const s of pendingSuggestions) {
         await onApply(s);
       }
+      // Show undo for 30 s after a successful Apply All.
+      if (batchIds.length > 0 && onUndoBatch) {
+        setLastBatchIds(batchIds);
+        setUndoVisible(true);
+        clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = setTimeout(() => setUndoVisible(false), 30000);
+      }
     } finally {
       setApplyingAll(false);
     }
+  }
+
+  function handleUndoBatch() {
+    clearTimeout(undoTimerRef.current);
+    setUndoVisible(false);
+    onUndoBatch?.(lastBatchIds);
+    setLastBatchIds([]);
   }
 
   return (
@@ -129,25 +154,39 @@ export function OrganizePanel({ suggestions, onApply, onIgnore, onClose }: Props
         )}
       </div>
 
-      {/* Footer: Apply Selected */}
-      {pendingSuggestions.length > 1 && (
-        <div className="border-t border-gray-100 px-4 py-3">
-          <button
-            type="button"
-            onClick={() => void handleApplyAll()}
-            disabled={applyingAll}
-            className={`w-full rounded-lg py-2 text-sm font-medium text-white transition-colors disabled:opacity-60 ${
-              confirmApplyAll
-                ? "bg-orange-500 hover:bg-orange-400"
-                : "bg-indigo-600 hover:bg-indigo-500"
-            }`}
-          >
-            {applyingAll
-              ? "Applying…"
-              : confirmApplyAll
-              ? `Confirm? Apply all ${pendingSuggestions.length}`
-              : `Apply All (${pendingSuggestions.length})`}
-          </button>
+      {/* Footer: Apply All + Undo */}
+      {(pendingSuggestions.length > 1 || undoVisible) && (
+        <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+          {pendingSuggestions.length > 1 && (
+            <button
+              type="button"
+              onClick={() => void handleApplyAll()}
+              disabled={applyingAll}
+              className={`w-full rounded-lg py-2 text-sm font-medium text-white transition-colors disabled:opacity-60 ${
+                confirmApplyAll
+                  ? "bg-orange-500 hover:bg-orange-400"
+                  : "bg-indigo-600 hover:bg-indigo-500"
+              }`}
+            >
+              {applyingAll
+                ? "Applying…"
+                : confirmApplyAll
+                ? `Confirm? Apply all ${pendingSuggestions.length}`
+                : `Apply All (${pendingSuggestions.length})`}
+            </button>
+          )}
+          {undoVisible && (
+            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-xs text-gray-500">Batch applied</span>
+              <button
+                type="button"
+                onClick={handleUndoBatch}
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                Undo
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

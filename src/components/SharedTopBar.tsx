@@ -1,6 +1,6 @@
 "use client";
 
-// SharedTopBar — segmented nav + auth widget used by Actions, Calendar, Timeline.
+// SharedTopBar — segmented nav + auth widget used by Actions, Calendar, Timeline, Notes.
 // Keeps global navigation consistent across all non-board views.
 
 import Link from "next/link";
@@ -15,6 +15,9 @@ type Props = {
 export function SharedTopBar({ boardHref = "/" }: Props) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  // Resolved href for the Board nav item: prefer the most recently visited board
+  // (stored in localStorage) so the link works even from a fresh session.
+  const [resolvedBoardHref, setResolvedBoardHref] = useState(boardHref);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -28,12 +31,18 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const stored = localStorage.getItem("nb:lastBoardHref");
+    if (stored) setResolvedBoardHref(stored);
+  }, []);
+
+  // Nav order: Notes → Board → Actions → Calendar → Timeline
   const views = [
-    { label: "Actions", href: "/actions" },
-    { label: "Board", href: boardHref },
+    { label: "Notes",    href: "/notes" },
+    { label: "Board",    href: resolvedBoardHref },
+    { label: "Actions",  href: "/actions" },
     { label: "Calendar", href: "/calendar" },
     { label: "Timeline", href: "/timeline" },
-    { label: "Notes", href: "/notes" },
   ];
 
   function isActive(label: string, href: string) {
@@ -43,7 +52,7 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
 
   const authEl = userEmail ? (
     <div className="flex items-center gap-2">
-      <div className="hidden items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 sm:flex">
+      <div className="hidden items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 md:flex">
         <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[8px] font-semibold text-indigo-600">
           {userEmail[0].toUpperCase()}
         </div>
@@ -53,7 +62,7 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
       </div>
       <button
         type="button"
-        className="text-[11px] text-gray-400 transition-colors hover:text-gray-600"
+        className="whitespace-nowrap text-[11px] text-gray-400 transition-colors hover:text-gray-600"
         onClick={() => supabase.auth.signOut()}
       >
         Sign out
@@ -71,23 +80,23 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
   return (
     <header className="relative z-10 flex-shrink-0 border-b border-gray-200 bg-white pt-[env(safe-area-inset-top,0px)] shadow-topbar">
 
-      {/* ── Mobile: two rows (hidden on sm+) ─────────────────────────────────── */}
+      {/* ── Mobile: two rows — < 640px (sm) ────────────────────────────────────── */}
       <div className="sm:hidden">
-        {/* Row 1: auth only — right-aligned */}
+        {/* Row 1: auth only, right-aligned */}
         <div className="flex h-11 items-center justify-end px-4">
           {authEl}
         </div>
-        {/* Row 2: nav tabs — horizontally scrollable */}
+        {/* Row 2: nav tabs, horizontally scrollable */}
         <div className="overflow-x-auto border-t border-gray-100 px-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <nav className="flex min-w-max gap-0.5">
             {views.map(({ label, href }) => (
               <Link
                 key={label}
                 href={href}
-                className={`whitespace-nowrap rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors ${
                   isActive(label, href)
-                    ? "bg-white text-indigo-700 shadow-[0_1px_5px_rgba(0,0,0,0.13)]"
-                    : "text-gray-500 hover:text-gray-800"
+                    ? "bg-white text-indigo-600 shadow-[0_2px_6px_rgba(0,0,0,0.08)] ring-1 ring-gray-200"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
               >
                 {label}
@@ -97,26 +106,37 @@ export function SharedTopBar({ boardHref = "/" }: Props) {
         </div>
       </div>
 
-      {/* ── Desktop: single row (hidden on mobile) ───────────────────────────── */}
-      <div className="relative hidden h-[56px] items-center px-4 sm:flex">
-        {/* Center: segmented nav — matches BoardTopBar exactly */}
-        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-[10px] bg-black/[0.07] p-0.5 ring-1 ring-inset ring-black/[0.04]">
+      {/* ── Desktop: single row — ≥ 640px (sm) ─────────────────────────────────── */}
+      {/*
+          SharedTopBar has no board selector, so nav + auth fits comfortably in
+          one row from sm upward. grid-cols-[1fr_auto_1fr] keeps the nav
+          geometrically centered at any width — left 1fr and right 1fr split
+          remaining space equally; neither track can overlap the center track.
+      */}
+      <div className="hidden h-[56px] grid-cols-[1fr_auto_1fr] items-center px-5 sm:grid">
+
+        {/* Left — empty balancing spacer */}
+        <div />
+
+        {/* Center — nav pill at natural width, always centered */}
+        <nav className="flex items-center rounded-[10px] bg-gray-100 p-0.5 shadow-inner">
           {views.map(({ label, href }) => (
             <Link
               key={label}
               href={href}
-              className={`rounded-[8px] px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
+              className={`whitespace-nowrap rounded-lg px-2.5 text-xs font-medium transition-colors ${
                 isActive(label, href)
-                  ? "bg-white text-indigo-600 shadow-[0_1px_0_rgba(0,0,0,0.06),0_2px_10px_rgba(0,0,0,0.14)] ring-1 ring-inset ring-black/[0.05]"
-                  : "text-gray-500 hover:text-gray-800"
+                  ? "py-[7px] bg-white text-indigo-600 shadow-[0_2px_6px_rgba(0,0,0,0.08)] ring-1 ring-gray-200"
+                  : "py-1.5 text-gray-600 hover:bg-white/70"
               }`}
             >
               {label}
             </Link>
           ))}
         </nav>
-        {/* Right: auth */}
-        <div className="ml-auto flex items-center gap-2">
+
+        {/* Right — auth, right-aligned */}
+        <div className="flex items-center justify-end gap-2">
           {authEl}
         </div>
       </div>

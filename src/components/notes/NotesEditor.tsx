@@ -13,6 +13,9 @@ type Props = {
   boards: BoardRow[];
   focusedId: string | null;
   selectedIds: Set<string>;
+  saveErrors?: Set<string>;
+  /** When set (board view), empty capture rows use a board-specific placeholder. */
+  activeBoardName?: string;
   onFocus: (id: string) => void;
   onBlur: (id: string, content: string) => void;
   onChange: (id: string, content: string) => void;
@@ -23,6 +26,9 @@ type Props = {
   onSelect: (id: string) => void;
   onAddFirstEntry: () => void;
   onOrganize?: () => void;
+  onRetry?: (id: string, content: string) => void;
+  onSuggestApplied?: (entryId: string) => void;
+  onArchive?: (id: string) => void;
   userAliases?: AliasMap;
   onConfirmAlias?: (alias: string, boardId: string) => void;
 };
@@ -32,6 +38,8 @@ export function NotesEditor({
   boards,
   focusedId,
   selectedIds,
+  saveErrors,
+  activeBoardName,
   onFocus,
   onBlur,
   onChange,
@@ -42,6 +50,9 @@ export function NotesEditor({
   onSelect,
   onAddFirstEntry,
   onOrganize,
+  onRetry,
+  onSuggestApplied,
+  onArchive,
   userAliases,
   onConfirmAlias,
 }: Props) {
@@ -54,22 +65,6 @@ export function NotesEditor({
     },
     [onArrow]
   );
-
-  if (entries.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="mb-1 text-sm font-medium text-gray-500">Start capturing</p>
-        <p className="mb-6 text-xs text-gray-400">Type notes, bullets, campaign signals, meeting notes...</p>
-        <button
-          type="button"
-          onClick={onAddFirstEntry}
-          className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-700"
-        >
-          + New note entry
-        </button>
-      </div>
-    );
-  }
 
   // Precompute context headers: show a board header when context changes between entries.
   // lastBoardId resets at each day group so each day's first context section is always labeled.
@@ -117,6 +112,12 @@ export function NotesEditor({
                     boards={boards}
                     isFocused={focusedId === entry.id}
                     isSelected={selectedIds.has(entry.id)}
+                    hasError={saveErrors?.has(entry.id) ?? false}
+                    placeholder={
+                      entry.content === "" && activeBoardName
+                        ? `Add a note to ${activeBoardName}…`
+                        : undefined
+                    }
                     onFocus={onFocus}
                     onBlur={onBlur}
                     onChange={onChange}
@@ -126,6 +127,9 @@ export function NotesEditor({
                     onArrow={handleArrow}
                     onSelect={onSelect}
                     onOrganize={onOrganize}
+                    onRetry={onRetry}
+                    onSuggestApplied={onSuggestApplied}
+                    onArchive={onArchive}
                     userAliases={userAliases}
                     onConfirmAlias={onConfirmAlias}
                   />

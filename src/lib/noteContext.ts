@@ -1,6 +1,10 @@
 /**
  * noteContext.ts
  *
+ * @deprecated This module is unused dead code. Context inference was removed from
+ * the live flow in Phase 1 — the API routes handle board routing directly via
+ * signal detection. Do not add new callers. Safe to delete if confirmed unused.
+ *
  * Transparent, rule-based context inference for note entries.
  * Pure functions — no Supabase calls, no magic.
  *
@@ -75,8 +79,14 @@ export function inferContextForEntries(
       entry.explicit_board_id = boardSignal.value; // board UUID
       entry.inferred_board_id = null;
       entry.context_source = "direct_match";
+    } else if (!entry.content.trim()) {
+      // Rule 2a: empty entries never inherit context — they stay in Quick Notes
+      // until the user types a board signal, ensuring the capture row is always visible.
+      entry.explicit_board_id = null;
+      entry.inferred_board_id = null;
+      entry.context_source = "unknown";
     } else {
-      // Rule 2: look back for an inherited board context
+      // Rule 2b: look back for an inherited board context
       const lookbackStart = Math.max(0, i - LOOKBACK_LIMIT);
       let inheritedBoardId: string | null = null;
 

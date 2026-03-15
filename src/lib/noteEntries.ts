@@ -36,7 +36,7 @@ export interface NoteEntryRow {
 export interface NoteEntrySignalRow {
   id: string;
   entry_id: string;
-  signal_type: "board" | "milestone" | "channel" | "market" | "date";
+  signal_type: "board" | "milestone" | "channel" | "market" | "date" | "link";
   signal_value: string;
   normalized_value: string | null;
   match_text: string;
@@ -145,6 +145,9 @@ export async function listNoteEntriesForDate(date: string): Promise<NoteEntryWit
 
 /**
  * Create a note entry. Returns null on failure.
+ *
+ * @deprecated Direct anon Supabase client — bypasses auth guards. Prefer the
+ * POST /api/note-entries route which enforces authentication via getAuthedSupabase().
  */
 export async function createNoteEntry(
   input: CreateEntryInput
@@ -172,6 +175,9 @@ export async function createNoteEntry(
 
 /**
  * Update an entry's content, position, indent, or context fields.
+ *
+ * @deprecated Direct anon Supabase client — bypasses auth guards. Prefer the
+ * PATCH /api/note-entries/[id] route which enforces authentication via getAuthedSupabase().
  */
 export async function updateNoteEntry(
   id: string,
@@ -190,6 +196,9 @@ export async function updateNoteEntry(
 
 /**
  * Soft-delete: mark entry as archived.
+ *
+ * @deprecated Direct anon Supabase client — bypasses auth guards. Prefer the
+ * DELETE /api/note-entries/[id] route which enforces authentication via getAuthedSupabase().
  */
 export async function deleteNoteEntry(id: string): Promise<boolean> {
   const { error } = await supabase

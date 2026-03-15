@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { DayItem } from "@/lib/calendar";
 import { LabelRow } from "@/lib/labels";
+import { BAR_H } from "./CalendarMonthGrid";
 
 type Props = {
   date: Date;
   items: DayItem[];
+  /** Number of multi-day bar lanes to reserve above the single-day chips. */
+  reservedLanes?: number;
   isCurrentMonth: boolean;
   isToday: boolean;
   noteLabelMap: Record<string, LabelRow[]>;
@@ -30,6 +33,7 @@ function getChipClass(type: DayItem["type"], note: DayItem["note"]): string {
 export function CalendarDayCell({
   date,
   items,
+  reservedLanes = 0,
   isCurrentMonth,
   isToday,
   noteLabelMap,
@@ -118,6 +122,11 @@ export function CalendarDayCell({
           {date.getDate()}
         </span>
       </div>
+
+      {/* Spacer that pushes chips below the multi-day bar overlay */}
+      {reservedLanes > 0 && (
+        <div aria-hidden="true" style={{ height: reservedLanes * BAR_H }} />
+      )}
 
       {/* Visible chips */}
       <div className={`space-y-0.5 ${!isCurrentMonth ? "opacity-50" : ""}`}>

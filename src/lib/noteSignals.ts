@@ -14,7 +14,7 @@
  * Overlapping matches are resolved by preferring longer matches.
  */
 
-export type SignalType = "board" | "milestone" | "channel" | "market" | "date";
+export type SignalType = "board" | "milestone" | "channel" | "market" | "date" | "link";
 
 export interface Signal {
   type: SignalType;
@@ -155,16 +155,50 @@ const DATE_PATTERNS: RegExp[] = [
   /\bq[1-4]\s+\d{4}\b/gi,
 ];
 
+// ─── Cross-reference Pattern ─────────────────────────────────────────────────
+
+/**
+ * Matches [[Board Name]] cross-reference syntax.
+ * Declared at module level (not inside detectSignals) to avoid re-allocation on every call.
+ * Reset lastIndex before each use since the RegExp has the /g flag.
+ */
+const LINK_PATTERN = /\[\[([^\]]+)\]\]/g;
+
+// ─── Shared constants ─────────────────────────────────────────────────────────
+
+/**
+ * Minimum character length for a term to be eligible for board/alias signal detection.
+ * Prevents very short board names (e.g. "AI", "UK") from producing false positives.
+ * Callers such as the autocomplete in NoteEntryRow should import and use this constant
+ * rather than hardcoding their own threshold.
+ */
+export const NOTE_SIGNAL_MIN_CHARS = 3;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** True if character at position is a word-boundary-style separator. */
-function isBoundary(ch: string | undefined): boolean {
-  return !ch || /[\s\-:,./()[\]"'@#]/.test(ch);
+const BOUNDARY_CHARS = /[\s\-:,./()[\]"'@#]/;
+
+/**
+ * True if the character is a valid LEFT-side word boundary.
+ * Undefined (start-of-string) counts as a valid left boundary.
+ */
+function isLeftBoundary(ch: string | undefined): boolean {
+  return ch === undefined || BOUNDARY_CHARS.test(ch);
+}
+
+/**
+ * True if the character is a valid RIGHT-side word boundary.
+ * Undefined (end-of-string) does NOT count — a match must be followed by an
+ * explicit separator to avoid false positives on partial or truncated words.
+ * This is the fix for the end-of-string routing bug.
+ */
+function isRightBoundary(ch: string | undefined): boolean {
+  return ch !== undefined && BOUNDARY_CHARS.test(ch);
 }
 
 /** Check word boundaries around a match at [start, end) in content. */
 function hasWordBoundaries(content: string, start: number, end: number): boolean {
-  return isBoundary(content[start - 1]) && isBoundary(content[end]);
+  return isLeftBoundary(content[start - 1]) && isRightBoundary(content[end]);
 }
 
 /** Remove signals that are fully contained within another (prefer longer). */
@@ -201,9 +235,27 @@ export function detectSignals(
   const lower = content.toLowerCase();
   const signals: Signal[] = [];
 
-  // 1. Board names (exact match)
+  // 0. Explicit board links: [[Board Name]] — highest priority, detected before all other signals.
+  // These are user-authored cross-references and should not be overridden by board name detection.
+  LINK_PATTERN.lastIndex = 0;
+  let linkMatch: RegExpExecArray | null;
+  while ((linkMatch = LINK_PATTERN.exec(content)) !== null) {
+    const innerText = linkMatch[1].trim();
+    const board = boards.find((b) => b.name.toLowerCase() === innerText.toLowerCase());
+    signals.push({
+      type: "link",
+      value: board?.id ?? innerText,
+      matchText: linkMatch[0],
+      matchStart: linkMatch.index,
+      matchEnd: linkMatch.index + linkMatch[0].length,
+      normalizedValue: board?.name ?? innerText,
+    });
+  }
+
+  // 1. Board names (exact match — skip names shorter than the minimum to avoid false positives)
   for (const board of boards) {
     if (!board.name.trim()) continue;
+    if (board.name.trim().length < NOTE_SIGNAL_MIN_CHARS) continue;
     const nameLower = board.name.toLowerCase();
     let idx = lower.indexOf(nameLower);
     while (idx !== -1) {
@@ -224,6 +276,8 @@ export function detectSignals(
   // 1b. Confirmed + generated aliases (deduplication handles any overlap with board names)
   if (aliasLookup) {
     for (const [alias, boardId] of aliasLookup) {
+      // Skip aliases shorter than the minimum — same reason as board names above.
+      if (alias.length < NOTE_SIGNAL_MIN_CHARS) continue;
       let idx = lower.indexOf(alias);
       while (idx !== -1) {
         if (hasWordBoundaries(content, idx, idx + alias.length)) {
@@ -331,6 +385,7 @@ export function groupSignalsByType(signals: Signal[]): Record<SignalType, Signal
     channel: signals.filter((s) => s.type === "channel"),
     market: signals.filter((s) => s.type === "market"),
     date: signals.filter((s) => s.type === "date"),
+    link: signals.filter((s) => s.type === "link"),
   };
 }
 

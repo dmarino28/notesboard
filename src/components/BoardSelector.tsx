@@ -113,7 +113,7 @@ export function BoardSelector({
       <button
         onClick={() => (open ? closePopover() : openPopover())}
         aria-label="Switch board"
-        className={`flex max-w-[12rem] items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold tracking-tight shadow-sm transition-all duration-150 ${
+        className={`flex max-w-[12rem] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold tracking-tight shadow-sm transition-colors ${
           open
             ? "border-gray-300 bg-gray-50 text-gray-900"
             : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:bg-gray-50"
@@ -284,7 +284,7 @@ function ChevronDownIcon({ open }: { open: boolean }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className={`shrink-0 text-neutral-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+      className={`shrink-0 text-gray-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
     >
       <polyline points="2,3.5 5,6.5 8,3.5" />
     </svg>

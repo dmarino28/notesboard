@@ -1,0 +1,16 @@
+{
+  "name": "NotesBoard",
+  "short_name": "NotesBoard",
+  "description": "Capture, organize, and link your work in one place.",
+  "start_url": "/notes",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/icon80.png",
+      "sizes": "80x80",
+      "type": "image/png"
+    }
+  ]
+}

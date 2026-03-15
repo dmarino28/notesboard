@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedSupabase } from "@/lib/supabaseAuthed";
 import { detectSignals } from "@/lib/noteSignals";
-import { inferContextForEntries } from "@/lib/noteContext";
 import type { Signal } from "@/lib/noteSignals";
 
 // GET /api/note-entries — list all active entries for the authenticated user
@@ -63,6 +62,8 @@ export async function POST(req: NextRequest) {
     context_source?: string;
     entry_date?: string;
     meeting_timestamp?: string | null;
+    /** When true, skip automatic board routing from signal detection. */
+    no_auto_route?: boolean;
   };
 
   try {
@@ -83,8 +84,11 @@ export async function POST(req: NextRequest) {
   let explicitBoardId = body.explicit_board_id ?? null;
   let inferredBoardId = body.inferred_board_id ?? null;
 
+  // Only auto-route to a board if the caller has not suppressed it.
+  // Notes captured via the Quick Notes inbox always pass no_auto_route=true
+  // so they stay in the inbox until explicitly organized.
   const boardSig = signals.find((s) => s.type === "board");
-  if (boardSig) {
+  if (boardSig && !body.no_auto_route) {
     explicitBoardId = boardSig.value;
     inferredBoardId = null;
     contextSource = "direct_match";

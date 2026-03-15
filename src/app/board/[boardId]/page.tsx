@@ -103,6 +103,11 @@ export default function BoardPage() {
     });
   }, []);
 
+  // Persist the most recently visited board so SharedTopBar can route back to it.
+  useEffect(() => {
+    localStorage.setItem("nb:lastBoardHref", `/board/${boardId}`);
+  }, [boardId]);
+
   // Reload columns + placements + labels whenever boardId or showArchived changes.
   useEffect(() => {
     let cancelled = false;

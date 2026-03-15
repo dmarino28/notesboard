@@ -1,5 +1,10 @@
 "use client";
 
+// NOTE: Despite the filename "ContextBadge", this file exports only board color
+// utilities (BOARD_ACCENT_COLORS, resolveBoardHex, getBoardAccentStyle).
+// There is no visual badge component here. Consider renaming to boardColors.ts
+// if this module is ever moved or refactored.
+
 import type { BoardRow } from "@/lib/boards";
 
 /**

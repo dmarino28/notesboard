@@ -4,9 +4,16 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import type { NoteEntryWithSignals } from "@/lib/noteEntries";
 import type { BoardRow } from "@/lib/boards";
 import type { SignalType } from "@/lib/noteSignals";
-import { buildTextSegments } from "@/lib/noteSignals";
+import { buildTextSegments, NOTE_SIGNAL_MIN_CHARS } from "@/lib/noteSignals";
+import type { AISuggestion } from "@/lib/ai/noteOrganize";
 import { resolveBoardHex } from "./ContextBadge";
 import { type AliasMap, generateBoardAliases } from "@/lib/noteAliases";
+import { isTemp } from "./tempId";
+import {
+  type NoteTemplate,
+  getAllTemplates,
+  filterTemplates,
+} from "@/lib/noteTemplates";
 
 /** Subtle text-only colors for non-board signals — no backgrounds. */
 const SIGNAL_TEXT_COLORS: Record<string, string> = {
@@ -48,6 +55,9 @@ type Props = {
   boards: BoardRow[];
   isFocused: boolean;
   isSelected: boolean;
+  hasError?: boolean;
+  /** Overrides the default "Type a note…" placeholder for empty capture rows. */
+  placeholder?: string;
   onFocus: (id: string) => void;
   onBlur: (id: string, content: string) => void;
   onChange: (id: string, content: string) => void;
@@ -57,6 +67,11 @@ type Props = {
   onArrow: (id: string, direction: "up" | "down") => void;
   onSelect: (id: string) => void;
   onOrganize?: () => void;
+  onRetry?: (id: string, content: string) => void;
+  /** Called when a single-entry board suggestion has been accepted and applied. */
+  onSuggestApplied?: (entryId: string) => void;
+  /** Called to archive this note (reuses the backspace-on-empty deferred-DELETE system). */
+  onArchive?: (id: string) => void;
   userAliases?: AliasMap;
   onConfirmAlias?: (alias: string, boardId: string) => void;
 };
@@ -80,7 +95,7 @@ function findBoardAutocomplete(
   boards: BoardRow[],
   userAliases: AliasMap
 ): AutocompleteResult | null {
-  if (lastWord.length < 1) return null;
+  if (lastWord.length < NOTE_SIGNAL_MIN_CHARS) return null;
   const lp = lastWord.toLowerCase();
 
   // 1. Prefix of board name
@@ -114,6 +129,8 @@ export function NoteEntryRow({
   boards,
   isFocused,
   isSelected,
+  hasError,
+  placeholder = "Type a note…",
   onFocus,
   onBlur,
   onChange,
@@ -123,6 +140,9 @@ export function NoteEntryRow({
   onArrow,
   onSelect,
   onOrganize,
+  onRetry,
+  onSuggestApplied,
+  onArchive,
   userAliases,
   onConfirmAlias,
 }: Props) {
@@ -130,6 +150,76 @@ export function NoteEntryRow({
   const [autocomplete, setAutocomplete] = useState<AutocompleteResult | null>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const popoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Template menu state — active when content starts with "/" and has no space.
+  // allItems: full unfiltered list loaded once when menu opens (avoids getAllTemplates() on every keystroke).
+  // items: currently displayed filtered subset.
+  const [templateMenu, setTemplateMenu] = useState<{
+    allItems: NoteTemplate[];
+    items: NoteTemplate[];
+    selectedIdx: number;
+  } | null>(null);
+
+  // Board link autocomplete — active when content contains "[[ without closing ]]"
+  const [linkAutocomplete, setLinkAutocomplete] = useState<{
+    query: string;
+    results: BoardRow[];
+  } | null>(null);
+
+  // Inline "Suggest board" state
+  const [inlineSugg, setInlineSugg] = useState<{
+    loading: boolean;
+    suggestion: AISuggestion | null;
+    applying: boolean;
+    noResult: boolean;
+  }>({ loading: false, suggestion: null, applying: false, noResult: false });
+
+  const handleSuggestBoard = useCallback(async () => {
+    if (isTemp(entry.id)) return;
+    setInlineSugg({ loading: true, suggestion: null, applying: false, noResult: false });
+    try {
+      const res = await fetch("/api/ai/notes-organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entry_ids: [entry.id] }),
+      });
+      if (res.ok) {
+        const { suggestions } = (await res.json()) as { suggestions: AISuggestion[] };
+        const first = suggestions.find((s) => s.targetBoardId) ?? null;
+        setInlineSugg({ loading: false, suggestion: first, applying: false, noResult: !first });
+      } else {
+        setInlineSugg({ loading: false, suggestion: null, applying: false, noResult: true });
+      }
+    } catch {
+      setInlineSugg({ loading: false, suggestion: null, applying: false, noResult: true });
+    }
+  }, [entry.id]);
+
+  const handleAcceptSuggestion = useCallback(async () => {
+    const s = inlineSugg.suggestion;
+    if (!s) return;
+    setInlineSugg((prev) => ({ ...prev, applying: true }));
+    try {
+      await fetch("/api/ai/notes-apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: s.type,
+          targetBoardId: s.targetBoardId,
+          targetColumnId: s.targetColumnId,
+          cardContent: s.cardContent,
+          cardDescription: s.cardDescription,
+          milestoneField: s.milestoneField,
+          milestoneValue: s.milestoneValue,
+          sourceEntryIds: s.sourceEntryIds,
+        }),
+      });
+      onSuggestApplied?.(entry.id);
+      setInlineSugg({ loading: false, suggestion: null, applying: false, noResult: false });
+    } catch {
+      setInlineSugg((prev) => ({ ...prev, applying: false }));
+    }
+  }, [inlineSugg.suggestion, entry.id, onSuggestApplied]);
 
   // Auto-resize textarea height to content
   useEffect(() => {
@@ -139,22 +229,64 @@ export function NoteEntryRow({
     ta.style.height = `${ta.scrollHeight}px`;
   }, [entry.content, isFocused]);
 
-  // Focus and move cursor to end when entry becomes active
+  // Focus and move cursor to end when TRANSITIONING from unfocused → focused.
+  // Uses prevFocusedRef to avoid jumping cursor to end on component remount
+  // (which happens during temp→real ID migration while the user is typing).
+  const prevFocusedRef = useRef(false);
   useEffect(() => {
-    if (isFocused && textareaRef.current) {
+    const wasFocused = prevFocusedRef.current;
+    prevFocusedRef.current = isFocused;
+    if (isFocused && !wasFocused && textareaRef.current) {
       const ta = textareaRef.current;
       ta.focus();
-      const len = ta.value.length;
-      ta.setSelectionRange(len, len);
+      ta.setSelectionRange(ta.value.length, ta.value.length);
     }
   }, [isFocused]);
 
-  // Autocomplete detection — runs on every content change while focused
+  // Autocomplete detection — runs on every content change while focused.
+  // Priority: template menu → board link autocomplete → normal board prefix autocomplete.
   useEffect(() => {
     if (!isFocused) {
       setAutocomplete(null);
+      setTemplateMenu(null);
+      setLinkAutocomplete(null);
       return;
     }
+
+    // 1. Template menu: "/" at start with no space typed yet
+    if (entry.content.startsWith("/") && !entry.content.includes(" ")) {
+      const query = entry.content.slice(1);
+      setAutocomplete(null);
+      setLinkAutocomplete(null);
+      setTemplateMenu((prev) => {
+        // Load all templates once when the menu first opens; reuse on subsequent keystrokes.
+        const allItems = prev?.allItems ?? getAllTemplates();
+        const items = filterTemplates(query, allItems);
+        return {
+          allItems,
+          items,
+          // Reset selection when items narrow, preserve otherwise
+          selectedIdx: Math.min(prev?.selectedIdx ?? 0, Math.max(0, items.length - 1)),
+        };
+      });
+      return;
+    }
+    setTemplateMenu(null);
+
+    // 2. Board link: "[[ without closing ]] anywhere in content
+    const linkTriggerMatch = entry.content.match(/\[\[([^\]]*)$/);
+    if (linkTriggerMatch !== null) {
+      const query = linkTriggerMatch[1].toLowerCase();
+      const results = boards
+        .filter((b) => b.name.toLowerCase().startsWith(query) || b.name.toLowerCase().includes(query))
+        .slice(0, 6);
+      setAutocomplete(null);
+      setLinkAutocomplete({ query: linkTriggerMatch[1], results });
+      return;
+    }
+    setLinkAutocomplete(null);
+
+    // 3. Normal board name prefix autocomplete
     const lastWord = getLastPartialWord(entry.content);
     const match = findBoardAutocomplete(lastWord, boards, userAliases ?? {});
     setAutocomplete(match);
@@ -174,6 +306,40 @@ export function NoteEntryRow({
     setAutocomplete(null);
   }, [autocomplete, entry.id, onChange, onConfirmAlias]);
 
+  // Insert a template, replacing the "/" trigger text with the template content.
+  const insertTemplate = useCallback(
+    (template: NoteTemplate) => {
+      onChange(entry.id, template.content);
+      setTemplateMenu(null);
+      // Move cursor to end after React flushes the new content.
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          const len = template.content.length;
+          textareaRef.current.setSelectionRange(len, len);
+        }
+      });
+    },
+    [entry.id, onChange]
+  );
+
+  // Complete a board link: replace the partial "[[query" with "[[Board Name]]".
+  const acceptLinkAutocomplete = useCallback(
+    (board: BoardRow) => {
+      if (!textareaRef.current) return;
+      // Find the last "[[ without closing ]]" and replace it.
+      const newContent = entry.content.replace(/\[\[([^\]]*)$/, `[[${board.name}]]`);
+      onChange(entry.id, newContent);
+      setLinkAutocomplete(null);
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          const len = newContent.length;
+          textareaRef.current.setSelectionRange(len, len);
+        }
+      });
+    },
+    [entry.content, entry.id, onChange]
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       const ta = e.currentTarget;
@@ -183,6 +349,62 @@ export function NoteEntryRow({
         e.preventDefault();
         onIndent(entry.id, e.shiftKey ? "out" : "in");
         return;
+      }
+
+      // ── Template menu navigation ────────────────────────────────────────────
+      if (templateMenu) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setTemplateMenu((prev) =>
+            prev ? { ...prev, selectedIdx: Math.min(prev.selectedIdx + 1, prev.items.length - 1) } : null
+          );
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setTemplateMenu((prev) =>
+            prev ? { ...prev, selectedIdx: Math.max(prev.selectedIdx - 1, 0) } : null
+          );
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          const selected = templateMenu.items[templateMenu.selectedIdx];
+          if (selected) {
+            insertTemplate(selected);
+          } else {
+            // No template matched — dismiss the menu and commit the entry normally.
+            setTemplateMenu(null);
+            if (autocomplete) {
+              acceptAutocomplete();
+            } else {
+              onEnter(entry.id, ta.selectionStart);
+            }
+          }
+          return;
+        }
+        if (e.key === "Escape") {
+          setTemplateMenu(null);
+          return;
+        }
+      }
+
+      // ── Board link autocomplete ─────────────────────────────────────────────
+      if (linkAutocomplete && linkAutocomplete.results.length > 0) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          acceptLinkAutocomplete(linkAutocomplete.results[0]);
+          return;
+        }
+        if (e.key === "ArrowRight" && ta.selectionStart === ta.value.length) {
+          e.preventDefault();
+          acceptLinkAutocomplete(linkAutocomplete.results[0]);
+          return;
+        }
+        if (e.key === "Escape") {
+          setLinkAutocomplete(null);
+          return;
+        }
       }
 
       // Escape → dismiss autocomplete suggestion
@@ -234,7 +456,7 @@ export function NoteEntryRow({
         return;
       }
     },
-    [entry.id, autocomplete, acceptAutocomplete, onEnter, onIndent, onBackspace, onArrow]
+    [entry.id, autocomplete, acceptAutocomplete, templateMenu, insertTemplate, linkAutocomplete, acceptLinkAutocomplete, onEnter, onIndent, onBackspace, onArrow]
   );
 
   // ─── Signal popover ────────────────────────────────────────────────────────
@@ -315,10 +537,14 @@ export function NoteEntryRow({
         }`}
         style={rowStyle}
       >
-        {/* Bullet dot — adopts resolved board color */}
+        {/* Bullet dot — open ring for empty entries, filled dot for entries with content */}
         <span
-          className="mt-[8px] h-[5px] w-[5px] flex-shrink-0 rounded-full transition-colors duration-150"
-          style={{ backgroundColor: resolvedBoardHex ?? "#d1d5db" }}
+          className="mt-[8px] h-[5px] w-[5px] flex-shrink-0 rounded-full transition-all duration-150"
+          style={
+            entry.content === ""
+              ? { backgroundColor: "transparent", border: "1.5px solid #d1d5db" }
+              : { backgroundColor: resolvedBoardHex ?? "#d1d5db" }
+          }
         />
 
         <div className="min-w-0 flex-1">
@@ -332,6 +558,43 @@ export function NoteEntryRow({
                 segments.map((seg, i) => {
                   if (!seg.signal) {
                     return <span key={i}>{seg.text}</span>;
+                  }
+
+                  if (seg.signal.type === "link") {
+                    // [[Board Name]] → render as a clickable board link chip.
+                    // The matchText includes the [[ and ]] brackets; display only the inner name.
+                    const boardId = seg.signal.value.length === 36 ? seg.signal.value : null;
+                    const hex = boardId ? resolveBoardHex(boardId, boards) ?? "#6366f1" : "#6366f1";
+                    const displayName = seg.signal.normalizedValue ?? seg.text.replace(/^\[\[|\]\]$/g, "");
+                    const href = boardId ? `/board/${boardId}` : null;
+                    const chip = (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-0.5 rounded px-1 py-px text-[11px] font-medium"
+                        style={{
+                          backgroundColor: `${hex}18`,
+                          color: hex,
+                          border: `1px solid ${hex}30`,
+                          verticalAlign: "baseline",
+                        }}
+                      >
+                        <span className="text-[9px]" style={{ color: hex, opacity: 0.7 }}>↗</span>
+                        {displayName}
+                      </span>
+                    );
+                    if (href) {
+                      return (
+                        <a
+                          key={i}
+                          href={href}
+                          onClick={(e) => e.stopPropagation()}
+                          className="no-underline"
+                        >
+                          {chip}
+                        </a>
+                      );
+                    }
+                    return chip;
                   }
 
                   if (seg.signal.type === "board") {
@@ -375,7 +638,7 @@ export function NoteEntryRow({
                   );
                 })
               ) : (
-                <span className="text-gray-300">Type a note…</span>
+                <span className="text-gray-400">{placeholder}</span>
               )}
             </div>
           )}
@@ -385,9 +648,9 @@ export function NoteEntryRow({
             <>
               <textarea
                 ref={textareaRef}
-                className="w-full resize-none overflow-hidden bg-transparent py-px text-sm leading-relaxed text-gray-800 outline-none placeholder:text-gray-300"
+                className="w-full resize-none overflow-hidden bg-transparent py-px text-sm leading-relaxed text-gray-800 outline-none placeholder:text-gray-400"
                 value={entry.content}
-                placeholder="Type a note…"
+                placeholder={placeholder}
                 rows={1}
                 onChange={(e) => onChange(entry.id, e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -415,9 +678,98 @@ export function NoteEntryRow({
                   </div>
                 );
               })()}
+
+              {/* Board link autocomplete — shown when user types [[ */}
+              {linkAutocomplete && linkAutocomplete.results.length > 0 && (
+                <div className="mt-0.5 rounded-lg border border-indigo-100 bg-white shadow-md">
+                  <div className="px-2 py-1 text-[10px] text-gray-400 border-b border-gray-50">
+                    ↗ Link to board · Enter to select · Esc to dismiss
+                  </div>
+                  {linkAutocomplete.results.map((board, idx) => {
+                    const hex = resolveBoardHex(board.id, boards) ?? "#6366f1";
+                    return (
+                      <button
+                        key={board.id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); acceptLinkAutocomplete(board); }}
+                        className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors hover:bg-indigo-50 ${idx === 0 ? "bg-indigo-50/40" : ""}`}
+                      >
+                        <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: hex }} />
+                        <span className="font-medium" style={{ color: hex }}>{board.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Template menu — shown when user types "/" at start */}
+              {templateMenu && templateMenu.items.length > 0 && (
+                <div className="mt-0.5 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden">
+                  <div className="px-2 py-1 text-[10px] text-gray-400 border-b border-gray-50">
+                    ↑↓ navigate · Enter insert · Esc dismiss
+                  </div>
+                  {templateMenu.items.map((tpl, idx) => (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); insertTemplate(tpl); }}
+                      className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors hover:bg-gray-50 ${
+                        idx === templateMenu.selectedIdx ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <span className="w-4 text-center text-xs text-gray-400">{tpl.icon}</span>
+                      <span className="flex-1 text-xs font-medium text-gray-700">{tpl.label}</span>
+                      <span className="text-[10px] text-gray-300">/{tpl.shortcut}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {templateMenu && templateMenu.items.length === 0 && (
+                <div className="mt-0.5 px-2 py-1 text-[11px] text-gray-400">
+                  No template matches — keep typing or Esc
+                </div>
+              )}
             </>
           )}
         </div>
+
+        {/* Suggest board button — only for unrouted, non-empty, persisted entries */}
+        {!entry.explicit_board_id && entry.content.trim() && !isTemp(entry.id) && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSuggestBoard();
+            }}
+            disabled={inlineSugg.loading || inlineSugg.applying}
+            className={`mt-[5px] flex-shrink-0 rounded px-1 py-0.5 text-[10px] font-medium text-indigo-400 transition-opacity hover:text-indigo-600 disabled:opacity-40 ${
+              inlineSugg.loading || inlineSugg.suggestion || inlineSugg.noResult
+                ? "opacity-60"
+                : "opacity-25 group-hover:opacity-100"
+            }`}
+            title="Suggest a board for this note"
+          >
+            {inlineSugg.loading ? "…" : "→"}
+          </button>
+        )}
+
+        {/* Archive button — visible at low opacity at rest, full on hover */}
+        {entry.content.trim() && !isTemp(entry.id) && onArchive && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchive(entry.id);
+            }}
+            className="mt-[5px] flex-shrink-0 rounded p-0.5 text-gray-300 opacity-25 transition-opacity hover:text-gray-500 hover:opacity-100"
+            title="Archive note"
+            aria-label="Archive note"
+          >
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M2 2l7 7M9 2L2 9" />
+            </svg>
+          </button>
+        )}
 
         {/* Selection checkbox */}
         <button
@@ -427,7 +779,7 @@ export function NoteEntryRow({
             onSelect(entry.id);
           }}
           className={`mt-[5px] flex-shrink-0 rounded p-0.5 transition-opacity ${
-            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-60"
+            isSelected ? "opacity-100" : "opacity-25 group-hover:opacity-100"
           }`}
           title="Select entry"
           aria-label="Select entry"
@@ -454,6 +806,66 @@ export function NoteEntryRow({
           </div>
         </button>
       </div>
+
+      {/* Save error indicator — shown when the last save attempt failed */}
+      {hasError && (
+        <div className="flex items-center gap-1 pb-0.5 pl-4">
+          <span className="text-[10px] text-red-500">Unsaved</span>
+          <span className="text-[10px] text-gray-300">·</span>
+          <button
+            type="button"
+            className="text-[10px] text-red-500 underline hover:text-red-700"
+            onClick={() => onRetry?.(entry.id, entry.content)}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Inline board suggestion */}
+      {(inlineSugg.suggestion || inlineSugg.noResult) && (
+        <div className="ml-4 mb-1 flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+          {inlineSugg.noResult ? (
+            <>
+              <span className="text-[11px] text-gray-500 flex-1">No board suggestion found.</span>
+              <button
+                type="button"
+                className="text-[10px] text-gray-400 hover:text-gray-600"
+                onClick={() => setInlineSugg({ loading: false, suggestion: null, applying: false, noResult: false })}
+              >
+                Dismiss
+              </button>
+            </>
+          ) : inlineSugg.suggestion && (
+            <>
+              <div className="flex-1 min-w-0">
+                <span className="text-[11px] font-semibold text-indigo-700">
+                  {inlineSugg.suggestion.targetBoardName}
+                </span>
+                <span className="mx-1 text-[11px] text-gray-400">·</span>
+                <span className="text-[11px] text-gray-600">{inlineSugg.suggestion.description}</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  disabled={inlineSugg.applying}
+                  onClick={() => void handleAcceptSuggestion()}
+                  className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  {inlineSugg.applying ? "…" : "Apply"}
+                </button>
+                <button
+                  type="button"
+                  className="text-[10px] text-gray-400 hover:text-gray-600"
+                  onClick={() => setInlineSugg({ loading: false, suggestion: null, applying: false, noResult: false })}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Signal hover popover — fixed positioned to avoid overflow clipping */}
       {popover && (
